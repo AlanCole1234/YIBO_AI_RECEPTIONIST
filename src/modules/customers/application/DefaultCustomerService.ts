@@ -1,4 +1,4 @@
-import type { CustomerId } from "../../../shared/types/index.js";
+import type { CustomerId } from "../../../shared/types/identifiers.js";
 import type { Customer } from "../domain/Customer.js";
 import type { CustomerRepository } from "../ports/CustomerRepository.js";
 import type {
@@ -7,7 +7,7 @@ import type {
   FindOrCreateCustomerByPhoneCommand,
   UpdateCustomerCommand,
 } from "./contracts.js";
-import type { Result } from "../../../shared/types/index.js";
+import type { Result } from "../../../shared/domain/result.js";
 
 export type CustomerIdFactory = () => CustomerId;
 

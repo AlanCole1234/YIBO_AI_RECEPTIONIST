@@ -1,4 +1,4 @@
-import type { CustomerId, TenantId } from "../../../shared/types/index.js";
+import type { CustomerId, TenantId } from "../../../shared/types/identifiers.js";
 
 export interface Customer {
   id: CustomerId;

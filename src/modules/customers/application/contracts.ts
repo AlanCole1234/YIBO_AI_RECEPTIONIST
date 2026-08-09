@@ -1,8 +1,8 @@
 import type {
   CustomerId,
-  Result,
   TenantId,
-} from "../../../shared/types/index.js";
+} from "../../../shared/types/identifiers.js";
+import type { Result } from "../../../shared/domain/result.js";
 import type { Customer } from "../domain/Customer.js";
 
 export interface FindOrCreateCustomerByPhoneCommand {
