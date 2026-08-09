@@ -1,1 +1,5 @@
+node_modules/
+dist/
+.pnpm-store/
+.vite/
 .DS_Store
