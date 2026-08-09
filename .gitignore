@@ -3,3 +3,7 @@ dist/
 .pnpm-store/
 .vite/
 .DS_Store
+coverage/
+.env
+.env.*
+!.env.example
