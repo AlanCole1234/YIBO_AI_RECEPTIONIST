@@ -4,11 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "dev": "concurrently -k -n api,dashboard -c cyan,magenta \"pnpm dev:api\" \"pnpm dev:dashboard\"",
+    "dev:api": "tsx watch src/main.ts",
+    "dev:dashboard": "vite --config dashboard/vite.config.ts",
+    "build": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json && vite build --config dashboard/vite.config.ts",
+    "typecheck": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json",
     "test": "vitest run"
   },
+  "dependencies": {
+    "fastify": "^5.6.0",
+    "vue": "^3.5.0"
+  },
   "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "concurrently": "^9.2.0",
+    "tsx": "^4.20.0",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vite": "^7.0.0",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^3.0.0"
   }
 }
