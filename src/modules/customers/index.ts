@@ -1,4 +1,5 @@
 export type { Customer } from "./domain/Customer.js";
+export type { CustomerRepository } from "./ports/CustomerRepository.js";
 export type {
   CustomerError,
   CustomerService,

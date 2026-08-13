@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
+    "db:init": "tsx src/infrastructure/database/init-databases.ts",
     "dev": "concurrently -k -n api,dashboard -c cyan,magenta \"pnpm dev:api\" \"pnpm dev:dashboard\"",
     "dev:api": "tsx watch src/main.ts",
     "dev:dashboard": "vite --config dashboard/vite.config.ts",
@@ -24,5 +28,6 @@
     "vite": "^7.0.0",
     "vitest": "^2.1.8",
     "vue-tsc": "^3.0.0"
-  }
+  },
+  "packageManager": "pnpm@11.19.0+sha512.7881f3ed590d472c4a955e2b88b2121791116066dcc88cbca3849ec9b60f1bbaa6d2ccb221fa91da4e1c65bef2bcbe379365aea7ac539c7bf86dedc3a1b22dce"
 }

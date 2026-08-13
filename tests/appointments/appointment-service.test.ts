@@ -15,6 +15,7 @@ import {
 } from "../../src/modules/appointments/index.js";
 
 const business: BusinessProfile = {
+  region: "MX",
   tenantId: "tenant-a",
   businessId: "business-a",
   name: "YIBO Test Business",

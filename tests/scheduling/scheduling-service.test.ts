@@ -8,6 +8,7 @@ import { success } from "../../src/shared/domain/result.js";
 import { SchedulingServiceImpl, type CalendarPort, type ConfirmedAppointmentReader, type EmployeeWorkingHoursProvider } from "../../src/modules/scheduling/index.js";
 
 const business: BusinessProfile = {
+  region: "US",
   tenantId: "tenant-smileline", businessId: "business-smileline", name: "SmileLine Dental",
   timezone: "America/Denver", locale: "en-US", active: true, calledNumbers: ["+13035550123"],
   employees: [{ id: "dr-lee", displayName: "Dr. Lee", active: true }],

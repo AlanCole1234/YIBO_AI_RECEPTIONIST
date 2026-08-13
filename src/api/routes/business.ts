@@ -9,7 +9,7 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
-    const { name, timezone, locale, services, employees, openingHours } = result.value;
-    return { name, timezone, locale, services, employees, openingHours };
+    const { region, name, timezone, locale, services, employees, openingHours } = result.value;
+    return { region, name, timezone, locale, services, employees, openingHours };
   });
 }

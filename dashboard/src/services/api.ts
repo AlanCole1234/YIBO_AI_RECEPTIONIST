@@ -10,6 +10,7 @@ export interface EmployeeDefinition { id: string; displayName: string; active: b
 export interface OpeningHoursRule { dayOfWeek: number; startTime: string; endTime: string }
 
 export interface Business {
+  region: "MX" | "US";
   name: string;
   timezone: string;
   locale: string;
