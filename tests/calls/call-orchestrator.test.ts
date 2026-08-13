@@ -3,6 +3,7 @@ import { BusinessDirectoryService, InMemoryBusinessRepository, type BusinessProf
 import { CallOrchestratorService, InMemoryCallRepository, type CallAgentRuntime, type CallCustomerDirectory, type CallTelephonyGateway, type CallVoiceBridge } from "../../src/modules/calls/index.js";
 
 const business: BusinessProfile = {
+  region: "US",
   tenantId: "tenant-smileline", businessId: "business-smileline", name: "SmileLine Dental", timezone: "America/Denver", locale: "en-US", active: true,
   calledNumbers: ["+13035550123"], employees: [], services: [], openingHours: [],
 };

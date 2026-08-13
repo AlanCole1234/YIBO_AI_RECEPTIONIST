@@ -6,6 +6,7 @@ import {
 } from "../../src/modules/business/index.js";
 
 const profile: BusinessProfile = {
+  region: "US",
   tenantId: "tenant-smileline",
   businessId: "business-smileline",
   name: "SmileLine Dental",

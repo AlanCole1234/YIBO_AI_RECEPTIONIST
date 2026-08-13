@@ -3,6 +3,7 @@ import type {
   BusinessId,
   EmployeeId,
   IANATimeZone,
+  RegionId,
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
@@ -18,6 +19,7 @@ export interface BusinessDirectory {
 }
 
 export interface BusinessProfile {
+  region: RegionId;
   tenantId: TenantId;
   businessId: BusinessId;
   name: string;

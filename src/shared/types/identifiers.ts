@@ -9,3 +9,4 @@ export type ServiceId = string;
 export type ToolCallId = string;
 export type IANATimeZone = string;
 export type ISODateTime = string;
+export type RegionId = "MX" | "US";
