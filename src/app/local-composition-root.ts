@@ -11,11 +11,13 @@ import { SchedulingServiceImpl, type EmployeeWorkingHoursProvider, type Scheduli
 import { SqliteAppointmentRepository } from "../infrastructure/database/sqlite-appointment-repository.js";
 import { SqliteBusinessRepository } from "../infrastructure/database/sqlite-business-repository.js";
 import { SqliteCalendarAdapter } from "../infrastructure/database/sqlite-calendar-adapter.js";
+import { SqliteGoogleTokenStore } from "../infrastructure/database/sqlite-google-token-store.js";
 import { SqliteCustomerRepository } from "../infrastructure/database/sqlite-customer-repository.js";
 import { migrateDatabase, openRegionalDatabase, seedBusiness } from "../infrastructure/database/regional-database.js";
 import type { RegionId } from "../shared/types/identifiers.js";
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS } from "./development-fixtures.js";
 import type { YiboApplication } from "./composition-root.js";
+import { GoogleCalendarAdapter, GoogleOAuthService } from "../modules/integrations/index.js";
 
 export interface LocalAccessContext {
   region: RegionId;
@@ -39,7 +41,26 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
   const customerRepository = new SqliteCustomerRepository(database, context.region);
   const customers = new DefaultCustomerService(customerRepository, () => `customer-${randomUUID()}`);
   const appointmentRepository = new SqliteAppointmentRepository(database, context.region);
-  const calendar = new SqliteCalendarAdapter(database, context.region);
+  const localCalendar = new SqliteCalendarAdapter(database, context.region);
+  const googleConfig = {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI,
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+  };
+  const googleReady = Boolean(
+    googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri &&
+    googleConfig.calendarId && process.env.YIBO_TOKEN_ENCRYPTION_KEY,
+  );
+  const googleOAuth = googleReady
+    ? new GoogleOAuthService(
+      googleConfig,
+      new SqliteGoogleTokenStore(database, context.region, process.env.YIBO_TOKEN_ENCRYPTION_KEY),
+    )
+    : undefined;
+  const calendar = googleOAuth && googleConfig.calendarId
+    ? new GoogleCalendarAdapter(googleConfig.calendarId, googleOAuth)
+    : localCalendar;
 
   const customerReader: CustomerReader = {
     exists: async (tenantId, customerId) => (await customerRepository.findById(tenantId, customerId)) !== null,
@@ -58,7 +79,7 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
     appointmentRepository, customerReader, business, scheduling, calendar,
     new InMemoryAppointmentConcurrencyGuard(), () => `appointment-${randomUUID()}`,
   );
-  return { tenantId: context.tenantId, business, customers, scheduling, appointments };
+  return { tenantId: context.tenantId, business, customers, scheduling, appointments, googleOAuth };
 }
 
 function fixtureFor(context: LocalAccessContext): BusinessProfile {

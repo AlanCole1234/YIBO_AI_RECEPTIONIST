@@ -16,6 +16,7 @@ import {
   type CustomerService,
 } from "../modules/customers/index.js";
 import { InMemoryCalendarAdapter } from "../modules/integrations/index.js";
+import type { GoogleOAuthService } from "../modules/integrations/index.js";
 import {
   SchedulingServiceImpl,
   type ConfirmedAppointmentReader,
@@ -30,6 +31,7 @@ export interface YiboApplication {
   customers: CustomerService;
   scheduling: SchedulingService;
   appointments: AppointmentService;
+  googleOAuth?: GoogleOAuthService;
 }
 
 export function createDevelopmentApplication(): YiboApplication {
