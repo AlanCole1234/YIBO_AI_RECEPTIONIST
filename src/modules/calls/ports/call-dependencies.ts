@@ -26,7 +26,7 @@ export interface CallVoiceSession {
 }
 
 export interface CallVoiceBridge {
-  start(input: { callId: string; agentSession: CallAgentSession }): Promise<
+  start(input: { callId: string; tenantId: TenantId; agentSession: CallAgentSession }): Promise<
     { ok: true; value: CallVoiceSession } | { ok: false }
   >;
 }

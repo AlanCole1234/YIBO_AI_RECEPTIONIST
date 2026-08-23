@@ -25,7 +25,7 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
   }) };
   const voice: CallVoiceBridge = { start: vi.fn(async () => ({ ok: true, value: { close: voiceClose } })) };
   const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
-  return { orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, repository), repository, telephony, agents, agentClose, voiceClose };
+  return { orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, repository), repository, telephony, agents, voice, agentClose, voiceClose };
 };
 
 describe("CallOrchestratorService", () => {
@@ -34,6 +34,7 @@ describe("CallOrchestratorService", () => {
     await system.orchestrator.handleTelephonyEvent(incoming);
     expect(system.repository.stateHistory.map((entry) => entry.state)).toEqual(["RINGING", "ANSWERED", "AI_CONNECTING", "IN_CONVERSATION"]);
     await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", state: "IN_CONVERSATION" });
+    expect(system.voice.start).toHaveBeenCalledWith(expect.objectContaining({ callId: incoming.callId, tenantId: business.tenantId }));
   });
 
   it("shuts down voice and agent sessions exactly once when the call hangs up", async () => {

@@ -64,7 +64,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     });
     if (!agent.ok) return this.fail(record.callId, event.occurredAt);
 
-    const voice = await this.voice.start({ callId: record.callId, agentSession: agent.value });
+    const voice = await this.voice.start({ callId: record.callId, tenantId: record.tenantId, agentSession: agent.value });
     if (!voice.ok) {
       await agent.value.close();
       return this.fail(record.callId, event.occurredAt);

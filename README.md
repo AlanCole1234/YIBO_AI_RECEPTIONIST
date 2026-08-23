@@ -63,9 +63,25 @@ payload parsing and call-control credentials remain inside the future provider
 adapter; neither belongs in appointment, customer, or calendar code.
 
 `GET /api/integrations/telephony/status` reports whether this ingress has been
-configured. The next provider-specific step is an Asterisk ARI/SIP client that
-maps its events into this contract and supplies live answer, hangup, transfer,
-and audio-stream support.
+configured. The Asterisk ARI/SIP transport below maps live provider events into
+this contract and supplies answer, hangup, transfer, and audio-stream support.
+
+## Asterisk ARI and live media
+
+YIBO now includes the Asterisk transport adapters, but it does not auto-start
+them until real Asterisk credentials and an approved AI voice provider are
+configured. `AsteriskAriClient` controls channels with ARI (answer, hang up,
+and transfer), and creates a bidirectional ARI External Media channel using
+Asterisk AudioSocket. `AsteriskAudioSocketServer` translates that stream into
+the existing Voice module's `AudioFrame`/`AudioSink` contract; no SIP or RTP
+implementation exists in YIBO.
+
+At startup, compose `AsteriskTelephonyGateway`, `AsteriskVoiceBridge`, and
+`AsteriskCallRuntime` with the existing `CallOrchestratorService`. The runtime
+starts the AudioSocket listener first, subscribes normalized Asterisk events to
+Calls, and then connects the ARI event socket. Set the optional `ASTERISK_*`
+values in `.env` only when the server, ARI user, Stasis dialplan, and approved
+AI voice provider are ready.
 
 ## Validation
 

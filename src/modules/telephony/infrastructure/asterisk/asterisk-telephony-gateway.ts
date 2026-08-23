@@ -13,7 +13,11 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
   private readonly handlers: Array<(event: TelephonyEvent) => Promise<void>> = [];
   private readonly calls: AsteriskCallRegistry;
 
-  constructor(client: AsteriskClient, createCallId: () => CallId) {
+  constructor(
+    client: AsteriskClient,
+    createCallId: () => CallId,
+    private readonly initializeMedia?: (channelId: string) => Promise<string>,
+  ) {
     this.client = client;
     this.calls = new AsteriskCallRegistry(createCallId);
     client.onEvent((event) => this.handleAsteriskEvent(event));
@@ -23,6 +27,11 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
 
   onEvent(handler: (event: TelephonyEvent) => Promise<void>): void {
     this.handlers.push(handler);
+  }
+
+  /** Used only by the Asterisk media adapter; it never crosses the telephony module boundary. */
+  mediaStreamIdForCall(callId: CallId): string | null {
+    return this.calls.mediaStreamIdForCall(callId);
   }
 
   async answer(callId: CallId) {
@@ -59,7 +68,14 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
 
   private async handleAsteriskEvent(event: AsteriskEvent): Promise<void> {
     if (event.type === "CHANNEL_ENTERED_APPLICATION") {
-      const callId = this.calls.register(event.channelId);
+      const callId = this.calls.register(event.channelId, event.mediaStreamId);
+      if (!event.mediaStreamId && this.initializeMedia) {
+        try {
+          this.calls.setMediaStreamId(callId, await this.initializeMedia(event.channelId));
+        } catch {
+          // The Calls module will fail safely when its Voice bridge cannot find media.
+        }
+      }
       return this.emit({
         type: "INCOMING_CALL",
         callId,

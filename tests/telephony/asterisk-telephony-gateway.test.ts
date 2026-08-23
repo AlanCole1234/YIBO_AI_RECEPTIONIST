@@ -47,6 +47,20 @@ describe("AsteriskTelephonyGateway", () => {
     }]);
   });
 
+  it("initializes Asterisk external media before emitting the incoming call", async () => {
+    const client = new FakeAsteriskClient();
+    const initializeMedia = vi.fn(async () => "d5da4d1e-1234-4cde-9000-123456789abc");
+    const gateway = new AsteriskTelephonyGateway(client, () => "call-1", initializeMedia);
+    const events: TelephonyEvent[] = [];
+    gateway.onEvent(async (event) => { events.push(event); });
+
+    await client.emit(incoming);
+
+    expect(initializeMedia).toHaveBeenCalledWith("asterisk-channel-99");
+    expect(gateway.mediaStreamIdForCall("call-1")).toBe("d5da4d1e-1234-4cde-9000-123456789abc");
+    expect(events).toHaveLength(1);
+  });
+
   it("uses the provider channel internally for answer and hangup", async () => {
     const { client, gateway } = fixture();
     await client.emit(incoming);

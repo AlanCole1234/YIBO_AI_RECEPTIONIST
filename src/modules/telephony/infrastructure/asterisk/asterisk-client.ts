@@ -5,6 +5,8 @@ export type AsteriskEvent =
       callerNumber: string;
       dialedNumber: string;
       occurredAt: string;
+      /** AudioSocket UUID supplied by the dialplan as the first Stasis argument. */
+      mediaStreamId?: string;
     }
   | { type: "CHANNEL_DESTROYED"; channelId: string; occurredAt: string }
   | { type: "DTMF_RECEIVED"; channelId: string; digit: string; occurredAt: string };
