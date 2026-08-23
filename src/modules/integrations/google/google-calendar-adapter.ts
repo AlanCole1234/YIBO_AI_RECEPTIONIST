@@ -4,7 +4,12 @@ import type { BusyInterval, CalendarPort } from "../../scheduling/index.js";
 import type { GoogleOAuthService } from "./google-oauth-service.js";
 
 export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarPort {
-  constructor(private readonly calendarId: string, private readonly oauth: GoogleOAuthService, private readonly fetcher: typeof fetch = fetch) {}
+  constructor(
+    private readonly calendarId: string,
+    private readonly timeZone: string,
+    private readonly oauth: GoogleOAuthService,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
 
   async getBusyIntervals(query: { tenantId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
     const token = await this.oauth.accessToken(query.tenantId);
@@ -26,7 +31,14 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/events`;
     const response = await this.fetcher(url, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-goog-request-id": command.idempotencyKey },
-      body: JSON.stringify({ summary: command.title, start: { dateTime: command.startAt }, end: { dateTime: command.endAt }, extendedProperties: { private: { yiboAppointmentId: command.appointmentId } } }),
+      body: JSON.stringify({
+        summary: command.title,
+        // The appointment stores an instant in UTC. Supplying the clinic zone makes
+        // the intended wall-clock time explicit to Google Calendar as well.
+        start: googleEventDateTime(command.startAt, this.timeZone),
+        end: googleEventDateTime(command.endAt, this.timeZone),
+        extendedProperties: { private: { yiboAppointmentId: command.appointmentId } },
+      }),
     });
     if (!response.ok) return failure(providerError(response.status));
     const body = await response.json() as { id?: string };
@@ -43,6 +55,34 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     return success(undefined);
   }
 }
+
+const googleEventDateTime = (value: string, timeZone: string): { dateTime: string; timeZone: string } => {
+  const instant = new Date(value);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find((item) => item.type === type)?.value);
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  const hour = part("hour");
+  const minute = part("minute");
+  const second = part("second");
+  const offsetMinutes = Math.round((Date.UTC(year, month - 1, day, hour, minute, second) - instant.valueOf()) / 60_000);
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offset = `${String(Math.floor(absoluteOffset / 60)).padStart(2, "0")}:${String(absoluteOffset % 60).padStart(2, "0")}`;
+  const dateTime = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}${sign}${offset}`;
+  return { dateTime, timeZone };
+};
 
 const providerError = (status: number) => {
   if (status === 401 || status === 403) return { code: "AUTHORIZATION_REQUIRED" as const };

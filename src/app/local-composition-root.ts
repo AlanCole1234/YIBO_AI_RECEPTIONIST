@@ -60,7 +60,7 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
     )
     : undefined;
   const calendar = googleOAuth && googleConfig.calendarId
-    ? new GoogleCalendarAdapter(googleConfig.calendarId, googleOAuth)
+    ? new GoogleCalendarAdapter(googleConfig.calendarId, profile.timezone, googleOAuth)
     : localCalendar;
 
   const customerReader: CustomerReader = {
