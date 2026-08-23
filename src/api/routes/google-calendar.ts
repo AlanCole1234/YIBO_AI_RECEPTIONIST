@@ -7,8 +7,8 @@ export async function registerGoogleCalendarRoutes(server: FastifyInstance, app:
     return app.googleOAuth.status(app.tenantId);
   });
 
-  server.get("/api/integrations/google/connect", async (_request, reply) => {
-    const url = app.googleOAuth?.authorizationUrl(app.tenantId);
+  server.get<{ Querystring: { returnTo?: string } }>("/api/integrations/google/connect", async (request, reply) => {
+    const url = app.googleOAuth?.authorizationUrl(app.tenantId, request.query.returnTo ?? "");
     if (!url) return reply.code(409).send({ error: { code: "GOOGLE_CONFIGURATION_REQUIRED" } });
     return { url };
   });
@@ -18,6 +18,10 @@ export async function registerGoogleCalendarRoutes(server: FastifyInstance, app:
       ? await app.googleOAuth.completeAuthorization(request.query.code, request.query.state)
       : null;
     const outcome = complete && !request.query.error ? "connected" : "failed";
-    return reply.type("text/html").send(`<!doctype html><title>YIBO Calendar</title><script>location.replace('http://127.0.0.1:5173/?calendar=${outcome}')</script><p>Google Calendar ${outcome}. You can close this window.</p>`);
+    const returnTo = complete?.returnTo ?? (request.query.state ? app.googleOAuth?.returnToForState(request.query.state) : null);
+    if (!returnTo) return reply.code(400).send({ error: { code: "GOOGLE_OAUTH_STATE_INVALID" } });
+    const destination = new URL(returnTo);
+    destination.searchParams.set("calendar", outcome);
+    return reply.redirect(destination.toString());
   });
 }

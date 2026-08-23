@@ -73,5 +73,5 @@ export const api = {
     request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
-  googleCalendarConnect: () => request<{ url: string }>("/api/integrations/google/connect"),
+  googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
 };

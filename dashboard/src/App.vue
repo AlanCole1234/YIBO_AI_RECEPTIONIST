@@ -55,7 +55,7 @@ function chooseSection(value: Section): void {
 }
 
 async function connectGoogleCalendar(): Promise<void> {
-  await run(async () => { window.location.assign((await api.googleCalendarConnect()).url); });
+  await run(async () => { window.location.assign((await api.googleCalendarConnect(window.location.origin)).url); });
 }
 
 function onServiceChanged(): void {

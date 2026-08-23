@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
 
 export interface GoogleOAuthConfig {
@@ -6,13 +6,12 @@ export interface GoogleOAuthConfig {
   clientSecret?: string;
   redirectUri?: string;
   calendarId?: string;
+  stateSigningKey?: string;
 }
 
-type PendingAuthorization = { tenantId: string; expiresAt: number };
+type AuthorizationState = { tenantId: string; returnTo: string; expiresAt: number; nonce: string };
 
 export class GoogleOAuthService {
-  private readonly pending = new Map<string, PendingAuthorization>();
-
   constructor(
     private readonly config: GoogleOAuthConfig,
     private readonly tokens: GoogleTokenStore,
@@ -25,10 +24,9 @@ export class GoogleOAuthService {
     return { configured, connected: token !== null, ...(this.config.calendarId ? { calendarId: this.config.calendarId } : {}) };
   }
 
-  authorizationUrl(tenantId: string): string | null {
+  authorizationUrl(tenantId: string, returnTo: string): string | null {
     if (!this.isConfigured()) return null;
-    const state = randomUUID();
-    this.pending.set(state, { tenantId, expiresAt: Date.now() + 10 * 60_000 });
+    const state = this.signState({ tenantId, returnTo, expiresAt: Date.now() + 10 * 60_000, nonce: randomUUID() });
     const query = new URLSearchParams({
       client_id: this.config.clientId!, redirect_uri: this.config.redirectUri!, response_type: "code",
       scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy",
@@ -37,10 +35,9 @@ export class GoogleOAuthService {
     return `https://accounts.google.com/o/oauth2/v2/auth?${query}`;
   }
 
-  async completeAuthorization(code: string, state: string): Promise<{ tenantId: string } | null> {
-    const pending = this.pending.get(state);
-    this.pending.delete(state);
-    if (!pending || pending.expiresAt < Date.now() || !code || !this.isConfigured()) return null;
+  async completeAuthorization(code: string, state: string): Promise<{ tenantId: string; returnTo: string } | null> {
+    const pending = this.readState(state);
+    if (!pending || !code || !this.isConfigured()) return null;
 
     const response = await this.fetcher("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -57,7 +54,11 @@ export class GoogleOAuthService {
       accessToken: payload.access_token, refreshToken: payload.refresh_token,
       expiresAt: new Date(Date.now() + (payload.expires_in ?? 3600) * 1000).toISOString(),
     });
-    return { tenantId: pending.tenantId };
+    return { tenantId: pending.tenantId, returnTo: pending.returnTo };
+  }
+
+  returnToForState(state: string): string | null {
+    return this.readState(state)?.returnTo ?? null;
   }
 
   async accessToken(tenantId: string): Promise<string | null> {
@@ -85,6 +86,33 @@ export class GoogleOAuthService {
   }
 
   private isConfigured(): boolean {
-    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.calendarId);
+    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.calendarId && this.config.stateSigningKey);
+  }
+
+  private signState(value: AuthorizationState): string {
+    const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+    return `${payload}.${this.signature(payload)}`;
+  }
+
+  private readState(value: string): AuthorizationState | null {
+    const [payload, signature] = value.split(".");
+    if (!payload || !signature || !this.config.stateSigningKey) return null;
+    const expected = this.signature(payload);
+    if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+    try {
+      const state = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthorizationState;
+      return state.tenantId && isLocalDashboardUrl(state.returnTo) && state.expiresAt > Date.now() ? state : null;
+    } catch { return null; }
+  }
+
+  private signature(payload: string): string {
+    return createHmac("sha256", this.config.stateSigningKey!).update(payload).digest("base64url");
   }
 }
+
+const isLocalDashboardUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && Boolean(url.port);
+  } catch { return false; }
+};

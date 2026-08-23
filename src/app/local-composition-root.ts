@@ -47,6 +47,7 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     redirectUri: process.env.GOOGLE_REDIRECT_URI,
     calendarId: process.env.GOOGLE_CALENDAR_ID,
+    stateSigningKey: process.env.YIBO_TOKEN_ENCRYPTION_KEY,
   };
   const googleReady = Boolean(
     googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri &&
