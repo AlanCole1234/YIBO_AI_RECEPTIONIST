@@ -49,6 +49,24 @@ Regional configuration example: `.env.example`
 - API: `http://localhost:3000`
 - Health: `http://localhost:3000/api/health`
 
+## Telephony event ingress
+
+The first telephony integration boundary is available at
+`POST /api/integrations/telephony/events`. It is disabled by default. Set a
+long random `YIBO_TELEPHONY_WEBHOOK_SECRET` in `.env`, then have the future
+Asterisk/SIP adapter send that value in the `x-yibo-telephony-key` header.
+
+The endpoint accepts only normalized provider-neutral events: `INCOMING_CALL`,
+`CALL_HUNG_UP`, and `DTMF_RECEIVED`. It validates call IDs, E.164 phone
+numbers, DTMF digits, and timestamps before dispatching the event. Provider
+payload parsing and call-control credentials remain inside the future provider
+adapter; neither belongs in appointment, customer, or calendar code.
+
+`GET /api/integrations/telephony/status` reports whether this ingress has been
+configured. The next provider-specific step is an Asterisk ARI/SIP client that
+maps its events into this contract and supplies live answer, hangup, transfer,
+and audio-stream support.
+
 ## Validation
 
 ```sh

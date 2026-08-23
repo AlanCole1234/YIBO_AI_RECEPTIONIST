@@ -24,6 +24,7 @@ import {
   type SchedulingService,
 } from "../modules/scheduling/index.js";
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_OPENING_HOURS, DEMO_TENANT_ID } from "./development-fixtures.js";
+import { TelephonyEventIngress } from "../modules/telephony/index.js";
 
 export interface YiboApplication {
   tenantId: string;
@@ -32,9 +33,10 @@ export interface YiboApplication {
   scheduling: SchedulingService;
   appointments: AppointmentService;
   googleOAuth?: GoogleOAuthService;
+  telephony: TelephonyEventIngress;
 }
 
-export function createDevelopmentApplication(): YiboApplication {
+export function createDevelopmentApplication(options: { telephonyWebhookSecret?: string } = {}): YiboApplication {
   const business = new BusinessDirectoryService(new InMemoryBusinessRepository([DEVELOPMENT_BUSINESS]));
   const customerRepository = new InMemoryCustomerRepository();
   let customerSequence = 1;
@@ -75,6 +77,7 @@ export function createDevelopmentApplication(): YiboApplication {
     new InMemoryAppointmentConcurrencyGuard(),
     () => `appointment-${appointmentSequence++}`,
   );
+  const telephony = new TelephonyEventIngress(options.telephonyWebhookSecret);
 
-  return { tenantId: DEMO_TENANT_ID, business, customers, scheduling, appointments };
+  return { tenantId: DEMO_TENANT_ID, business, customers, scheduling, appointments, telephony };
 }

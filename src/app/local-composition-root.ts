@@ -18,6 +18,7 @@ import type { RegionId } from "../shared/types/identifiers.js";
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS } from "./development-fixtures.js";
 import type { YiboApplication } from "./composition-root.js";
 import { GoogleCalendarAdapter, GoogleOAuthService } from "../modules/integrations/index.js";
+import { TelephonyEventIngress } from "../modules/telephony/index.js";
 
 export interface LocalAccessContext {
   region: RegionId;
@@ -80,7 +81,15 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
     appointmentRepository, customerReader, business, scheduling, calendar,
     new InMemoryAppointmentConcurrencyGuard(), () => `appointment-${randomUUID()}`,
   );
-  return { tenantId: context.tenantId, business, customers, scheduling, appointments, googleOAuth };
+  return {
+    tenantId: context.tenantId,
+    business,
+    customers,
+    scheduling,
+    appointments,
+    googleOAuth,
+    telephony: new TelephonyEventIngress(process.env.YIBO_TELEPHONY_WEBHOOK_SECRET),
+  };
 }
 
 function fixtureFor(context: LocalAccessContext): BusinessProfile {
