@@ -9,7 +9,7 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
   async getBusyIntervals(query: { tenantId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
     const token = await this.oauth.accessToken(query.tenantId);
     if (!token) return failure({ code: "AUTHORIZATION_REQUIRED" as const });
-    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/freeBusy`);
+    const url = new URL("https://www.googleapis.com/calendar/v3/freeBusy");
     const response = await this.fetcher(url, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, items: [{ id: this.calendarId }] }),

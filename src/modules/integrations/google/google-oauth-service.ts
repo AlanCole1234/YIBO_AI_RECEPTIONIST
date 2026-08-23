@@ -31,7 +31,8 @@ export class GoogleOAuthService {
     this.pending.set(state, { tenantId, expiresAt: Date.now() + 10 * 60_000 });
     const query = new URLSearchParams({
       client_id: this.config.clientId!, redirect_uri: this.config.redirectUri!, response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.events", access_type: "offline", prompt: "consent", state,
+      scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.freebusy",
+      access_type: "offline", prompt: "consent", state,
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${query}`;
   }

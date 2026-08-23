@@ -18,6 +18,7 @@ describe("GoogleOAuthService", () => {
     if (!url) throw new Error("Expected configured OAuth URL");
     const state = new URL(url).searchParams.get("state");
     if (!state) throw new Error("Expected state");
+    expect(new URL(url).searchParams.get("scope")).toContain("calendar.events.freebusy");
 
     await expect(service.completeAuthorization("code", state)).resolves.toEqual({ tenantId: "tenant-1" });
     await expect(service.status("tenant-1")).resolves.toMatchObject({ configured: true, connected: true });
