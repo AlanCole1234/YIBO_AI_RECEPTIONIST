@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { api, ApiError, type Appointment, type Business, type Customer, type Slot } from "./services/api";
+import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
 import { messages, supportedLocale, type MessageKey } from "./i18n";
 
 type Section = "overview" | "customers" | "availability" | "appointments";
@@ -8,6 +8,8 @@ type Section = "overview" | "customers" | "availability" | "appointments";
 const section = ref<Section>("overview");
 const business = ref<Business>();
 const apiOnline = ref(false);
+const googleCalendar = ref<GoogleCalendarStatus>({ configured: false, connected: false });
+const calendarNeedsReconnect = ref(new URLSearchParams(window.location.search).get("calendar") === "failed");
 const globalError = ref("");
 const busy = ref(false);
 const customerForm = ref({ name: "", phone: "+52999" });
@@ -36,9 +38,10 @@ const t = (key: MessageKey): string => copy.value[key];
 
 onMounted(async () => {
   try {
-    const [health, profile] = await Promise.all([api.health(), api.business()]);
+    const [health, profile, calendarStatus] = await Promise.all([api.health(), api.business(), api.googleCalendarStatus()]);
     apiOnline.value = health.status === "ok";
     business.value = profile;
+    googleCalendar.value = calendarStatus;
     serviceId.value = profile.services[0]?.id ?? "";
     employeeId.value = profile.services[0]?.eligibleEmployeeIds[0] ?? "";
     customerForm.value.phone = profile.region === "US" ? "+1" : "+52";
@@ -50,6 +53,10 @@ onMounted(async () => {
 function chooseSection(value: Section): void {
   section.value = value;
   globalError.value = "";
+}
+
+async function connectGoogleCalendar(): Promise<void> {
+  await run(async () => { window.location.assign((await api.googleCalendarConnect(window.location.origin)).url); });
 }
 
 function onServiceChanged(): void {
@@ -169,6 +176,7 @@ function statusLabel(status: string): string {
           <article><span>{{ t('professionals') }}</span><strong>{{ business?.employees.length ?? '—' }}</strong><small>{{ t('active') }}</small></article>
           <article><span>{{ t('timezone') }}</span><strong class="metric-text">{{ business?.timezone ?? '—' }}</strong><small>{{ t('sourceOfTruth') }}</small></article>
         </div>
+        <article class="panel integration-card"><div><h3>Google Calendar</h3><p v-if="googleCalendar.connected"><span class="pill success">Connected</span> {{ googleCalendar.calendarId }}</p><p v-else-if="googleCalendar.configured">Connect the test calendar before making real bookings.</p><p v-else>Add the Google Calendar values and encryption key to your local .env file.</p></div><button v-if="googleCalendar.configured && !googleCalendar.connected" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else-if="!googleCalendar.connected" class="pill">Not configured</span></article>
         <div class="two-column">
           <article class="panel"><h3>{{ t('availableServices') }}</h3><div v-for="service in business?.services" :key="service.id" class="list-row"><div><strong>{{ service.name }}</strong><small>{{ service.id }}</small></div><span>{{ service.durationMinutes }} min</span></div></article>
           <article class="panel"><h3>{{ t('businessHours') }}</h3><div v-for="hours in business?.openingHours" :key="hours.dayOfWeek" class="list-row"><strong>{{ copy.days[hours.dayOfWeek] }}</strong><span>{{ hours.startTime }} — {{ hours.endTime }}</span></div></article>

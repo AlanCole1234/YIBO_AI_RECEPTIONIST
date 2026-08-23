@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createLocalApplication, localAccessContext } from "./app/local-composition-root.js";
 import { createApiServer } from "./api/index.js";
 

@@ -5,7 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { BusinessProfile } from "../../modules/business/index.js";
 import type { RegionId } from "../../shared/types/identifiers.js";
 
-const migrationPath = fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url));
+const migrations = [
+  { version: 1, path: fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url)) },
+  { version: 2, path: fileURLToPath(new URL("./migrations/002_google_calendar_tokens.sql", import.meta.url)) },
+];
 
 export const defaultDatabasePath = (region: RegionId): string =>
   process.env[`YIBO_DATABASE_${region}`] ?? resolve(process.cwd(), "data", `yibo-${region.toLowerCase()}.sqlite`);
@@ -18,9 +21,13 @@ export function openRegionalDatabase(region: RegionId, path = defaultDatabasePat
 }
 
 export function migrateDatabase(database: DatabaseSync): void {
-  database.exec(readFileSync(migrationPath, "utf8"));
-  database.prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
-    .run(1, new Date().toISOString());
+  for (const migration of migrations) {
+    const applied = database.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(migration.version);
+    if (applied) continue;
+    database.exec(readFileSync(migration.path, "utf8"));
+    database.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+      .run(migration.version, new Date().toISOString());
+  }
 }
 
 export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {
