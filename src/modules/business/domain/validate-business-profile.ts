@@ -1,8 +1,17 @@
 import type { BusinessProfile } from "../application/contracts.js";
+import type { RegionId } from "../../../shared/types/identifiers.js";
 
 export type BusinessProfileValidationError = { message: string };
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const defaultTimezoneForRegion = (region: RegionId): string =>
+  region === "US" ? "America/Chicago" : "America/Mexico_City";
+
+// Older database rows predate the timezone setting. Keep them schedulable while
+// giving them a region-appropriate IANA zone until an owner chooses one.
+export const withDefaultTimezone = (profile: BusinessProfile): BusinessProfile =>
+  profile.timezone?.trim() ? profile : { ...profile, timezone: defaultTimezoneForRegion(profile.region) };
 
 export const normalizePhoneNumber = (value: string): string | null => {
   const normalized = value.trim().replace(/[\s().-]/g, "");
@@ -15,6 +24,10 @@ export const validateBusinessProfile = (
 ): BusinessProfileValidationError | null => {
   if (!profile.tenantId || !profile.businessId || !profile.name.trim()) {
     return { message: "Tenant ID, business ID, and name are required." };
+  }
+
+  if (!profile.timezone?.trim()) {
+    return { message: "Business timezone is required." };
   }
 
   try {

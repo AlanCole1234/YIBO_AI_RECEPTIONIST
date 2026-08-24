@@ -31,12 +31,21 @@ export function migrateDatabase(database: DatabaseSync): void {
 }
 
 export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {
+  // A local database outlives individual application runs. Treat an existing
+  // tenant or business ID as the source of truth rather than overwriting it
+  // with development fixtures (which would also discard saved settings such
+  // as the clinic timezone).
+  const existing = database.prepare(`
+    SELECT tenant_id
+    FROM businesses
+    WHERE region_id = ? AND (tenant_id = ? OR business_id = ?)
+    LIMIT 1
+  `).get(profile.region, profile.tenantId, profile.businessId);
+  if (existing) return;
+
   database.prepare(`
     INSERT INTO businesses(region_id, tenant_id, business_id, profile_json)
     VALUES (?, ?, ?, ?)
-    ON CONFLICT(region_id, tenant_id) DO UPDATE SET
-      business_id = excluded.business_id,
-      profile_json = excluded.profile_json
   `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
   database.prepare("DELETE FROM called_numbers WHERE region_id = ? AND tenant_id = ?")
     .run(profile.region, profile.tenantId);

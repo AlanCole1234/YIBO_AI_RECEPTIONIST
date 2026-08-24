@@ -61,7 +61,10 @@ export function createLocalApplication(context = localAccessContext()): YiboAppl
     )
     : undefined;
   const calendar = googleOAuth && googleConfig.calendarId
-    ? new GoogleCalendarAdapter(googleConfig.calendarId, profile.timezone, googleOAuth)
+    ? new GoogleCalendarAdapter(googleConfig.calendarId, async (tenantId) => {
+      const result = await business.getBusinessProfile(tenantId);
+      return result.ok ? result.value.timezone : profile.timezone;
+    }, googleOAuth)
     : localCalendar;
 
   const customerReader: CustomerReader = {

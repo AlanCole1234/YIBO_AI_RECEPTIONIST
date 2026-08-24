@@ -59,4 +59,27 @@ describe("BusinessDirectoryService", () => {
       error: { code: "BUSINESS_CONFIGURATION_INVALID" },
     });
   });
+
+  it("updates a valid IANA timezone and rejects invalid timezone identifiers", async () => {
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
+
+    await expect(service.updateTimezone(profile.tenantId, "America/New_York")).resolves.toMatchObject({
+      ok: true, value: { timezone: "America/New_York" },
+    });
+    await expect(service.updateTimezone(profile.tenantId, "not/a-timezone")).resolves.toEqual({
+      ok: false, error: { code: "INVALID_TIMEZONE", message: "Business timezone must be a valid IANA timezone." },
+    });
+    await expect(service.getBusinessProfile(profile.tenantId)).resolves.toMatchObject({
+      ok: true, value: { timezone: "America/New_York" },
+    });
+  });
+
+  it("uses a region-safe default for legacy business records without a timezone", async () => {
+    const legacyProfile = { ...profile, timezone: undefined } as unknown as BusinessProfile;
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([legacyProfile]));
+
+    await expect(service.getBusinessProfile(profile.tenantId)).resolves.toMatchObject({
+      ok: true, value: { timezone: "America/Chicago" },
+    });
+  });
 });

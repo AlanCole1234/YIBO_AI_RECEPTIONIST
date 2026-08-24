@@ -16,6 +16,11 @@ export interface BusinessDirectory {
   getBusinessProfile(
     tenantId: TenantId,
   ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+
+  updateTimezone(
+    tenantId: TenantId,
+    timezone: IANATimeZone,
+  ): Promise<Result<BusinessProfile, BusinessTimezoneUpdateError>>;
 }
 
 export interface BusinessProfile {
@@ -57,3 +62,8 @@ export type BusinessLookupError =
   | { code: "BUSINESS_NOT_FOUND" }
   | { code: "BUSINESS_INACTIVE" }
   | { code: "BUSINESS_CONFIGURATION_INVALID"; message: string };
+
+export type BusinessTimezoneUpdateError =
+  | { code: "BUSINESS_NOT_FOUND" }
+  | { code: "BUSINESS_INACTIVE" }
+  | { code: "INVALID_TIMEZONE"; message: string };

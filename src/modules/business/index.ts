@@ -2,6 +2,7 @@ export { BusinessDirectoryService } from "./application/business-directory-servi
 export type {
   BusinessDirectory,
   BusinessLookupError,
+  BusinessTimezoneUpdateError,
   BusinessProfile,
   EmployeeDefinition,
   OpeningHoursRule,

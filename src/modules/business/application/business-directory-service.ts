@@ -3,6 +3,7 @@ import type { TenantId } from "../../../shared/types/identifiers.js";
 import {
   normalizePhoneNumber,
   validateBusinessProfile,
+  withDefaultTimezone,
 } from "../domain/validate-business-profile.js";
 import type {
   BusinessDirectory,
@@ -25,11 +26,26 @@ export class BusinessDirectoryService implements BusinessDirectory {
     return this.toLookupResult(await this.repository.findByTenantId(tenantId));
   }
 
+  async updateTimezone(tenantId: TenantId, timezone: string) {
+    const profile = await this.repository.findByTenantId(tenantId);
+    if (!profile) return failure({ code: "BUSINESS_NOT_FOUND" as const });
+    if (!profile.active) return failure({ code: "BUSINESS_INACTIVE" as const });
+
+    const updated = { ...profile, timezone: timezone.trim() };
+    const validationError = validateBusinessProfile(updated);
+    if (validationError) {
+      return failure({ code: "INVALID_TIMEZONE" as const, message: validationError.message });
+    }
+    await this.repository.save(updated);
+    return success(updated);
+  }
+
   private toLookupResult(profile: BusinessProfile | null) {
     if (!profile) return failure<BusinessLookupError>({ code: "BUSINESS_NOT_FOUND" });
     if (!profile.active) return failure<BusinessLookupError>({ code: "BUSINESS_INACTIVE" });
 
-    const validationError = validateBusinessProfile(profile);
+    const normalizedProfile = withDefaultTimezone(profile);
+    const validationError = validateBusinessProfile(normalizedProfile);
     if (validationError) {
       return failure<BusinessLookupError>({
         code: "BUSINESS_CONFIGURATION_INVALID",
@@ -37,6 +53,6 @@ export class BusinessDirectoryService implements BusinessDirectory {
       });
     }
 
-    return success(profile);
+    return success(normalizedProfile);
   }
 }

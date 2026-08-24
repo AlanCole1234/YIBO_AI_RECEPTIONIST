@@ -64,6 +64,8 @@ function errorCode(body: unknown): string {
 export const api = {
   health: () => request<{ status: string }>("/api/health"),
   business: () => request<Business>("/api/business"),
+  updateBusinessTimezone: (timezone: string) =>
+    request<Business>("/api/business/timezone", { method: "PUT", body: JSON.stringify({ timezone }) }),
   findOrCreateCustomer: (input: { name: string; phone: string }) =>
     request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(input) }),
   availability: (input: { serviceId: string; employeeId: string; rangeStart: string; rangeEnd: string }) => {

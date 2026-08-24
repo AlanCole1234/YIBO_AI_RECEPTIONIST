@@ -1,4 +1,4 @@
-import { normalizePhoneNumber } from "../domain/validate-business-profile.js";
+import { normalizePhoneNumber, withDefaultTimezone } from "../domain/validate-business-profile.js";
 import type { BusinessProfile } from "../application/contracts.js";
 import type { BusinessRepository } from "../ports/business-repository.js";
 import type { TenantId } from "../../../shared/types/identifiers.js";
@@ -12,13 +12,17 @@ export class InMemoryBusinessRepository implements BusinessRepository {
   }
 
   async findByTenantId(tenantId: TenantId): Promise<BusinessProfile | null> {
-    return this.byTenant.get(tenantId) ?? null;
+    const profile = this.byTenant.get(tenantId);
+    return profile ? withDefaultTimezone(profile) : null;
   }
 
   async findByCalledNumber(calledNumber: string): Promise<BusinessProfile | null> {
     const tenantId = this.tenantByCalledNumber.get(calledNumber);
-    return tenantId ? this.byTenant.get(tenantId) ?? null : null;
+    const profile = tenantId ? this.byTenant.get(tenantId) : null;
+    return profile ? withDefaultTimezone(profile) : null;
   }
+
+  async save(profile: BusinessProfile): Promise<void> { this.byTenant.set(profile.tenantId, profile); }
 
   private add(profile: BusinessProfile): void {
     if (this.byTenant.has(profile.tenantId)) {

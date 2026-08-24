@@ -33,4 +33,19 @@ describe("GoogleCalendarAdapter", () => {
       end: { dateTime: "2026-08-24T11:30:00-05:00", timeZone: "America/Chicago" },
     });
   });
+
+  it("resolves the current business timezone for each calendar event", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ id: "event-1" }), { status: 200 }));
+    const oauth = { accessToken: async () => "test-access-token" } as unknown as GoogleOAuthService;
+    const adapter = new GoogleCalendarAdapter("yibo-test@example.com", async () => "America/Denver", oauth, fetcher);
+
+    await adapter.createEvent({
+      tenantId: "tenant-denver", appointmentId: "appointment-1", employeeId: "employee-1", title: "Consultation",
+      startAt: "2026-08-24T17:00:00.000Z", endAt: "2026-08-24T17:30:00.000Z", idempotencyKey: "request-1",
+    });
+
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({
+      start: { dateTime: "2026-08-24T11:00:00-06:00", timeZone: "America/Denver" },
+    });
+  });
 });
