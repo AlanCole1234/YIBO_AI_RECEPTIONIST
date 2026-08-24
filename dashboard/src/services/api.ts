@@ -33,6 +33,7 @@ export interface Appointment {
   externalCalendarEventId?: string;
 }
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean; calendarId?: string }
+export interface TelephonyStatus { configured: boolean; provider: string }
 
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -74,4 +75,5 @@ export const api = {
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
+  telephonyStatus: () => request<TelephonyStatus>("/api/integrations/telephony/status"),
 };
