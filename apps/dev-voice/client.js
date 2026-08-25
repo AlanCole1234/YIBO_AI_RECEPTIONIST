@@ -1,6 +1,8 @@
 const log = document.querySelector("#log");
 const micButton = document.querySelector("#mic");
 const stopButton = document.querySelector("#stop");
+const voiceOrb = document.querySelector("#voiceOrb");
+const orbStatus = document.querySelector("#orbStatus");
 const socket = new WebSocket(`ws://${location.host}/voice`);
 socket.binaryType = "arraybuffer";
 
@@ -12,8 +14,8 @@ let playbackAt = 0;
 let pendingAudio;
 let playback;
 
-socket.addEventListener("open", () => line("harness.connected"));
-socket.addEventListener("close", () => line("harness.disconnected"));
+socket.addEventListener("open", () => { line("harness.connected"); setOrb("idle", "En espera", "Lista para comenzar"); });
+socket.addEventListener("close", () => { line("harness.disconnected"); setOrb("idle", "Desconectado", "Reinicia el servidor para continuar"); });
 socket.addEventListener("message", ({ data }) => {
   if (typeof data !== "string") {
     playPcm16(data, pendingAudio);
@@ -29,6 +31,7 @@ socket.addEventListener("message", ({ data }) => {
 micButton.addEventListener("click", async () => {
   context ??= new AudioContext();
   await context.resume();
+  setOrb("connecting", "Conectando…", "Solicitando acceso al micrófono");
   stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
   source = context.createMediaStreamSource(stream);
   processor = context.createScriptProcessor(2048, 1, 1);
@@ -42,11 +45,16 @@ micButton.addEventListener("click", async () => {
   socket.send(JSON.stringify({ type: "mic.start", sampleRate: context.sampleRate, channels: 1 }));
   micButton.disabled = true;
   stopButton.disabled = false;
+  setOrb("listening", "Escuchando", "Habla con naturalidad; puedes interrumpir a YIBO");
 });
 
 stopButton.addEventListener("click", stopMicrophone);
 document.querySelector("#interrupt").addEventListener("click", () => socket.send(JSON.stringify({ type: "interrupt" })));
-document.querySelector("#close").addEventListener("click", () => socket.send(JSON.stringify({ type: "close" })));
+document.querySelector("#close").addEventListener("click", () => {
+  stopMicrophone();
+  socket.send(JSON.stringify({ type: "close" }));
+  setOrb("idle", "Sesión cerrada", "Recarga la página para iniciar otra llamada");
+});
 document.querySelector("#wav").addEventListener("change", async ({ target }) => {
   const file = target.files?.[0];
   if (!file) return;
@@ -64,6 +72,7 @@ function stopMicrophone() {
   micButton.disabled = false;
   stopButton.disabled = true;
   line("microphone.stopped");
+  setOrb("idle", "Micrófono pausado", "YIBO ya no recibe audio");
 }
 
 function playPcm16(arrayBuffer, metadata) {
@@ -81,11 +90,15 @@ function playPcm16(arrayBuffer, metadata) {
     playback = { assistantTurnId: metadata.assistantTurnId, startedAt: playbackAt, nodes: [] };
   }
   node.start(playbackAt);
+  setOrb("speaking", "YIBO está hablando", "Puedes interrumpir su respuesta en cualquier momento");
   playback.nodes.push(node);
   node.onended = () => {
     if (playback?.assistantTurnId !== metadata.assistantTurnId) return;
     playback.nodes = playback.nodes.filter((candidate) => candidate !== node);
-    if (playback.nodes.length === 0) playback = undefined;
+    if (playback.nodes.length === 0) {
+      playback = undefined;
+      setOrb(stream ? "listening" : "idle", stream ? "Escuchando" : "En espera", stream ? "Tu turno" : "El micrófono está apagado");
+    }
   };
   playbackAt += buffer.duration;
 }
@@ -98,6 +111,7 @@ function clearPlayback(requestId) {
   });
   playback = undefined;
   playbackAt = now;
+  setOrb(stream ? "listening" : "idle", stream ? "Interrupción detectada" : "Respuesta detenida", stream ? "YIBO te está escuchando" : "Audio detenido");
   socket.send(JSON.stringify({
     type: "playback.cleared",
     requestId,
@@ -110,4 +124,10 @@ function clearPlayback(requestId) {
 function line(value) {
   log.textContent += `${value}\n`;
   log.scrollTop = log.scrollHeight;
+}
+
+function setOrb(state, title, detail) {
+  voiceOrb.classList.remove("listening", "speaking", "connecting");
+  if (state !== "idle") voiceOrb.classList.add(state);
+  orbStatus.innerHTML = `<b>${title}</b>${detail}`;
 }
