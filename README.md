@@ -1,8 +1,14 @@
 # YIBO
 
-Local development shell for the YIBO modular monolith. It composes the current
-business, customer, scheduling, appointment, and integration modules behind a
-Fastify API and a Vue dashboard.
+Núcleo de una recepcionista telefónica con IA, multi-tenant, construido como
+monolito modular. La aplicación local expone los módulos mediante una API
+Fastify y un dashboard Vue.
+
+## Documentación
+
+- [Arquitectura actual](docs/ARCHITECTURE.md)
+- [Guía para seguir construyendo](docs/BUILDING_GUIDE.md)
+- [Contrato de arquitectura completo](YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md)
 
 ## Run locally
 
