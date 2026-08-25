@@ -52,11 +52,13 @@ const server = Fastify({ logger: false });
 const htmlPath = new URL("./index.html", import.meta.url);
 const clientPath = new URL("./client.js", import.meta.url);
 const configurationPanelPath = new URL("./configuration-panel.js", import.meta.url);
+const usageMonitorPath = new URL("./usage-monitor.js", import.meta.url);
 const callHistoryPath = new URL("./call-history.js", import.meta.url);
 
 server.get("/", async (_request, reply) => reply.type("text/html").send(await readFile(htmlPath, "utf8")));
 server.get("/client.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(clientPath, "utf8")));
 server.get("/configuration-panel.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(configurationPanelPath, "utf8")));
+server.get("/usage-monitor.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(usageMonitorPath, "utf8")));
 server.get("/call-history.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(callHistoryPath, "utf8")));
 server.get("/api/configuration", async () => ({
   current: await app.agentConfiguration.get(app.tenantId),
