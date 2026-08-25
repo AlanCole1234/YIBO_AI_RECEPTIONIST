@@ -2,9 +2,9 @@ export type SupportedLocale = "es-MX" | "en-US";
 
 export const messages = {
   "es-MX": {
-    overview: "Resumen", agent: "Agente IA", customers: "Clientes", availability: "Disponibilidad", appointments: "Citas",
-    apiConnected: "API conectada", apiOffline: "API sin conexión", localEnvironment: "Entorno local",
-    operationalConfiguration: "Configuración operativa", systemReady: "Sistema listo",
+    overview: "Inicio", agent: "Agente IA", customers: "Clientes", availability: "Disponibilidad", appointments: "Citas",
+    apiConnected: "Todo conectado", apiOffline: "Sin conexión", localEnvironment: "Espacio de trabajo",
+    operationalConfiguration: "Así está funcionando YIBO", systemReady: "Listo para atender",
     services: "Servicios", configured: "configurados", professionals: "Profesionales", active: "activos",
     timezone: "Zona horaria", sourceOfTruth: "fuente de verdad", availableServices: "Servicios disponibles",
     businessHours: "Horario de atención", findOrCreateCustomer: "Buscar o crear cliente",
@@ -21,9 +21,9 @@ export const messages = {
     days: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
   },
   "en-US": {
-    overview: "Overview", agent: "AI agent", customers: "Customers", availability: "Availability", appointments: "Appointments",
-    apiConnected: "API connected", apiOffline: "API offline", localEnvironment: "Local environment",
-    operationalConfiguration: "Operational configuration", systemReady: "System ready",
+    overview: "Home", agent: "AI agent", customers: "Customers", availability: "Availability", appointments: "Appointments",
+    apiConnected: "Everything connected", apiOffline: "Offline", localEnvironment: "Workspace",
+    operationalConfiguration: "How YIBO is doing", systemReady: "Ready to welcome callers",
     services: "Services", configured: "configured", professionals: "Professionals", active: "active",
     timezone: "Time zone", sourceOfTruth: "source of truth", availableServices: "Available services",
     businessHours: "Business hours", findOrCreateCustomer: "Find or create customer",

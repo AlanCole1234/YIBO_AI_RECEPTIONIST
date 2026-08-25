@@ -156,7 +156,7 @@ function statusLabel(status: string): string {
 <template>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">Y</span><div><strong>YIBO</strong><small>Development console</small></div></div>
+      <div class="brand"><span class="brand-mark">Y</span><div><strong>YIBO</strong><small>{{ locale === 'en-US' ? 'Welcome studio' : 'Estudio de atención' }}</small></div></div>
       <nav aria-label="Navegación principal">
         <button v-for="item in navItems"
           :key="item[0]" :class="{ active: section === item[0] }" @click="chooseSection(item[0])">
