@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
 import { messages, supportedLocale, type MessageKey } from "./i18n";
 import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
+import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 
 type Section = "overview" | "agent" | "customers" | "availability" | "appointments";
 
@@ -167,7 +168,7 @@ function statusLabel(status: string): string {
     </aside>
 
     <main>
-      <header><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
+      <header v-if="section !== 'agent'"><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
       <p v-if="globalError" class="alert" role="alert">{{ globalError }}</p>
 
       <section v-if="section === 'overview'" class="view">
@@ -185,6 +186,7 @@ function statusLabel(status: string): string {
       </section>
 
       <section v-else-if="section === 'agent'" class="view agent-view">
+        <AgentVoiceLab />
         <AgentConfigurationPanel :locale="locale" />
       </section>
 

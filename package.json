@@ -8,7 +8,7 @@
   },
   "scripts": {
     "db:init": "tsx src/infrastructure/database/init-databases.ts",
-    "dev": "concurrently -k -n api,dashboard -c cyan,magenta \"pnpm dev:api\" \"pnpm dev:dashboard\"",
+    "dev": "concurrently -k -n api,dashboard,voice -c cyan,magenta,yellow \"pnpm dev:api\" \"pnpm dev:dashboard\" \"pnpm dev:voice\"",
     "dev:api": "tsx watch src/main.ts",
     "dev:dashboard": "vite --config dashboard/vite.config.ts",
     "dev:voice": "tsx --env-file=.env apps/dev-voice/server.ts",
