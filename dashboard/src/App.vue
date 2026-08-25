@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
 import { messages, supportedLocale, type MessageKey } from "./i18n";
+import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 
-type Section = "overview" | "customers" | "availability" | "appointments";
+type Section = "overview" | "agent" | "customers" | "availability" | "appointments";
 
 const section = ref<Section>("overview");
 const business = ref<Business>();
@@ -30,7 +31,7 @@ const eligibleEmployees = computed(() => business.value?.employees.filter(
 const locale = computed(() => supportedLocale(business.value?.locale));
 const copy = computed(() => messages[locale.value]);
 const navItems = computed(() => [
-  ["overview", copy.value.overview], ["customers", copy.value.customers],
+  ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
   ["availability", copy.value.availability], ["appointments", copy.value.appointments],
 ] as Array<[Section, string]>);
 const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
@@ -183,6 +184,10 @@ function statusLabel(status: string): string {
         </div>
       </section>
 
+      <section v-else-if="section === 'agent'" class="view agent-view">
+        <AgentConfigurationPanel :locale="locale" />
+      </section>
+
       <section v-else-if="section === 'customers'" class="view narrow">
         <div class="section-heading"><div><p class="eyebrow">{{ t('customers') }}</p><h2>{{ t('findOrCreateCustomer') }}</h2><p>{{ t('customerIdentityHelp') }}</p></div></div>
         <form class="panel form-card" @submit.prevent="saveCustomer">
@@ -206,7 +211,7 @@ function statusLabel(status: string): string {
         <div v-if="selectedSlot" class="booking-bar"><div><span>{{ t('selectedTime') }}</span><strong>{{ formatDateTime(selectedSlot.startAt) }}</strong></div><button class="primary" :disabled="!customer || busy" @click="createAppointment">{{ customer ? t('createAppointment') : t('createCustomerFirst') }}</button></div>
       </section>
 
-      <section v-else class="view">
+      <section v-else-if="section === 'appointments'" class="view">
         <div class="section-heading"><div><p class="eyebrow">{{ t('appointments') }}</p><h2>{{ t('appointmentInspection') }}</h2></div></div>
         <article v-if="createdAppointment" class="result-card success-card featured"><span class="result-label">{{ t('confirmedAppointment') }}</span><h3>{{ createdAppointment.id }}</h3><p>{{ formatDateTime(createdAppointment.startAt) }} — {{ slotTime(createdAppointment.endAt) }}</p><span class="pill success">{{ statusLabel(createdAppointment.status) }}</span><small>{{ t('externalEvent') }}: {{ createdAppointment.externalCalendarEventId }}</small></article>
         <form class="panel lookup" @submit.prevent="findAppointment"><label>{{ t('appointmentId') }}<input v-model="lookupId" placeholder="appointment-1" /></label><button class="primary" :disabled="busy">{{ t('searchAppointment') }}</button></form>

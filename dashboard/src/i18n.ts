@@ -2,7 +2,7 @@ export type SupportedLocale = "es-MX" | "en-US";
 
 export const messages = {
   "es-MX": {
-    overview: "Resumen", customers: "Clientes", availability: "Disponibilidad", appointments: "Citas",
+    overview: "Resumen", agent: "Agente IA", customers: "Clientes", availability: "Disponibilidad", appointments: "Citas",
     apiConnected: "API conectada", apiOffline: "API sin conexión", localEnvironment: "Entorno local",
     operationalConfiguration: "Configuración operativa", systemReady: "Sistema listo",
     services: "Servicios", configured: "configurados", professionals: "Profesionales", active: "activos",
@@ -21,7 +21,7 @@ export const messages = {
     days: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
   },
   "en-US": {
-    overview: "Overview", customers: "Customers", availability: "Availability", appointments: "Appointments",
+    overview: "Overview", agent: "AI agent", customers: "Customers", availability: "Availability", appointments: "Appointments",
     apiConnected: "API connected", apiOffline: "API offline", localEnvironment: "Local environment",
     operationalConfiguration: "Operational configuration", systemReady: "System ready",
     services: "Services", configured: "configured", professionals: "Professionals", active: "active",

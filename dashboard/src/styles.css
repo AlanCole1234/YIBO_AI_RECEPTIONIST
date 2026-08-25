@@ -143,6 +143,7 @@ h3 { margin-bottom: 18px; color: var(--neon-cyan); font-family: 'Share Tech Mono
 
 .view { padding-top: 20px; }
 .view.narrow { max-width: 800px; }
+.agent-view { max-width: 1380px; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .section-heading p:not(.eyebrow) { color: var(--text-muted); font-size: 15px; }
 
@@ -276,7 +277,7 @@ input:focus, select:focus {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; padding: 20px; flex-direction: row; align-items: center; justify-content: space-between; border-right: none; border-bottom: 1px solid var(--glass-border); }
   .brand { padding-bottom: 0; }
-  nav { grid-template-columns: repeat(4, 1fr); gap: 10px; width: 60%; }
+  nav { grid-template-columns: repeat(5, 1fr); gap: 10px; width: 70%; }
   nav button { justify-content: center; font-size: 0; padding: 15px; }
   .nav-dot { width: 12px; height: 12px; }
   .sidebar-status { display: none; }

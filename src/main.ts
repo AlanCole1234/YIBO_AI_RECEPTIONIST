@@ -3,7 +3,7 @@ import { buildConfiguredApplication } from "./bootstrap/build-configured-applica
 import { createApiServer } from "./api/index.js";
 
 const port = Number(process.env.PORT ?? 3000);
-const application = buildConfiguredApplication({
+const application = await buildConfiguredApplication({
   environment: process.env,
   ...(process.env.YIBO_TENANT_ID?.trim() ? { tenantId: process.env.YIBO_TENANT_ID.trim() } : {}),
 });
