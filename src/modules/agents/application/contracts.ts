@@ -42,22 +42,33 @@ export interface ToolExecutor {
   execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult>;
 }
 
-export interface StartAgentSessionCommand {
-  callId: CallId;
-  tenantId: TenantId;
-  customerId?: CustomerId;
+export interface PrepareAgentDefinitionCommand extends ToolExecutionContext {}
+
+export interface AgentDefinition {
+  instructions: string;
+  locale: string;
+  voice?: string;
+  conversation: ConversationBehavior;
+  tools: AgentToolDefinition[];
+  toolExecutor: ToolExecutor;
+  trustedContext: ToolExecutionContext;
 }
 
-export interface AgentSession {
-  callId: CallId;
-  tenantId: TenantId;
-  close(): Promise<void>;
+export interface ConversationBehavior {
+  model: string;
+  maxOutputTokens: number;
+  reasoningEffort: "minimal" | "low" | "medium" | "high";
+  turnDetection: {
+    threshold?: number;
+    prefixPaddingMs?: number;
+    silenceDurationMs?: number;
+  };
 }
 
-export type AgentError =
-  | { code: "CONFIGURATION_NOT_FOUND" }
-  | { code: "AI_PROVIDER_UNAVAILABLE"; retryable: boolean };
+export type AgentDefinitionError = { code: "CONFIGURATION_NOT_FOUND" };
 
-export interface AgentRuntime {
-  startSession(command: StartAgentSessionCommand): Promise<Result<AgentSession, AgentError>>;
+export interface AgentDefinitionFactory {
+  prepare(
+    command: PrepareAgentDefinitionCommand,
+  ): Promise<Result<AgentDefinition, AgentDefinitionError>>;
 }

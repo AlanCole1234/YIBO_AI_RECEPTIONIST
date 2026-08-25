@@ -1,11 +1,16 @@
-export { VoiceBridgeService } from "./application/voice-bridge-service.js";
 export type {
   AudioFrame,
   AudioSink,
-  StartVoiceBridgeCommand,
-  VoiceAgentSession,
-  VoiceBridge,
-  VoiceBridgeSession,
-  VoiceError,
+  ConversationTransport,
+  VoiceMediaError,
+  VoiceMediaGateway,
 } from "./application/contracts.js";
-export type { AIProviderError, ProviderVoiceSession, VoiceAIProvider } from "./ports/voice-ai-provider.js";
+export { ScriptedVoiceMediaGateway } from "./infrastructure/scripted-voice-media-gateway.js";
+export {
+  decodeWav,
+  floatAudioToRealtimeFrame,
+  splitRealtimeFrame,
+  REALTIME_CODEC,
+  REALTIME_SAMPLE_RATE,
+} from "./media/pcm-media.js";
+export type { FloatAudioChunk } from "./media/pcm-media.js";

@@ -5,7 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { BusinessProfile } from "../../modules/business/index.js";
 import type { RegionId } from "../../shared/types/identifiers.js";
 
-const migrationPath = fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url));
+const migrationPaths = [
+  fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url)),
+  fileURLToPath(new URL("./migrations/002_agent_configuration_and_usage.sql", import.meta.url)),
+];
 
 export const defaultDatabasePath = (region: RegionId): string =>
   process.env[`YIBO_DATABASE_${region}`] ?? resolve(process.cwd(), "data", `yibo-${region.toLowerCase()}.sqlite`);
@@ -18,9 +21,11 @@ export function openRegionalDatabase(region: RegionId, path = defaultDatabasePat
 }
 
 export function migrateDatabase(database: DatabaseSync): void {
-  database.exec(readFileSync(migrationPath, "utf8"));
-  database.prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
-    .run(1, new Date().toISOString());
+  migrationPaths.forEach((path, index) => {
+    database.exec(readFileSync(path, "utf8"));
+    database.prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+      .run(index + 1, new Date().toISOString());
+  });
 }
 
 export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {

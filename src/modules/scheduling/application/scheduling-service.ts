@@ -1,4 +1,5 @@
 import { failure, success } from "../../../shared/domain/result.js";
+import type { Clock } from "../../../shared/application/system.js";
 import type { EmployeeDefinition, OpeningHoursRule, ServiceDefinition } from "../../business/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import {
@@ -29,6 +30,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     private readonly workingHours: EmployeeWorkingHoursProvider,
     private readonly appointments: ConfirmedAppointmentReader,
     private readonly calendar: CalendarPort,
+    private readonly clock: Clock,
   ) {}
 
   async findAvailableSlots(query: FindAvailableSlotsQuery) {
@@ -81,7 +83,7 @@ export class SchedulingServiceImpl implements SchedulingService {
       employeeId: employee.id,
       startAt: start.toISOString(),
       endAt: end.toISOString(),
-      validatedAt: new Date().toISOString(),
+      validatedAt: this.clock.now().toISOString(),
     });
   }
 

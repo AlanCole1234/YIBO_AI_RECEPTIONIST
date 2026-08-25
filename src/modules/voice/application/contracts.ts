@@ -1,37 +1,14 @@
 import type { Result } from "../../../shared/domain/result.js";
+import type {
+  AudioFrame,
+  AudioSink,
+  ConversationTransport,
+} from "../../conversation/index.js";
 
-export interface AudioFrame {
-  data: Uint8Array;
-  codec: string;
-  sampleRateHz: number;
-  timestampMs?: number;
+export interface VoiceMediaGateway {
+  open(callId: string): Promise<Result<ConversationTransport, VoiceMediaError>>;
 }
 
-export interface AudioSink {
-  write(frame: AudioFrame): Promise<void>;
-}
+export type VoiceMediaError = { code: "MEDIA_NOT_AVAILABLE"; message: string };
 
-export interface VoiceAgentSession {
-  callId: string;
-  tenantId: string;
-}
-
-export interface VoiceBridge {
-  start(command: StartVoiceBridgeCommand): Promise<Result<VoiceBridgeSession, VoiceError>>;
-}
-
-export interface StartVoiceBridgeCommand {
-  callId: string;
-  agentSession: VoiceAgentSession;
-  inboundAudio: AsyncIterable<AudioFrame>;
-  outboundAudio: AudioSink;
-}
-
-export interface VoiceBridgeSession {
-  close(): Promise<void>;
-  completed: Promise<void>;
-}
-
-export type VoiceError =
-  | { code: "INVALID_AUDIO_STREAM"; message: string }
-  | { code: "AI_PROVIDER_UNAVAILABLE"; retryable: boolean };
+export type { AudioFrame, AudioSink, ConversationTransport };

@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import type { YiboApplication } from "../app/index.js";
+import type { YiboApplication } from "../bootstrap/index.js";
 import { registerAppointmentRoutes } from "./routes/appointments.js";
 import { registerAvailabilityRoutes } from "./routes/availability.js";
 import { registerBusinessRoutes } from "./routes/business.js";

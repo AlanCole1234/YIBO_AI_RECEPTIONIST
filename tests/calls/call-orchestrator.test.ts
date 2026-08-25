@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { AgentDefinitionService, InMemoryAgentConfigurationSource, type AgentToolName, type ToolExecutor } from "../../src/modules/agents/index.js";
 import { BusinessDirectoryService, InMemoryBusinessRepository, type BusinessProfile } from "../../src/modules/business/index.js";
-import { CallOrchestratorService, InMemoryCallRepository, type CallAgentRuntime, type CallCustomerDirectory, type CallTelephonyGateway, type CallVoiceBridge } from "../../src/modules/calls/index.js";
+import { CallOrchestratorService, InMemoryCallRepository, type CallCustomerDirectory, type CallTelephonyGateway } from "../../src/modules/calls/index.js";
+import { ConversationService, ScriptedConversationRuntime } from "../../src/modules/conversation/index.js";
+import { ScriptedVoiceMediaGateway, type ConversationTransport } from "../../src/modules/voice/index.js";
 
 const business: BusinessProfile = {
   region: "US",
@@ -9,6 +12,7 @@ const business: BusinessProfile = {
 };
 
 const incoming = { type: "INCOMING_CALL" as const, callId: "call-1", from: "+13035550999", to: "+13035550123", occurredAt: "2026-08-09T18:00:00.000Z" };
+const noAudio = async function* () {};
 
 const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean } = {}) => {
   const repository = new InMemoryCallRepository();
@@ -17,39 +21,73 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
     if (overrides.customerOk === false) return { ok: false } as const;
     return { ok: true, value: { id: "customer-1" } } as const;
   }) };
-  const agentClose = vi.fn(async () => undefined);
-  const voiceClose = vi.fn(async () => undefined);
-  const agents: CallAgentRuntime = { startSession: vi.fn(async () => {
-    if (overrides.agentOk === false) return { ok: false } as const;
-    return { ok: true, value: { close: agentClose } } as const;
-  }) };
-  const voice: CallVoiceBridge = { start: vi.fn(async () => ({ ok: true, value: { close: voiceClose } })) };
+  const toolExecutor: ToolExecutor = { execute: vi.fn() };
+  const configurations = overrides.agentOk === false ? [] : [{
+    tenantId: business.tenantId,
+    configuration: {
+      instructions: "Help the caller", locale: "en-US",
+      enabledTools: ["check_availability", "create_appointment", "cancel_appointment", "transfer_to_human"] as AgentToolName[],
+      conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const, turnDetection: {} },
+    },
+  }];
+  const agents = new AgentDefinitionService(new InMemoryAgentConfigurationSource(configurations), toolExecutor);
+  const transportClose = vi.fn(async () => undefined);
+  const transport: ConversationTransport = {
+    inboundAudio: noAudio(),
+    outboundAudio: { write: vi.fn() },
+    close: transportClose,
+  };
+  const voice = new ScriptedVoiceMediaGateway();
+  voice.register(incoming.callId, transport);
+  const runtime = new ScriptedConversationRuntime();
+  const conversations = new ConversationService({ runtime });
   const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
-  return { orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, repository), repository, telephony, agents, agentClose, voiceClose };
+  return {
+    orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, conversations, repository),
+    repository,
+    runtime,
+    telephony,
+    transportClose,
+    voice,
+  };
 };
 
 describe("CallOrchestratorService", () => {
-  it("moves an inbound call through the documented start sequence", async () => {
+  it("starts a conversation through the public agent, voice and conversation APIs", async () => {
     const system = createOrchestrator();
+
     await system.orchestrator.handleTelephonyEvent(incoming);
+
     expect(system.repository.stateHistory.map((entry) => entry.state)).toEqual(["RINGING", "ANSWERED", "AI_CONNECTING", "IN_CONVERSATION"]);
     await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", state: "IN_CONVERSATION" });
+    expect(system.voice.openedCallIds).toEqual([incoming.callId]);
+    expect(system.runtime.openedInputs).toEqual([{
+      conversationId: incoming.callId,
+      agent: expect.objectContaining({
+        instructions: "Help the caller",
+        locale: "en-US",
+        tools: expect.arrayContaining([expect.objectContaining({ name: "check_availability" })]),
+      }),
+    }]);
   });
 
-  it("shuts down voice and agent sessions exactly once when the call hangs up", async () => {
+  it("closes the conversation and media exactly once when the call hangs up", async () => {
     const system = createOrchestrator();
     await system.orchestrator.handleTelephonyEvent(incoming);
+
     await system.orchestrator.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:03:00.000Z" });
     await system.orchestrator.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:04:00.000Z" });
-    expect(system.voiceClose).toHaveBeenCalledTimes(1);
-    expect(system.agentClose).toHaveBeenCalledTimes(1);
+
+    expect(system.runtime.latestSession.closeCount).toBe(1);
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
     expect(system.repository.stateHistory.at(-1)).toEqual({ callId: incoming.callId, state: "COMPLETED" });
   });
 
-  it("fails and hangs up when an agent session cannot start", async () => {
+  it("fails and hangs up when an agent definition cannot be prepared", async () => {
     const system = createOrchestrator({ agentOk: false });
     await system.orchestrator.handleTelephonyEvent(incoming);
     expect(system.telephony.hangup).toHaveBeenCalledWith(incoming.callId);
+    expect(system.runtime.sessions).toHaveLength(0);
     expect(system.repository.stateHistory.at(-1)).toEqual({ callId: incoming.callId, state: "FAILED" });
   });
 

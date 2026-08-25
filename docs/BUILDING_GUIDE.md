@@ -21,11 +21,12 @@ Objetivo: demostrar una llamada simulada que crea una cita confirmada usando tod
 
 - Crear `src/bootstrap/`.
 - Construir explícitamente repositorios, servicios y adaptadores en memoria.
-- Crear fakes de telefonía, agente IA y streams de voz.
+- Crear fakes de telefonía, runtime de conversación y transporte de media.
 - Añadir una prueba `tests/e2e/in-memory-call-to-appointment.test.ts`.
 - Centralizar un reloj y generadores de IDs inyectables.
 
-Terminado cuando un evento `INCOMING_CALL` recorre Calls → Agents → ToolExecutor → Appointments y termina en una cita `CONFIRMED`.
+Terminado cuando un evento `INCOMING_CALL` recorre Calls → Agents →
+Conversation → ToolExecutor → Appointments y termina en una cita `CONFIRMED`.
 
 ### Fase 2 — Persistencia PostgreSQL
 
@@ -55,7 +56,8 @@ No introducir un segundo proveedor hasta cerrar el primer recorrido real.
 
 Objetivo: abrir una sesión realtime y ejecutar tools con contexto seguro.
 
-- Implementar `AgentAIProvider` y/o consolidar el límite con `VoiceAIProvider` mediante una decisión explícita.
+- Implementar un adaptador de infraestructura para `ConversationRuntimePort`,
+  conservando la sesión unificada definida por ADR-001.
 - Mantener `tenantId`, `customerId`, `callId` e idempotencia fuera de los argumentos del modelo.
 - Instrumentar inicio/cierre, tool calls, latencia y errores.
 - Definir política de retención antes de almacenar audio o transcripción.
@@ -149,7 +151,9 @@ El primer vertical slice técnico queda terminado cuando:
 - una llamada simulada resuelve tenant y cliente;
 - el agente solicita disponibilidad y creación mediante tools;
 - la cita queda `CONFIRMED` en repositorio y calendario fake;
-- el hangup cierra voz y agente una sola vez;
+- el hangup cierra conversación y media una sola vez;
 - todos los eventos se pueden correlacionar por `callId` y `tenantId`;
 - typecheck y suite completa pasan.
 
+Checkpoint: YIBO todavía no habla, pero ya existe como sistema completamente
+conectado en memoria.

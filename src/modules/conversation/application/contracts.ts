@@ -1,0 +1,60 @@
+import type {
+  AgentDefinition,
+} from "../../agents/index.js";
+import type {
+  AudioFrame,
+  AssistantPlaybackPosition,
+  ConversationRuntimeEvent,
+  ConversationRuntimePort,
+  ConversationRuntimeSession,
+} from "../ports/conversation-runtime-port.js";
+import type { ConversationUsageRecorder } from "../ports/conversation-usage.js";
+
+export interface AudioSink {
+  write(frame: AudioFrame, assistantTurnId: string): Promise<void>;
+  interrupt?(): Promise<AssistantPlaybackPosition | undefined>;
+}
+
+export interface ConversationTransport {
+  inboundAudio: AsyncIterable<AudioFrame>;
+  outboundAudio: AudioSink;
+  close(): Promise<void>;
+}
+
+export interface StartConversationCommand {
+  conversationId: string;
+  agent: AgentDefinition;
+  transport: ConversationTransport;
+  observeEvent?(event: ConversationRuntimeEvent): void;
+}
+
+export interface ConversationServiceDependencies {
+  runtime: ConversationRuntimePort;
+  usageRecorder?: ConversationUsageRecorder;
+}
+
+export type ConversationCompletion =
+  | { status: "closed"; reason?: string }
+  | { status: "failed"; error: ConversationError };
+
+export type ConversationError =
+  | { code: "RUNTIME_ERROR"; message: string; retryable: boolean }
+  | { code: "AUDIO_TRANSPORT_ERROR"; message: string }
+  | { code: "TOOL_EXECUTION_ERROR"; message: string };
+
+export interface ConversationSession {
+  completed: Promise<ConversationCompletion>;
+  sendText(text: string): Promise<void>;
+  interrupt(position?: AssistantPlaybackPosition): Promise<void>;
+  close(): Promise<void>;
+}
+
+export interface ConversationServiceContract {
+  start(command: StartConversationCommand): Promise<ConversationSession>;
+}
+
+export interface ConversationSessionControllerDependencies {
+  runtimeSession: ConversationRuntimeSession;
+  command: StartConversationCommand;
+  usageRecorder?: ConversationUsageRecorder;
+}

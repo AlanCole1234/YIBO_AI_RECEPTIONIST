@@ -1,0 +1,27 @@
+import { DatabaseSync } from "node:sqlite";
+import { DEVELOPMENT_BUSINESS } from "../../src/app/index.js";
+import { AgentConfigurationService } from "../../src/modules/agents/index.js";
+import { SqliteAgentConfigurationRepository } from "../../src/infrastructure/database/sqlite-agent-configuration-repository.js";
+import { SqliteConversationUsageRepository } from "../../src/infrastructure/database/sqlite-conversation-usage-repository.js";
+import { migrateDatabase, seedBusiness } from "../../src/infrastructure/database/regional-database.js";
+
+const database = new DatabaseSync(":memory:");
+try {
+  migrateDatabase(database);
+  seedBusiness(database, DEVELOPMENT_BUSINESS);
+  const configurations = new SqliteAgentConfigurationRepository(database, "MX");
+  const service = new AgentConfigurationService(configurations);
+  const recommended = service.recommended("es-MX", DEVELOPMENT_BUSINESS.name, "gpt-realtime-2.1");
+  await service.update(DEVELOPMENT_BUSINESS.tenantId, recommended);
+  const usage = new SqliteConversationUsageRepository(database, "MX");
+  await usage.record({
+    tenantId: DEVELOPMENT_BUSINESS.tenantId, callId: "call-1", occurredAt: new Date().toISOString(),
+    inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,
+  });
+  console.log(JSON.stringify({
+    configuration: await service.get(DEVELOPMENT_BUSINESS.tenantId),
+    usage: await usage.summarize(DEVELOPMENT_BUSINESS.tenantId),
+  }));
+} finally {
+  database.close();
+}

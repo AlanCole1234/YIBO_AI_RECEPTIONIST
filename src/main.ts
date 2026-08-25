@@ -1,10 +1,13 @@
-import { createLocalApplication, localAccessContext } from "./app/local-composition-root.js";
+import { buildApplication } from "./bootstrap/index.js";
 import { createApiServer } from "./api/index.js";
 
 const port = Number(process.env.PORT ?? 3000);
-const context = localAccessContext();
-const server = await createApiServer(createLocalApplication(context));
+const application = buildApplication({
+  environment: process.env,
+  ...(process.env.YIBO_TENANT_ID?.trim() ? { tenantId: process.env.YIBO_TENANT_ID.trim() } : {}),
+});
+const server = await createApiServer(application);
 
 await server.listen({ port, host: "127.0.0.1" });
 console.log(`YIBO API listening on http://localhost:${port}`);
-console.log(`Local data context: region=${context.region} tenant=${context.tenantId}`);
+console.log(`Local tenant: ${application.tenantId}`);
