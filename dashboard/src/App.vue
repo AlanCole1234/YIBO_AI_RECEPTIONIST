@@ -168,18 +168,30 @@ function statusLabel(status: string): string {
     </aside>
 
     <main>
-      <header v-if="section !== 'agent'"><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
+      <header v-if="section !== 'agent' && section !== 'overview'"><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
       <p v-if="globalError" class="alert" role="alert">{{ globalError }}</p>
 
-      <section v-if="section === 'overview'" class="view">
-        <div class="section-heading"><div><p class="eyebrow">{{ t('overview') }}</p><h2>{{ t('operationalConfiguration') }}</h2></div><span class="pill success">{{ t('systemReady') }}</span></div>
-        <div class="metric-grid">
-          <article><span>{{ t('services') }}</span><strong>{{ business?.services.length ?? '—' }}</strong><small>{{ t('configured') }}</small></article>
-          <article><span>{{ t('professionals') }}</span><strong>{{ business?.employees.length ?? '—' }}</strong><small>{{ t('active') }}</small></article>
-          <article><span>{{ t('timezone') }}</span><strong class="metric-text">{{ business?.timezone ?? '—' }}</strong><small>{{ t('sourceOfTruth') }}</small></article>
+      <section v-if="section === 'overview'" class="view home-view">
+        <div class="home-intro">
+          <div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1><p>{{ t('homeSubtitle') }}</p></div>
+          <div class="home-actions"><span class="pill success">{{ t('systemReady') }}</span><button class="primary" @click="chooseSection('agent')">{{ t('testAgent') }} <span aria-hidden="true">→</span></button></div>
         </div>
-        <article class="panel integration-card"><div><h3>Google Calendar</h3><p v-if="googleCalendar.connected"><span class="pill success">Connected</span> {{ googleCalendar.calendarId }}</p><p v-else-if="googleCalendar.configured">Connect the test calendar before making real bookings.</p><p v-else>Add the Google Calendar values and encryption key to your local .env file.</p></div><button v-if="googleCalendar.configured && !googleCalendar.connected" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else-if="!googleCalendar.connected" class="pill">Not configured</span></article>
-        <div class="two-column">
+        <div class="home-dashboard">
+          <section class="home-snapshot" aria-labelledby="home-status-title">
+            <div class="home-snapshot-heading"><div><p class="eyebrow">{{ t('overview') }}</p><h2 id="home-status-title">{{ t('operationalConfiguration') }}</h2></div><span class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></div>
+            <div class="home-metrics">
+              <article><span>{{ t('services') }}</span><strong>{{ business?.services.length ?? '—' }}</strong><small>{{ t('configured') }}</small></article>
+              <article><span>{{ t('professionals') }}</span><strong>{{ business?.employees.length ?? '—' }}</strong><small>{{ t('active') }}</small></article>
+              <article><span>{{ t('timezone') }}</span><strong class="metric-text">{{ business?.timezone ?? '—' }}</strong><small>{{ t('sourceOfTruth') }}</small></article>
+            </div>
+          </section>
+          <article class="home-calendar">
+            <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
+            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? t('calendarReady') : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }} <strong>{{ googleCalendar.calendarId }}</strong>.</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
+            <button v-if="googleCalendar.configured && !googleCalendar.connected" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? t('reconnectCalendar') : t('connectCalendar') }}</button><span v-else-if="!googleCalendar.connected" class="pill">{{ t('notConfigured') }}</span>
+          </article>
+        </div>
+        <div class="two-column home-details">
           <article class="panel"><h3>{{ t('availableServices') }}</h3><div v-for="service in business?.services" :key="service.id" class="list-row"><div><strong>{{ service.name }}</strong><small>{{ service.id }}</small></div><span>{{ service.durationMinutes }} min</span></div></article>
           <article class="panel"><h3>{{ t('businessHours') }}</h3><div v-for="hours in business?.openingHours" :key="hours.dayOfWeek" class="list-row"><strong>{{ copy.days[hours.dayOfWeek] }}</strong><span>{{ hours.startTime }} — {{ hours.endTime }}</span></div></article>
         </div>

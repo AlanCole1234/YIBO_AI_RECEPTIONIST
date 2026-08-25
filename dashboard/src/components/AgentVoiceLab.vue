@@ -206,7 +206,7 @@ function addEvent(value: string): void {
 </script>
 
 <template>
-  <section class="voice-lab" aria-labelledby="voice-lab-title">
+  <section class="voice-lab voice-lab-v2" aria-labelledby="voice-lab-title">
     <div class="lab-copy">
       <div class="lab-kicker"><span></span> PRUEBA EN VIVO</div>
       <h2 id="voice-lab-title">Habla con el agente<br><em>antes de publicarlo.</em></h2>

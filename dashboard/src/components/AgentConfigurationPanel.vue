@@ -161,7 +161,7 @@ function errorMessage(caught: unknown): string {
 </script>
 
 <template>
-  <section class="agent-config" aria-labelledby="agent-config-title">
+  <section class="agent-config agent-config-v2" aria-labelledby="agent-config-title">
     <div class="config-intro">
       <div>
         <p class="config-kicker">02 · AJUSTES DEL AGENTE</p>
