@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
-import { createDevelopmentApplication } from "../../src/app/index.js";
+import { buildApplication } from "../../src/bootstrap/index.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("local API flow", () => {
   it("supports health, customer, availability, booking, refresh, conflict, and lookup", async () => {
-    server = await createApiServer(createDevelopmentApplication());
+    server = await createApiServer(buildApplication());
 
     const health = await server.inject({ method: "GET", url: "/api/health" });
     expect(health.statusCode).toBe(200);

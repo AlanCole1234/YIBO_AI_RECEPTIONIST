@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { YiboApplication } from "../../app/index.js";
+import type { YiboApplication } from "../../bootstrap/index.js";
 
 export async function registerGoogleCalendarRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
   server.get("/api/integrations/google/status", async () => {

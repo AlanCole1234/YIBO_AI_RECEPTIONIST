@@ -1,26 +1,29 @@
 import type { BusinessDirectory } from "../../business/index.js";
+import type { AgentDefinitionFactory } from "../../agents/index.js";
+import type {
+  ConversationServiceContract,
+  ConversationSession,
+} from "../../conversation/index.js";
+import type { VoiceMediaGateway } from "../../voice/index.js";
 import type { CallOrchestrator, CallRecord, CallState, TelephonyEvent } from "./contracts.js";
 import type { CallRepository } from "../ports/call-repository.js";
 import type {
-  CallAgentRuntime,
-  CallAgentSession,
   CallCustomerDirectory,
   CallTelephonyGateway,
-  CallVoiceBridge,
-  CallVoiceSession,
 } from "../ports/call-dependencies.js";
 
 const terminalStates = new Set<CallState>(["COMPLETED", "FAILED", "TRANSFERRED"]);
 
 export class CallOrchestratorService implements CallOrchestrator {
-  private readonly sessions = new Map<string, { agent: CallAgentSession; voice: CallVoiceSession }>();
+  private readonly sessions = new Map<string, ConversationSession>();
 
   constructor(
     private readonly businessDirectory: BusinessDirectory,
     private readonly customers: CallCustomerDirectory,
     private readonly telephony: CallTelephonyGateway,
-    private readonly agents: CallAgentRuntime,
-    private readonly voice: CallVoiceBridge,
+    private readonly agents: AgentDefinitionFactory,
+    private readonly voice: VoiceMediaGateway,
+    private readonly conversations: ConversationServiceContract,
     private readonly calls: CallRepository,
   ) {}
 
@@ -28,6 +31,10 @@ export class CallOrchestratorService implements CallOrchestrator {
     if (event.type === "INCOMING_CALL") return this.handleIncoming(event);
     if (event.type === "CALL_HUNG_UP") return this.shutdown(event.callId, event.occurredAt);
     // DTMF is persisted by the telephony implementation if required; it does not alter call state.
+  }
+
+  async interrupt(callId: string, position?: import("../../conversation/index.js").AssistantPlaybackPosition): Promise<void> {
+    await this.sessions.get(callId)?.interrupt(position);
   }
 
   private async handleIncoming(event: Extract<TelephonyEvent, { type: "INCOMING_CALL" }>): Promise<void> {
@@ -42,6 +49,8 @@ export class CallOrchestratorService implements CallOrchestrator {
     const record: CallRecord = {
       callId: event.callId,
       tenantId: business.value.tenantId,
+      from: event.from,
+      to: event.to,
       state: "RINGING",
       createdAt: event.occurredAt,
       updatedAt: event.occurredAt,
@@ -57,20 +66,29 @@ export class CallOrchestratorService implements CallOrchestrator {
     await this.calls.setCustomer(record.callId, customer.value.id, event.occurredAt);
     await this.transition(record.callId, "AI_CONNECTING", event.occurredAt);
 
-    const agent = await this.agents.startSession({
+    const agent = await this.agents.prepare({
       callId: record.callId,
       tenantId: record.tenantId,
       customerId: customer.value.id,
     });
     if (!agent.ok) return this.fail(record.callId, event.occurredAt);
 
-    const voice = await this.voice.start({ callId: record.callId, agentSession: agent.value });
-    if (!voice.ok) {
-      await agent.value.close();
+    const media = await this.voice.open(record.callId);
+    if (!media.ok) return this.fail(record.callId, event.occurredAt);
+
+    let conversation: ConversationSession;
+    try {
+      conversation = await this.conversations.start({
+        conversationId: record.callId,
+        agent: agent.value,
+        transport: media.value,
+      });
+    } catch {
+      await media.value.close();
       return this.fail(record.callId, event.occurredAt);
     }
 
-    this.sessions.set(record.callId, { agent: agent.value, voice: voice.value });
+    this.sessions.set(record.callId, conversation);
     await this.transition(record.callId, "IN_CONVERSATION", event.occurredAt);
   }
 
@@ -80,8 +98,7 @@ export class CallOrchestratorService implements CallOrchestrator {
 
     const session = this.sessions.get(callId);
     if (session) {
-      await session.voice.close();
-      await session.agent.close();
+      await session.close();
       this.sessions.delete(callId);
     }
     await this.transition(callId, "COMPLETED", occurredAt);

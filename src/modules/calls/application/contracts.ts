@@ -1,7 +1,9 @@
 import type { CustomerId, TenantId } from "../../../shared/types/identifiers.js";
+import type { AssistantPlaybackPosition } from "../../conversation/index.js";
 
 export interface CallOrchestrator {
   handleTelephonyEvent(event: TelephonyEvent): Promise<void>;
+  interrupt(callId: string, position?: AssistantPlaybackPosition): Promise<void>;
 }
 
 export type CallState =
@@ -23,7 +25,19 @@ export interface CallRecord {
   callId: string;
   tenantId: TenantId;
   customerId?: CustomerId;
+  from: string;
+  to: string;
   state: CallState;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CallHistoryEntry extends CallRecord {
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    inputAudioMs: number;
+    outputAudioMs: number;
+    toolCalls: number;
+  };
 }

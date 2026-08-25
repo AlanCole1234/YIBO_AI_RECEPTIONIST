@@ -1,0 +1,67 @@
+import type { AgentDefinition, AgentToolName } from "../../agents/index.js";
+
+export interface AudioFrame {
+  data: Uint8Array;
+  codec: string;
+  sampleRate: number;
+  channels: number;
+  timestampMs?: number;
+}
+
+export interface AssistantPlaybackPosition {
+  assistantTurnId: string;
+  audioEndMs: number;
+}
+
+export interface OpenConversationInput {
+  conversationId: string;
+  agent: Pick<AgentDefinition, "instructions" | "locale" | "voice" | "tools" | "conversation">;
+}
+
+export type ToolResultEnvelope =
+  | { toolCallId: string; ok: true; data: unknown }
+  | {
+      toolCallId: string;
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        retryable: boolean;
+      };
+    };
+
+export type ConversationRuntimeEvent =
+  | { type: "audio.delta"; assistantTurnId: string; frame: AudioFrame }
+  | { type: "user.speech_started"; occurredAt?: string }
+  | { type: "user.speech_stopped"; occurredAt?: string }
+  | {
+      type: "tool.call";
+      toolCallId: string;
+      name: AgentToolName;
+      arguments: unknown;
+    }
+  | { type: "assistant.transcript"; text: string; final: boolean }
+  | {
+      type: "usage";
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+      inputAudioMs?: number;
+      outputAudioMs?: number;
+      toolCalls?: number;
+    }
+  | { type: "error"; code: string; message: string; retryable: boolean }
+  | { type: "closed"; reason?: string };
+
+export interface ConversationRuntimePort {
+  openSession(input: OpenConversationInput): Promise<ConversationRuntimeSession>;
+}
+
+export interface ConversationRuntimeSession {
+  sendText(text: string): Promise<void>;
+  sendAudio(frame: AudioFrame): Promise<void>;
+  sendToolResult(result: ToolResultEnvelope): Promise<void>;
+  interrupt(position?: AssistantPlaybackPosition): Promise<void>;
+  close(): Promise<void>;
+  events(): AsyncIterable<ConversationRuntimeEvent>;
+}

@@ -22,9 +22,10 @@ const workingHours: EmployeeWorkingHoursProvider = {
 
 const noAppointments: ConfirmedAppointmentReader = { findConfirmedIntervals: async () => [] };
 const noCalendarConflicts: CalendarPort = { getBusyIntervals: async () => success([]) };
+const clock = { now: () => new Date("2026-08-01T00:00:00.000Z") };
 
 const createService = (appointments = noAppointments, calendar = noCalendarConflicts) => new SchedulingServiceImpl(
-  new BusinessDirectoryService(new InMemoryBusinessRepository([business])), workingHours, appointments, calendar,
+  new BusinessDirectoryService(new InMemoryBusinessRepository([business])), workingHours, appointments, calendar, clock,
 );
 
 describe("SchedulingService", () => {

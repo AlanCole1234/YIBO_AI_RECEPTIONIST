@@ -7,7 +7,9 @@ import type { RegionId } from "../../shared/types/identifiers.js";
 
 const migrations = [
   { version: 1, path: fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url)) },
-  { version: 2, path: fileURLToPath(new URL("./migrations/002_google_calendar_tokens.sql", import.meta.url)) },
+  { version: 2, path: fileURLToPath(new URL("./migrations/002_agent_configuration_and_usage.sql", import.meta.url)) },
+  { version: 3, path: fileURLToPath(new URL("./migrations/003_call_history.sql", import.meta.url)) },
+  { version: 4, path: fileURLToPath(new URL("./migrations/004_google_calendar_tokens.sql", import.meta.url)) },
 ];
 
 export const defaultDatabasePath = (region: RegionId): string =>
@@ -21,6 +23,10 @@ export function openRegionalDatabase(region: RegionId, path = defaultDatabasePat
 }
 
 export function migrateDatabase(database: DatabaseSync): void {
+  database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  )`);
   for (const migration of migrations) {
     const applied = database.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(migration.version);
     if (applied) continue;

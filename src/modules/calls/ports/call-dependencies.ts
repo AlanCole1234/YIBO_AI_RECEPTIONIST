@@ -10,23 +10,3 @@ export interface CallCustomerDirectory {
     { ok: true; value: { id: CustomerId } } | { ok: false }
   >;
 }
-
-export interface CallAgentSession {
-  close(): Promise<void>;
-}
-
-export interface CallAgentRuntime {
-  startSession(input: { callId: string; tenantId: TenantId; customerId?: CustomerId }): Promise<
-    { ok: true; value: CallAgentSession } | { ok: false }
-  >;
-}
-
-export interface CallVoiceSession {
-  close(): Promise<void>;
-}
-
-export interface CallVoiceBridge {
-  start(input: { callId: string; agentSession: CallAgentSession }): Promise<
-    { ok: true; value: CallVoiceSession } | { ok: false }
-  >;
-}

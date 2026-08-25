@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { YiboApplication } from "../../app/index.js";
+import type { YiboApplication } from "../../bootstrap/index.js";
 import { toHttpError } from "../http-errors.js";
 
 export async function registerBusinessRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {

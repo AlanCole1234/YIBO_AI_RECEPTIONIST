@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
-import type { YiboApplication } from "../../src/app/index.js";
+import type { YiboApplication } from "../../src/bootstrap/index.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });

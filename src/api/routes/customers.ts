@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { YiboApplication } from "../../app/index.js";
+import type { YiboApplication } from "../../bootstrap/index.js";
 import { toHttpError } from "../http-errors.js";
 
 interface CustomerBody { phone?: unknown; name?: unknown; email?: unknown }

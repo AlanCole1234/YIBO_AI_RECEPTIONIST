@@ -1,24 +1,25 @@
-export { AgentRuntimeImpl } from "./application/agent-runtime.js";
+export { AgentDefinitionService } from "./application/agent-definition-service.js";
+export { AgentConfigurationService } from "./application/agent-configuration-service.js";
+export type { AgentConfigurationServiceContract } from "./application/agent-configuration-service.js";
 export { ToolExecutorImpl } from "./application/tool-executor.js";
 export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export type {
-  AgentError,
-  AgentRuntime,
-  AgentSession,
+  AgentDefinition,
+  ConversationBehavior,
+  AgentDefinitionError,
+  AgentDefinitionFactory,
   AgentToolCall,
   AgentToolDefinition,
   AgentToolName,
   AgentToolResult,
-  StartAgentSessionCommand,
+  PrepareAgentDefinitionCommand,
   ToolExecutionContext,
   ToolExecutor,
 } from "./application/contracts.js";
 export type {
-  AgentAIProvider,
-  AgentAIProviderError,
   AgentConfiguration,
-  AgentConfigurationProvider,
+  AgentConfigurationSource,
+  AgentConfigurationRepository,
   HumanTransferPort,
-  ProviderAgentSession,
 } from "./ports/agent-dependencies.js";
-export { InMemoryAgentConfigurationProvider } from "./infrastructure/in-memory-agent-configuration.js";
+export { InMemoryAgentConfigurationSource } from "./infrastructure/in-memory-agent-configuration.js";

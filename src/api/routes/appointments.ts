@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { YiboApplication } from "../../app/index.js";
+import type { YiboApplication } from "../../bootstrap/index.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AppointmentBody {
@@ -19,7 +18,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     const idempotencyHeader = request.headers["idempotency-key"];
     const idempotencyKey = typeof idempotencyHeader === "string" && idempotencyHeader.trim()
       ? idempotencyHeader.trim()
-      : `dashboard:${randomUUID()}`;
+      : `dashboard:${app.ids.generate("idempotency")}`;
     const result = await app.appointments.createAppointment({
       tenantId: app.tenantId,
       customerId: customerId as string,

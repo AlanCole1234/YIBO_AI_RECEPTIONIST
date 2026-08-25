@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDevelopmentApplication } from "../../src/app/index.js";
+import { buildApplication } from "../../src/bootstrap/index.js";
 
 const monday = {
   rangeStart: "2026-08-10T00:00:00.000Z",
@@ -8,7 +8,7 @@ const monday = {
 
 describe("development application composition", () => {
   it("confirms a booking and makes the occupied slot unavailable", async () => {
-    const app = createDevelopmentApplication();
+    const app = buildApplication();
     const customer = await app.customers.findOrCreateByPhone({
       tenantId: app.tenantId,
       phone: "+529991234567",
