@@ -6,6 +6,7 @@ export interface ApplicationConfiguration {
   conversationVoice: string;
   maxOutputTokens: number;
   openAiApiKey?: string;
+  openAiAdminKey?: string;
   vadThreshold?: number;
   vadPrefixPaddingMs?: number;
   vadSilenceDurationMs?: number;
@@ -33,6 +34,7 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     4096,
   ) ?? 512;
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
+  const openAiAdminKey = environment.OPENAI_ADMIN_KEY?.trim();
   const vadThreshold = optionalNumber(environment.YIBO_VAD_THRESHOLD, "YIBO_VAD_THRESHOLD", 0, 1);
   const vadPrefixPaddingMs = optionalInteger(environment.YIBO_VAD_PREFIX_PADDING_MS, "YIBO_VAD_PREFIX_PADDING_MS");
   const vadSilenceDurationMs = optionalInteger(environment.YIBO_VAD_SILENCE_DURATION_MS, "YIBO_VAD_SILENCE_DURATION_MS");
@@ -46,6 +48,7 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     conversationVoice,
     maxOutputTokens,
     ...(openAiApiKey ? { openAiApiKey } : {}),
+    ...(openAiAdminKey ? { openAiAdminKey } : {}),
     ...(vadThreshold === undefined ? {} : { vadThreshold }),
     ...(vadPrefixPaddingMs === undefined ? {} : { vadPrefixPaddingMs }),
     ...(vadSilenceDurationMs === undefined ? {} : { vadSilenceDurationMs }),

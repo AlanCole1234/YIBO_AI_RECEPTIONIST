@@ -78,6 +78,14 @@ server.put("/api/configuration", async (request, reply) => {
   }
 });
 server.get("/api/usage", async () => usageRepository.summarize(app.tenantId));
+server.get("/api/billing", async (_request, reply) => {
+  if (!app.billing) return { configured: false };
+  try {
+    return { configured: true, summary: await app.billing.summarize() };
+  } catch (error) {
+    return reply.code(502).send({ configured: true, error: errorMessage(error) });
+  }
+});
 server.get("/api/calls", async (request) => {
   const query = request.query as { limit?: string };
   const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25) || 25));

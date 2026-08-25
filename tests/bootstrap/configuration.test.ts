@@ -28,6 +28,11 @@ describe("loadConfiguration", () => {
     });
   });
 
+  it("loads the organization admin key separately from the realtime key", () => {
+    expect(loadConfiguration({ OPENAI_ADMIN_KEY: "admin-test-key" }))
+      .toMatchObject({ openAiAdminKey: "admin-test-key" });
+  });
+
   it("loads and validates voice output controls", () => {
     expect(loadConfiguration({
       YIBO_VOICE: "cedar",

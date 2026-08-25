@@ -64,6 +64,8 @@ import {
 } from "../app/development-fixtures.js";
 import { loadConfiguration, type ApplicationConfiguration } from "./configuration.js";
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
+import type { OrganizationCostReader } from "../modules/billing/index.js";
+import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
 
 export interface YiboApplication {
   tenantId: string;
@@ -83,6 +85,7 @@ export interface YiboApplication {
   calendar: InMemoryCalendarAdapter;
   telephony: InMemoryCallTelephonyGateway;
   ids: IdGenerator;
+  billing?: OrganizationCostReader;
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -98,6 +101,7 @@ export interface BuildApplicationOptions {
   agentConfigurationRepository?: AgentConfigurationRepository;
   usageRecorder?: ConversationUsageRecorder;
   callRepository?: CallRepository & CallHistoryReader;
+  billing?: OrganizationCostReader;
 }
 
 export function buildApplication(options: BuildApplicationOptions = {}): YiboApplication {
@@ -110,6 +114,9 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   if (!tenant) throw new Error(`Unknown bootstrap tenant: ${tenantId}`);
 
   const runtime = selectRuntime(config, options.runtime);
+  const billing = options.billing ?? (config.openAiAdminKey
+    ? new OpenAIOrganizationCostsAdapter(config.openAiAdminKey)
+    : undefined);
   const businessRepository = new InMemoryBusinessRepository(profiles);
   const business = new BusinessDirectoryService(businessRepository);
   const customerRepository = new InMemoryCustomerRepository();
@@ -213,6 +220,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     calendar,
     telephony,
     ids,
+    ...(billing ? { billing } : {}),
     registerCallMedia: (callId, transport) => voice.register(callId, transport),
   };
 }
