@@ -59,7 +59,7 @@ describe("CallOrchestratorService", () => {
     await system.orchestrator.handleTelephonyEvent(incoming);
 
     expect(system.repository.stateHistory.map((entry) => entry.state)).toEqual(["RINGING", "ANSWERED", "AI_CONNECTING", "IN_CONVERSATION"]);
-    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", state: "IN_CONVERSATION" });
+    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", from: incoming.from, to: incoming.to, state: "IN_CONVERSATION" });
     expect(system.voice.openedCallIds).toEqual([incoming.callId]);
     expect(system.runtime.openedInputs).toEqual([{
       conversationId: incoming.callId,

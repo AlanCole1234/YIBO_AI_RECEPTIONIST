@@ -30,6 +30,10 @@ flowchart LR
   UR --> USAGE[("SQLite regional<br/>conversation_usage")]
   API --> URD["ConversationUsageReader"]
   URD --> USAGE
+  CALL --> CALLS[("SQLite regional<br/>calls + state transitions")]
+  HISTORY["YiboCallHistory<br/>Web Component"] --> API
+  API --> CALLS
+  CALLS -. "join por callId" .-> USAGE
 ```
 
 ## Permisos efectivos
@@ -91,3 +95,4 @@ classDiagram
 - No se persisten API keys, prompts, transcripciones ni audio.
 - La API key permanece exclusivamente en `OPENAI_API_KEY`.
 - El panel muestra si existe una key, nunca su contenido.
+- El historial guarda caller/called number, estados, timestamps e IDs operativos; agrega consumo por `callId` sin guardar contenido de la conversación.

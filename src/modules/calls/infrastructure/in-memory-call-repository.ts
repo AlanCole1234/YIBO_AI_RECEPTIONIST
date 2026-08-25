@@ -1,7 +1,7 @@
 import type { CallRecord, CallState } from "../application/contracts.js";
-import type { CallRepository } from "../ports/call-repository.js";
+import type { CallHistoryReader, CallRepository } from "../ports/call-repository.js";
 
-export class InMemoryCallRepository implements CallRepository {
+export class InMemoryCallRepository implements CallRepository, CallHistoryReader {
   private readonly records = new Map<string, CallRecord>();
   readonly stateHistory: Array<{ callId: string; state: CallState }> = [];
 
@@ -25,5 +25,11 @@ export class InMemoryCallRepository implements CallRepository {
     const record = this.records.get(callId);
     if (!record) throw new Error(`Unknown call: ${callId}`);
     this.records.set(callId, { ...record, customerId, updatedAt });
+  }
+
+  async listByTenant(tenantId: string, limit: number) {
+    return [...this.records.values()].filter((record) => record.tenantId === tenantId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, limit)
+      .map((record) => ({ ...record, usage: { inputTokens: 0, outputTokens: 0, inputAudioMs: 0, outputAudioMs: 0, toolCalls: 0 } }));
   }
 }

@@ -9,6 +9,7 @@ describe("SQLite agent configuration and usage", () => {
     const result = JSON.parse(output.trim()) as {
       configuration: { voice: string; enabledTools: string[] };
       usage: Record<string, number>;
+      calls: Array<{ callId: string; state: string; usage: Record<string, number> }>;
     };
 
     expect(result.configuration.voice).toBe("marin");
@@ -16,5 +17,8 @@ describe("SQLite agent configuration and usage", () => {
     expect(result.usage).toEqual({
       inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,
     });
+    expect(result.calls).toEqual([expect.objectContaining({
+      callId: "call-1", state: "COMPLETED", usage: result.usage,
+    })]);
   });
 });

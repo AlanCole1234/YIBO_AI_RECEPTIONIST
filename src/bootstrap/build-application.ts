@@ -28,6 +28,8 @@ import {
   CallOrchestratorService,
   InMemoryCallRepository,
   type CallOrchestrator,
+  type CallHistoryReader,
+  type CallRepository,
 } from "../modules/calls/index.js";
 import {
   ConversationService,
@@ -75,6 +77,7 @@ export interface YiboApplication {
   agentConfiguration: AgentConfigurationServiceContract;
   conversations: ConversationServiceContract;
   calls: CallOrchestrator;
+  callHistory: CallHistoryReader;
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
   calendar: InMemoryCalendarAdapter;
@@ -94,6 +97,7 @@ export interface BuildApplicationOptions {
   humanTransfer?: HumanTransferPort;
   agentConfigurationRepository?: AgentConfigurationRepository;
   usageRecorder?: ConversationUsageRecorder;
+  callRepository?: CallRepository & CallHistoryReader;
 }
 
 export function buildApplication(options: BuildApplicationOptions = {}): YiboApplication {
@@ -180,7 +184,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   });
   const voice = new ScriptedVoiceMediaGateway();
   const telephony = new InMemoryCallTelephonyGateway();
-  const callRepository = new InMemoryCallRepository();
+  const callRepository = options.callRepository ?? new InMemoryCallRepository();
   const calls = new CallOrchestratorService(
     business,
     customers,
@@ -203,6 +207,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     agentConfiguration,
     conversations,
     calls,
+    callHistory: callRepository,
     runtime,
     voice,
     calendar,

@@ -11,10 +11,10 @@ import {
 } from "../../src/infrastructure/database/regional-database.js";
 import { SqliteAgentConfigurationRepository } from "../../src/infrastructure/database/sqlite-agent-configuration-repository.js";
 import { SqliteConversationUsageRepository } from "../../src/infrastructure/database/sqlite-conversation-usage-repository.js";
+import { SqliteCallRepository } from "../../src/infrastructure/database/sqlite-call-repository.js";
 import type {
   AudioFrame,
   ConversationRuntimeEvent,
-  ConversationSession,
   ConversationTransport,
 } from "../../src/modules/conversation/index.js";
 import {
@@ -33,6 +33,7 @@ migrateDatabase(database);
 seedBusiness(database, profile);
 const configurationRepository = new SqliteAgentConfigurationRepository(database, profile.region);
 const usageRepository = new SqliteConversationUsageRepository(database, profile.region);
+const callRepository = new SqliteCallRepository(database, profile.region);
 const configurationService = new AgentConfigurationService(configurationRepository);
 if (!await configurationRepository.getConfiguration(profile.tenantId)) {
   await configurationRepository.saveConfiguration(profile.tenantId, configurationService.recommended(
@@ -45,15 +46,18 @@ const app = buildApplication({
   tenantId,
   agentConfigurationRepository: configurationRepository,
   usageRecorder: usageRepository,
+  callRepository,
 });
 const server = Fastify({ logger: false });
 const htmlPath = new URL("./index.html", import.meta.url);
 const clientPath = new URL("./client.js", import.meta.url);
 const configurationPanelPath = new URL("./configuration-panel.js", import.meta.url);
+const callHistoryPath = new URL("./call-history.js", import.meta.url);
 
 server.get("/", async (_request, reply) => reply.type("text/html").send(await readFile(htmlPath, "utf8")));
 server.get("/client.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(clientPath, "utf8")));
 server.get("/configuration-panel.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(configurationPanelPath, "utf8")));
+server.get("/call-history.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(callHistoryPath, "utf8")));
 server.get("/api/configuration", async () => ({
   current: await app.agentConfiguration.get(app.tenantId),
   recommended: app.agentConfiguration.recommended(profile.locale, profile.name, app.config.openAiRealtimeModel),
@@ -74,6 +78,11 @@ server.put("/api/configuration", async (request, reply) => {
   }
 });
 server.get("/api/usage", async () => usageRepository.summarize(app.tenantId));
+server.get("/api/calls", async (request) => {
+  const query = request.query as { limit?: string };
+  const limit = Math.min(100, Math.max(1, Number(query.limit ?? 25) || 25));
+  return { calls: await app.callHistory.listByTenant(app.tenantId, limit) };
+});
 
 const sockets = new WebSocketServer({ server: server.server, path: "/voice" });
 sockets.on("connection", (socket) => attachHarness(socket));
@@ -85,7 +94,7 @@ console.log(`Transcript logging: ${transcriptEnabled ? "ON" : "OFF"}; audio pers
 function attachHarness(socket: WebSocket): void {
   const callId = app.ids.generate("call");
   const inbound = new AudioQueue();
-  let session: ConversationSession | undefined;
+  let conversationStarted = false;
   let starting: Promise<void> | undefined;
   let inputSampleRate = 48_000;
   let inputChannels = 1;
@@ -123,7 +132,7 @@ function attachHarness(socket: WebSocket): void {
   };
 
   const ensureConversation = async (): Promise<void> => {
-    if (session) return;
+    if (conversationStarted) return;
     if (starting) return starting;
     starting = startConversation();
     try {
@@ -134,18 +143,6 @@ function attachHarness(socket: WebSocket): void {
   };
 
   const startConversation = async (): Promise<void> => {
-    const customer = await app.customers.findOrCreateByPhone({
-      tenantId: app.tenantId,
-      phone: "+529990000001",
-      name: "Dev Voice Caller",
-    });
-    if (!customer.ok) throw new Error(`Unable to prepare dev customer: ${customer.error.code}`);
-    const prepared = await app.agents.prepare({
-      tenantId: app.tenantId,
-      callId,
-      customerId: customer.value.id,
-    });
-    if (!prepared.ok) throw new Error(`Unable to prepare agent: ${prepared.error.code}`);
     const transport: ConversationTransport = {
       inboundAudio: inbound,
       outboundAudio: {
@@ -162,14 +159,16 @@ function attachHarness(socket: WebSocket): void {
       },
       close: async () => inbound.end(),
     };
-    session = await app.conversations.start({
-      conversationId: callId,
-      agent: prepared.value,
-      transport,
-      observeEvent: (event) => observeRuntimeEvent(event, log),
+    app.registerCallMedia(callId, transport);
+    await app.calls.handleTelephonyEvent({
+      type: "INCOMING_CALL",
+      callId,
+      from: "+529990000001",
+      to: profile!.calledNumbers[0]!,
+      occurredAt: new Date().toISOString(),
     });
+    conversationStarted = true;
     log("conversation.opened");
-    void session.completed.then((completion) => log("conversation.completed", completion));
   };
 
   socket.on("message", (raw, binary) => {
@@ -197,10 +196,10 @@ function attachHarness(socket: WebSocket): void {
             log("fixture.ready", { name: typeof message.name === "string" ? message.name : "fixture.wav" });
           } else if (message.type === "interrupt") {
             const position = await interruptLocalPlayback();
-            await session?.interrupt(position);
+            await app.calls.interrupt(callId, position);
             log("conversation.interrupted");
           } else if (message.type === "close") {
-            await session?.close();
+            await app.calls.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId, occurredAt: new Date().toISOString() });
             log("conversation.closed");
           }
           return;
@@ -244,7 +243,7 @@ function attachHarness(socket: WebSocket): void {
   socket.on("error", (error) => log("websocket.error", { error: error.message }));
   socket.on("close", () => {
     inbound.end();
-    void session?.close();
+    if (conversationStarted) void app.calls.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId, occurredAt: new Date().toISOString() });
     console.log(JSON.stringify({ callId, timestamp: new Date().toISOString(), event: "harness.disconnected" }));
   });
 

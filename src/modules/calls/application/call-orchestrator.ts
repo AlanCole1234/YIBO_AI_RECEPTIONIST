@@ -33,6 +33,10 @@ export class CallOrchestratorService implements CallOrchestrator {
     // DTMF is persisted by the telephony implementation if required; it does not alter call state.
   }
 
+  async interrupt(callId: string, position?: import("../../conversation/index.js").AssistantPlaybackPosition): Promise<void> {
+    await this.sessions.get(callId)?.interrupt(position);
+  }
+
   private async handleIncoming(event: Extract<TelephonyEvent, { type: "INCOMING_CALL" }>): Promise<void> {
     if (await this.calls.findByCallId(event.callId)) return;
 
@@ -45,6 +49,8 @@ export class CallOrchestratorService implements CallOrchestrator {
     const record: CallRecord = {
       callId: event.callId,
       tenantId: business.value.tenantId,
+      from: event.from,
+      to: event.to,
       state: "RINGING",
       createdAt: event.occurredAt,
       updatedAt: event.occurredAt,
