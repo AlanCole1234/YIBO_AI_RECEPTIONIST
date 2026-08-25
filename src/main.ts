@@ -1,8 +1,9 @@
-import { buildApplication } from "./bootstrap/index.js";
+import "dotenv/config";
+import { buildConfiguredApplication } from "./bootstrap/build-configured-application.js";
 import { createApiServer } from "./api/index.js";
 
 const port = Number(process.env.PORT ?? 3000);
-const application = buildApplication({
+const application = buildConfiguredApplication({
   environment: process.env,
   ...(process.env.YIBO_TENANT_ID?.trim() ? { tenantId: process.env.YIBO_TENANT_ID.trim() } : {}),
 });

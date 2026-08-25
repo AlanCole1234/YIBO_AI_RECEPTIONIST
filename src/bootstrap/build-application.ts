@@ -16,6 +16,7 @@ import {
   InMemoryAppointmentConcurrencyGuard,
   InMemoryAppointmentRepository,
   type AppointmentService,
+  type AppointmentCalendarPort,
   type CustomerReader,
 } from "../modules/appointments/index.js";
 import {
@@ -45,9 +46,13 @@ import {
   InMemoryCustomerRepository,
   type CustomerService,
 } from "../modules/customers/index.js";
-import { InMemoryCalendarAdapter } from "../modules/integrations/index.js";
+import {
+  GoogleOAuthService,
+  InMemoryCalendarAdapter,
+} from "../modules/integrations/index.js";
 import {
   SchedulingServiceImpl,
+  type CalendarPort,
   type ConfirmedAppointmentReader,
   type EmployeeWorkingHoursProvider,
   type SchedulingService,
@@ -66,6 +71,7 @@ import { loadConfiguration, type ApplicationConfiguration } from "./configuratio
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
 import type { OrganizationCostReader } from "../modules/billing/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
+type ApplicationCalendar = CalendarPort & AppointmentCalendarPort;
 
 export interface YiboApplication {
   tenantId: string;
@@ -82,10 +88,11 @@ export interface YiboApplication {
   callHistory: CallHistoryReader;
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
-  calendar: InMemoryCalendarAdapter;
+  calendar: ApplicationCalendar;
   telephony: InMemoryCallTelephonyGateway;
   ids: IdGenerator;
   billing?: OrganizationCostReader;
+  googleOAuth?: GoogleOAuthService;
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -102,10 +109,13 @@ export interface BuildApplicationOptions {
   usageRecorder?: ConversationUsageRecorder;
   callRepository?: CallRepository & CallHistoryReader;
   billing?: OrganizationCostReader;
+  calendar?: ApplicationCalendar;
+  googleOAuth?: GoogleOAuthService;
 }
 
 export function buildApplication(options: BuildApplicationOptions = {}): YiboApplication {
-  const config = options.config ?? loadConfiguration(options.environment);
+  const environment = options.environment ?? process.env;
+  const config = options.config ?? loadConfiguration(environment);
   const clock = options.clock ?? systemClock;
   const ids = options.ids ?? uuidGenerator;
   const profiles = options.businesses ?? [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS];
@@ -125,7 +135,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("customer"),
   );
   const appointmentRepository = new InMemoryAppointmentRepository();
-  const calendar = new InMemoryCalendarAdapter();
+  const calendar = options.calendar ?? new InMemoryCalendarAdapter();
 
   const customerReader: CustomerReader = {
     exists: async (candidateTenantId, customerId) =>
@@ -221,6 +231,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     telephony,
     ids,
     ...(billing ? { billing } : {}),
+    ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
     registerCallMedia: (callId, transport) => voice.register(callId, transport),
   };
 }

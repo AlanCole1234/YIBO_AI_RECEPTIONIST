@@ -5,10 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import type { BusinessProfile } from "../../modules/business/index.js";
 import type { RegionId } from "../../shared/types/identifiers.js";
 
-const migrationPaths = [
-  fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url)),
-  fileURLToPath(new URL("./migrations/002_agent_configuration_and_usage.sql", import.meta.url)),
-  fileURLToPath(new URL("./migrations/003_call_history.sql", import.meta.url)),
+const migrations = [
+  { version: 1, path: fileURLToPath(new URL("./migrations/001_initial.sql", import.meta.url)) },
+  { version: 2, path: fileURLToPath(new URL("./migrations/002_agent_configuration_and_usage.sql", import.meta.url)) },
+  { version: 3, path: fileURLToPath(new URL("./migrations/003_call_history.sql", import.meta.url)) },
+  { version: 4, path: fileURLToPath(new URL("./migrations/004_google_calendar_tokens.sql", import.meta.url)) },
 ];
 
 export const defaultDatabasePath = (region: RegionId): string =>
@@ -22,11 +23,17 @@ export function openRegionalDatabase(region: RegionId, path = defaultDatabasePat
 }
 
 export function migrateDatabase(database: DatabaseSync): void {
-  migrationPaths.forEach((path, index) => {
-    database.exec(readFileSync(path, "utf8"));
-    database.prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)")
-      .run(index + 1, new Date().toISOString());
-  });
+  database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  )`);
+  for (const migration of migrations) {
+    const applied = database.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(migration.version);
+    if (applied) continue;
+    database.exec(readFileSync(migration.path, "utf8"));
+    database.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+      .run(migration.version, new Date().toISOString());
+  }
 }
 
 export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {
