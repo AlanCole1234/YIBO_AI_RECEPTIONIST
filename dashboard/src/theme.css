@@ -112,6 +112,23 @@ select { border-color: #ccc4b7; background: #fffaf2; }
   box-shadow: 0 20px 60px #39425c1c, 8px 9px 0 #c4d3e5;
 }
 .agent-view .voice-lab.voice-lab-v2 .lab-controls button { background: #f0ede6; }
+.agent-view .voice-lab.voice-lab-v2 .lab-controls button.start {
+  color: #fff;
+  border-color: #173f9e;
+  background: #2854c7;
+  box-shadow: 4px 5px 0 #b8cee8;
+}
+.agent-view .voice-lab.voice-lab-v2 .lab-controls button.start:hover:not(:disabled) {
+  border-color: #173f9e;
+  background: #315fd1;
+}
+.agent-view .voice-lab.voice-lab-v2 .lab-controls button:disabled {
+  color: #989ea8;
+  border-color: #d4d2cd;
+  background: #ebe8e1;
+  box-shadow: none;
+  opacity: 1;
+}
 .agent-view .voice-lab.voice-lab-v2 .fixture { background: #eaeef3; }
 .agent-view .voice-lab.voice-lab-v2 .lab-events { border-color: #d4cec3; }
 
