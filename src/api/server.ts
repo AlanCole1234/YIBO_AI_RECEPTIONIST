@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import type { YiboApplication } from "../bootstrap/index.js";
+import { registerAgentConfigurationRoutes } from "./routes/agent-configuration.js";
 import { registerAppointmentRoutes } from "./routes/appointments.js";
 import { registerAvailabilityRoutes } from "./routes/availability.js";
 import { registerBusinessRoutes } from "./routes/business.js";
@@ -10,6 +11,7 @@ import { registerGoogleCalendarRoutes } from "./routes/google-calendar.js";
 export async function createApiServer(app: YiboApplication): Promise<FastifyInstance> {
   const server = Fastify({ logger: false });
   await registerHealthRoutes(server);
+  await registerAgentConfigurationRoutes(server, app);
   await registerBusinessRoutes(server, app);
   await registerCustomerRoutes(server, app);
   await registerAvailabilityRoutes(server, app);

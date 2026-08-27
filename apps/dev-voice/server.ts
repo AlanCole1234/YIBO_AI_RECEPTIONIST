@@ -12,6 +12,7 @@ import {
 import { SqliteAgentConfigurationRepository } from "../../src/infrastructure/database/sqlite-agent-configuration-repository.js";
 import { SqliteConversationUsageRepository } from "../../src/infrastructure/database/sqlite-conversation-usage-repository.js";
 import { SqliteCallRepository } from "../../src/infrastructure/database/sqlite-call-repository.js";
+import { registerAgentConfigurationRoutes } from "../../src/api/routes/agent-configuration.js";
 import type {
   AudioFrame,
   ConversationRuntimeEvent,
@@ -60,25 +61,7 @@ server.get("/client.js", async (_request, reply) => reply.type("text/javascript"
 server.get("/configuration-panel.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(configurationPanelPath, "utf8")));
 server.get("/usage-monitor.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(usageMonitorPath, "utf8")));
 server.get("/call-history.js", async (_request, reply) => reply.type("text/javascript").send(await readFile(callHistoryPath, "utf8")));
-server.get("/api/configuration", async () => ({
-  current: await app.agentConfiguration.get(app.tenantId),
-  recommended: app.agentConfiguration.recommended(profile.locale, profile.name, app.config.openAiRealtimeModel),
-  availableTools: app.tools ? [
-    { name: "check_availability", kind: "consult", label: "Consultar disponibilidad" },
-    { name: "create_appointment", kind: "mutate", label: "Crear citas" },
-    { name: "cancel_appointment", kind: "mutate", label: "Cancelar citas" },
-    { name: "transfer_to_human", kind: "external", label: "Transferir a una persona" },
-  ] : [],
-  secrets: { apiKeyConfigured: Boolean(app.config.openAiApiKey) },
-}));
-server.put("/api/configuration", async (request, reply) => {
-  try {
-    const saved = await app.agentConfiguration.update(app.tenantId, request.body as never);
-    return { configuration: saved, appliesTo: "next-conversation" };
-  } catch (error) {
-    return reply.code(400).send({ error: errorMessage(error) });
-  }
-});
+await registerAgentConfigurationRoutes(server, app);
 server.get("/api/usage", async () => usageRepository.summarize(app.tenantId));
 server.get("/api/billing", async (_request, reply) => {
   if (!app.billing) return { configured: false };

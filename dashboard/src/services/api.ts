@@ -34,6 +34,37 @@ export interface Appointment {
 }
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean; calendarId?: string }
 
+export type AgentToolName = "check_availability" | "create_appointment" | "cancel_appointment" | "transfer_to_human";
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+
+export interface AgentConfiguration {
+  instructions: string;
+  locale: string;
+  voice?: string;
+  enabledTools: AgentToolName[];
+  conversation: {
+    model: string;
+    maxOutputTokens: number;
+    reasoningEffort: ReasoningEffort;
+    turnDetection: {
+      threshold?: number;
+      prefixPaddingMs?: number;
+      silenceDurationMs?: number;
+    };
+  };
+}
+
+export interface AgentConfigurationPayload {
+  current: AgentConfiguration | null;
+  recommended: AgentConfiguration;
+  availableTools: Array<{
+    name: AgentToolName;
+    description: string;
+    kind: "consult" | "mutate" | "external";
+  }>;
+  secrets: { apiKeyConfigured: boolean };
+}
+
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) {
     super(code);
@@ -74,4 +105,9 @@ export const api = {
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
+  agentConfiguration: () => request<AgentConfigurationPayload>("/api/configuration"),
+  updateAgentConfiguration: (configuration: AgentConfiguration) => request<{
+    configuration: AgentConfiguration;
+    appliesTo: "next-conversation";
+  }>("/api/configuration", { method: "PUT", body: JSON.stringify(configuration) }),
 };
