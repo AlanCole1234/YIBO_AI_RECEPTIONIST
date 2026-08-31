@@ -6,40 +6,46 @@ import type { GoogleOAuthService } from "./google-oauth-service.js";
 export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarPort {
   constructor(
     private readonly calendarId: string,
-    private readonly timeZone: string,
+    private readonly timeZone: string | ((tenantId: string) => string | Promise<string>),
     private readonly oauth: GoogleOAuthService,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
   async getBusyIntervals(query: { tenantId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
-    const token = await this.oauth.accessToken(query.tenantId);
-    if (!token) return failure({ code: "AUTHORIZATION_REQUIRED" as const });
-    const url = new URL("https://www.googleapis.com/calendar/v3/freeBusy");
-    const response = await this.fetcher(url, {
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, items: [{ id: this.calendarId }] }),
-    });
-    if (!response.ok) return failure(providerError(response.status));
-    const body = await response.json() as { calendars?: Record<string, { busy?: Array<{ start: string; end: string }> }> };
-    const busy = body.calendars?.[this.calendarId]?.busy ?? [];
-    return success(busy.map(({ start, end }) => ({ startAt: start, endAt: end })) as BusyInterval[]);
+    const token = await this.tokenFor(query.tenantId);
+    if (!token.ok) return token;
+    try {
+      const timeZone = await this.timeZoneFor(query.tenantId);
+      const response = await this.fetcher(new URL("https://www.googleapis.com/calendar/v3/freeBusy"), {
+        method: "POST", headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json" },
+        body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, timeZone, items: [{ id: this.calendarId }] }),
+      });
+      if (!response.ok) return failure(providerError(response.status));
+      const body = await response.json() as { calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: unknown[] }> };
+      if (body.calendars?.[this.calendarId]?.errors?.length) return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: false });
+      const busy = body.calendars?.[this.calendarId]?.busy ?? [];
+      return success(busy.map(({ start, end }) => ({ startAt: start, endAt: end })) as BusyInterval[]);
+    } catch { return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true }); }
   }
 
   async createEvent(command: { tenantId: string; appointmentId: string; employeeId: string; title: string; startAt: string; endAt: string; idempotencyKey: string }) {
-    const token = await this.oauth.accessToken(command.tenantId);
-    if (!token) return failure({ code: "AUTHORIZATION_REQUIRED" as const });
+    const token = await this.tokenFor(command.tenantId);
+    if (!token.ok) return token;
+    const externalEventId = googleEventId(command.appointmentId);
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/events`;
     const response = await this.fetcher(url, {
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-goog-request-id": command.idempotencyKey },
+      method: "POST", headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json", "x-goog-request-id": command.idempotencyKey },
       body: JSON.stringify({
+        id: externalEventId,
         summary: command.title,
         // The appointment stores an instant in UTC. Supplying the clinic zone makes
         // the intended wall-clock time explicit to Google Calendar as well.
-        start: googleEventDateTime(command.startAt, this.timeZone),
-        end: googleEventDateTime(command.endAt, this.timeZone),
+        start: googleEventDateTime(command.startAt, await this.timeZoneFor(command.tenantId)),
+        end: googleEventDateTime(command.endAt, await this.timeZoneFor(command.tenantId)),
         extendedProperties: { private: { yiboAppointmentId: command.appointmentId } },
       }),
     });
+    if (response.status === 409) return success({ provider: "google-calendar", externalEventId });
     if (!response.ok) return failure(providerError(response.status));
     const body = await response.json() as { id?: string };
     if (!body.id) return failure({ code: "VALIDATION_ERROR" as const, message: "Google Calendar did not return an event ID." });
@@ -54,7 +60,20 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     if (!response.ok) return failure(providerError(response.status));
     return success(undefined);
   }
+
+  private async timeZoneFor(tenantId: string): Promise<string> {
+    return typeof this.timeZone === "string" ? this.timeZone : this.timeZone(tenantId);
+  }
+
+  private async tokenFor(tenantId: string) {
+    const status = await this.oauth.status(tenantId);
+    if (!status.configured || !status.connected) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
+    const token = await this.oauth.accessToken(tenantId);
+    return token ? success(token) : failure({ code: "AUTHORIZATION_REQUIRED" as const });
+  }
 }
+
+const googleEventId = (appointmentId: string): string => `a${appointmentId.replace(/[^0-9a-f]/gi, "").toLowerCase()}`;
 
 const googleEventDateTime = (value: string, timeZone: string): { dateTime: string; timeZone: string } => {
   const instant = new Date(value);

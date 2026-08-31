@@ -40,14 +40,10 @@ export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): 
   database.prepare(`
     INSERT INTO businesses(region_id, tenant_id, business_id, profile_json)
     VALUES (?, ?, ?, ?)
-    ON CONFLICT(region_id, tenant_id) DO UPDATE SET
-      business_id = excluded.business_id,
-      profile_json = excluded.profile_json
+    ON CONFLICT(region_id, tenant_id) DO NOTHING
   `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
-  database.prepare("DELETE FROM called_numbers WHERE region_id = ? AND tenant_id = ?")
-    .run(profile.region, profile.tenantId);
   const insertNumber = database.prepare(
-    "INSERT INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
+    "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
   );
   for (const phone of profile.calledNumbers) insertNumber.run(profile.region, profile.tenantId, phone);
 }

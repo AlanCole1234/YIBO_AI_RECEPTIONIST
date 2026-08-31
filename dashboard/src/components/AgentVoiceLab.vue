@@ -17,16 +17,18 @@ let processor: ScriptProcessorNode | undefined;
 let pendingAudio: AudioMetadata | undefined;
 let playbackAt = 0;
 let playback: Playback | undefined;
+let playbackChain = Promise.resolve();
+let announcedAssistantTurnId: string | undefined;
 
 const connected = ref(false);
 const microphoneActive = computed(() => state.value === "listening" || state.value === "speaking");
 const statusCopy = computed(() => ({
-  connecting: ["Conectando el estudio", "Preparando el canal de audio"],
-  idle: ["Listo cuando tú estés", "El micrófono está apagado"],
-  listening: ["YIBO te escucha", "Habla con naturalidad; también puedes interrumpir"],
-  speaking: ["YIBO está respondiendo", "Puedes hablar encima para probar el barge-in"],
-  closed: ["Sesión terminada", "Recarga para iniciar una conversación nueva"],
-  error: ["Estudio no disponible", "Comprueba que pnpm dev siga ejecutándose"],
+  connecting: ["Connecting your studio", "Preparing the audio channel"],
+  idle: ["Ready when you are", "The microphone is off"],
+  listening: ["YIBO is listening", "Speak naturally; you can interrupt too"],
+  speaking: ["YIBO is responding", "Try speaking over YIBO to test interruption"],
+  closed: ["Session ended", "Reload to start a new conversation"],
+  error: ["Studio unavailable", "Check that pnpm dev is still running"],
 }[state.value]));
 
 onMounted(connect);
@@ -44,26 +46,32 @@ function connect(): void {
   socket.addEventListener("open", () => {
     connected.value = true;
     state.value = "idle";
-    addEvent("Estudio conectado");
+    addEvent("Voice studio connected");
   });
   socket.addEventListener("close", () => {
     connected.value = false;
     if (state.value !== "closed") state.value = "error";
-    addEvent("Conexión cerrada");
+    addEvent("Connection closed");
   });
   socket.addEventListener("error", () => {
     connected.value = false;
     state.value = "error";
-    addEvent("No se pudo conectar al laboratorio de voz");
+    addEvent("Could not connect to the voice lab");
   });
   socket.addEventListener("message", ({ data }) => {
     if (typeof data !== "string") {
-      playPcm16(data as ArrayBuffer, pendingAudio);
+      queuePcm16(data as ArrayBuffer, pendingAudio);
       pendingAudio = undefined;
       return;
     }
     const message = JSON.parse(data) as Record<string, unknown>;
-    if (message.type === "audio.chunk") pendingAudio = message as unknown as AudioMetadata;
+    if (message.type === "audio.chunk") {
+      pendingAudio = message as unknown as AudioMetadata;
+      if (pendingAudio.assistantTurnId !== announcedAssistantTurnId) {
+        announcedAssistantTurnId = pendingAudio.assistantTurnId;
+        addEvent("YIBO audio received");
+      }
+    }
     else if (message.type === "playback.clear") clearPlayback(String(message.requestId ?? ""));
     else observeEvent(message);
   });
@@ -73,24 +81,23 @@ async function startMicrophone(): Promise<void> {
   const activeSocket = socket;
   if (!connected.value || !activeSocket) return;
   try {
-    context ??= new (window.AudioContext ?? (window as unknown as { webkitAudioContext: AudioContextConstructor }).webkitAudioContext)();
-    await context.resume();
+    const activeContext = await resumeAudioContext();
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
-    source = context.createMediaStreamSource(stream);
-    processor = context.createScriptProcessor(2048, 1, 1);
+    source = activeContext.createMediaStreamSource(stream);
+    processor = activeContext.createScriptProcessor(2048, 1, 1);
     processor.onaudioprocess = ({ inputBuffer }) => {
       if (activeSocket.readyState !== WebSocket.OPEN) return;
       activeSocket.send(inputBuffer.getChannelData(0).slice().buffer);
     };
     source.connect(processor);
-    processor.connect(context.destination);
-    activeSocket.send(JSON.stringify({ type: "mic.start", sampleRate: context.sampleRate, channels: 1 }));
+    processor.connect(activeContext.destination);
+    activeSocket.send(JSON.stringify({ type: "mic.start", sampleRate: activeContext.sampleRate, channels: 1 }));
     sessionUsed.value = true;
     state.value = "listening";
-    addEvent("Micrófono activado");
+    addEvent("Microphone enabled");
   } catch (error) {
     state.value = "error";
-    addEvent(error instanceof Error ? error.message : "No se pudo abrir el micrófono");
+    addEvent(error instanceof Error ? error.message : "Could not open the microphone");
   }
 }
 
@@ -102,13 +109,13 @@ function stopMicrophone(log = true): void {
   source = undefined;
   stream = undefined;
   if (state.value !== "closed" && state.value !== "error") state.value = "idle";
-  if (log) addEvent("Micrófono pausado");
+  if (log) addEvent("Microphone paused");
 }
 
 function interrupt(): void {
   if (!connected.value || !sessionUsed.value) return;
   socket?.send(JSON.stringify({ type: "interrupt" }));
-  addEvent("Interrupción solicitada");
+  addEvent("Interruption requested");
 }
 
 function closeSession(): void {
@@ -116,15 +123,14 @@ function closeSession(): void {
   stopPlayback();
   if (connected.value && sessionUsed.value) socket?.send(JSON.stringify({ type: "close" }));
   state.value = "closed";
-  addEvent("Sesión cerrada");
+  addEvent("Session closed");
 }
 
 async function sendFixture(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file || !connected.value) return;
-  context ??= new AudioContext();
-  await context.resume();
+  await resumeAudioContext();
   socket?.send(JSON.stringify({ type: "fixture.next", name: file.name }));
   socket?.send(await file.arrayBuffer());
   sessionUsed.value = true;
@@ -132,22 +138,34 @@ async function sendFixture(event: Event): Promise<void> {
   input.value = "";
 }
 
-function playPcm16(arrayBuffer: ArrayBuffer, metadata?: AudioMetadata): void {
+function queuePcm16(arrayBuffer: ArrayBuffer, metadata?: AudioMetadata): void {
+  playbackChain = playbackChain
+    .catch(() => undefined)
+    .then(() => playPcm16(arrayBuffer, metadata))
+    .catch((error: unknown) => {
+      state.value = "error";
+      addEvent(`Audio playback error: ${error instanceof Error ? error.message : "unknown error"}`);
+    });
+}
+
+async function playPcm16(arrayBuffer: ArrayBuffer, metadata?: AudioMetadata): Promise<void> {
   if (!metadata?.assistantTurnId) return;
-  context ??= new AudioContext();
+  const activeContext = await resumeAudioContext();
   const pcm = new Int16Array(arrayBuffer);
-  const buffer = context.createBuffer(1, pcm.length, 24_000);
+  if (pcm.length === 0) return;
+  const buffer = activeContext.createBuffer(1, pcm.length, 24_000);
   const channel = buffer.getChannelData(0);
   for (let index = 0; index < pcm.length; index += 1) channel[index] = (pcm[index] ?? 0) / 0x8000;
-  const node = context.createBufferSource();
+  const node = activeContext.createBufferSource();
   node.buffer = buffer;
-  node.connect(context.destination);
-  playbackAt = Math.max(playbackAt, context.currentTime + 0.02);
+  node.connect(activeContext.destination);
+  playbackAt = Math.max(playbackAt, activeContext.currentTime + 0.02);
   if (!playback || playback.assistantTurnId !== metadata.assistantTurnId) {
     playback = { assistantTurnId: metadata.assistantTurnId, startedAt: playbackAt, nodes: [] };
   }
   node.start(playbackAt);
   state.value = "speaking";
+  if (playback.nodes.length === 0) addEvent("Playing YIBO response");
   playback.nodes.push(node);
   node.onended = () => {
     if (playback?.assistantTurnId !== metadata.assistantTurnId) return;
@@ -158,6 +176,16 @@ function playPcm16(arrayBuffer: ArrayBuffer, metadata?: AudioMetadata): void {
     }
   };
   playbackAt += buffer.duration;
+}
+
+async function resumeAudioContext(): Promise<AudioContext> {
+  context ??= new (window.AudioContext ?? (window as unknown as { webkitAudioContext: AudioContextConstructor }).webkitAudioContext)();
+  if (!context.onstatechange) {
+    context.onstatechange = () => addEvent(`Browser audio ${context?.state ?? "unavailable"}`);
+  }
+  if (context.state !== "running") await context.resume();
+  if (context.state !== "running") throw new Error(`Browser audio is ${context.state}`);
+  return context;
 }
 
 function clearPlayback(requestId: string): void {
@@ -172,7 +200,7 @@ function clearPlayback(requestId: string): void {
     assistantTurnId: current?.assistantTurnId ?? "unknown",
     audioEndMs: current ? Math.max(0, Math.round((now - current.startedAt) * 1000)) : 0,
   }));
-  addEvent("Audio anterior detenido");
+  addEvent("Previous audio stopped");
 }
 
 function stopPlayback(): void {
@@ -186,21 +214,21 @@ function stopPlayback(): void {
 function observeEvent(message: Record<string, unknown>): void {
   const name = typeof message.event === "string" ? message.event : typeof message.type === "string" ? message.type : "Evento recibido";
   const labels: Record<string, string> = {
-    "harness.connected": "Estudio conectado",
-    "conversation.opened": "Conversación iniciada",
-    "microphone.started": "Audio conectado",
-    "audio.in": "YIBO está escuchando",
-    "audio.out": "YIBO está hablando",
-    "conversation.interrupted": "Respuesta interrumpida",
-    "conversation.closed": "Conversación cerrada",
-    error: "Ocurrió un error",
+    "harness.connected": "Voice studio connected",
+    "conversation.opened": "Conversation started",
+    "microphone.started": "Audio connected",
+    "audio.in": "YIBO is listening",
+    "audio.out": "YIBO is speaking",
+    "conversation.interrupted": "Response interrupted",
+    "conversation.closed": "Conversation closed",
+    error: "An error occurred",
   };
   if (name === "audio.in" || name === "audio.out") return;
   addEvent(labels[name] ?? name);
 }
 
 function addEvent(value: string): void {
-  const timestamp = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
+  const timestamp = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
   events.value = [`${timestamp} · ${value}`, ...events.value].slice(0, 6);
 }
 </script>
@@ -208,29 +236,29 @@ function addEvent(value: string): void {
 <template>
   <section class="voice-lab voice-lab-v2" aria-labelledby="voice-lab-title">
     <div class="lab-copy">
-      <div class="lab-kicker"><span></span> PRUEBA EN VIVO</div>
-      <h2 id="voice-lab-title">Habla con el agente<br><em>antes de publicarlo.</em></h2>
-      <p>Esta prueba recorre el mismo ConversationService que usará telefonía. Escucha el ritmo, corrígelo y prueba interrupciones aquí mismo.</p>
-      <div class="privacy"><span>Audio no guardado</span><span>Transcript apagado</span><span class="cost">Puede consumir crédito</span></div>
+      <div class="lab-kicker"><span></span> LIVE TEST</div>
+      <h2 id="voice-lab-title">Talk to your agent<br><em>before publishing it.</em></h2>
+      <p>This test uses the same ConversationService that telephony will use. Listen to its pace, refine it, and test interruptions right here.</p>
+      <div class="privacy"><span>Audio is not saved</span><span>Transcript is off</span><span class="cost">May use credits</span></div>
     </div>
 
     <div class="lab-experience">
       <div :class="['live-orb', state]"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-      <div class="live-status"><small>ESTADO DEL AGENTE</small><strong>{{ statusCopy[0] }}</strong><span>{{ statusCopy[1] }}</span></div>
+      <div class="live-status"><small>AGENT STATUS</small><strong>{{ statusCopy[0] }}</strong><span>{{ statusCopy[1] }}</span></div>
       <div class="lab-controls">
-        <button class="start" :disabled="!connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Iniciar conversación</button>
-        <button :disabled="!microphoneActive" @click="stopMicrophone()">Pausar micrófono</button>
-        <button :disabled="!sessionUsed || state === 'closed'" @click="interrupt">Interrumpir a YIBO</button>
-        <button class="close" :disabled="!sessionUsed || state === 'closed'" @click="closeSession">Cerrar sesión</button>
+        <button class="start" :disabled="!connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Start conversation</button>
+        <button :disabled="!microphoneActive" @click="stopMicrophone()">Pause microphone</button>
+        <button :disabled="!sessionUsed || state === 'closed'" @click="interrupt">Interrupt YIBO</button>
+        <button class="close" :disabled="!sessionUsed || state === 'closed'" @click="closeSession">Close session</button>
       </div>
-      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="!connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Usar una frase WAV</strong><small>Repite exactamente el mismo audio para comparar configuraciones.</small></span></label>
+      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="!connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
     </div>
 
     <div class="lab-events">
-      <div><span><i></i> Actividad reciente</span><small>Sin contenido de audio</small></div>
-      <ol><li v-for="event in events" :key="event">{{ event }}</li><li v-if="events.length === 0">Esperando al laboratorio…</li></ol>
+      <div><span><i></i> Recent activity</span><small>No audio content</small></div>
+      <ol><li v-for="event in events" :key="event">{{ event }}</li><li v-if="events.length === 0">Waiting for the voice lab…</li></ol>
     </div>
-    <p class="credit-note">La sesión con OpenAI empieza únicamente al activar el micrófono o enviar un WAV. Abrir esta pantalla no consume crédito.</p>
+    <p class="credit-note">The OpenAI session starts only when you enable the microphone or send a WAV. Opening this screen does not use credits.</p>
   </section>
 </template>
 

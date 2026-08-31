@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import Fastify from "fastify";
 import { WebSocketServer, type WebSocket } from "ws";
-import { buildApplication } from "../../src/bootstrap/index.js";
+import { buildConfiguredApplication } from "../../src/bootstrap/build-configured-application.js";
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS } from "../../src/app/index.js";
 import { AgentConfigurationService } from "../../src/modules/agents/index.js";
 import {
@@ -25,6 +25,7 @@ import {
 } from "../../src/modules/voice/index.js";
 
 const transcriptEnabled = process.argv.includes("--transcript");
+const audioDebug = process.env.YIBO_VOICE_DEBUG === "1";
 const port = Number(process.env.DEV_VOICE_PORT ?? 4317);
 const tenantId = process.env.YIBO_TENANT_ID?.trim() || DEVELOPMENT_BUSINESS.tenantId;
 const profile = [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS].find((value) => value.tenantId === tenantId);
@@ -43,8 +44,9 @@ if (!await configurationRepository.getConfiguration(profile.tenantId)) {
     process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1",
   ));
 }
-const app = buildApplication({
+const app = await buildConfiguredApplication({
   tenantId,
+  businesses: [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS],
   agentConfigurationRepository: configurationRepository,
   usageRecorder: usageRepository,
   callRepository,
@@ -83,6 +85,12 @@ sockets.on("connection", (socket) => attachHarness(socket));
 await server.listen({ host: "127.0.0.1", port });
 console.log(`YIBO DevAudioHarness: http://127.0.0.1:${port}`);
 console.log(`Transcript logging: ${transcriptEnabled ? "ON" : "OFF"}; audio persistence: OFF`);
+console.log(JSON.stringify({
+  event: "voice.runtime.configured",
+  runtime: app.config.runtime,
+  model: app.config.openAiRealtimeModel,
+  apiKeyConfigured: Boolean(app.config.openAiApiKey),
+}));
 
 function attachHarness(socket: WebSocket): void {
   const callId = app.ids.generate("call");
@@ -138,11 +146,18 @@ function attachHarness(socket: WebSocket): void {
   const startConversation = async (): Promise<void> => {
     const transport: ConversationTransport = {
       inboundAudio: inbound,
+      observeEvent: (event) => observeRuntimeEvent(event, log),
       outboundAudio: {
         write: async (frame, assistantTurnId) => {
           outboundFrames += 1;
           lastAssistantTurnId = assistantTurnId;
-          log("audio.out", { bytes: frame.data.byteLength, frames: outboundFrames });
+          if (audioDebug || outboundFrames === 1) {
+            log(outboundFrames === 1 ? "assistant.audio_started" : "audio.out", {
+              bytes: frame.data.byteLength,
+              frames: outboundFrames,
+              ...(audioDebug ? { debug: true } : {}),
+            });
+          }
           if (socket.readyState === socket.OPEN) {
             socket.send(JSON.stringify({ type: "audio.chunk", assistantTurnId, bytes: frame.data.byteLength }));
             socket.send(frame.data, { binary: true });
@@ -160,6 +175,10 @@ function attachHarness(socket: WebSocket): void {
       to: profile!.calledNumbers[0]!,
       occurredAt: new Date().toISOString(),
     });
+    const call = await callRepository.findByCallId(callId);
+    if (call?.state !== "IN_CONVERSATION") {
+      throw new Error("OpenAI Realtime conversation could not start. Check the voice-server error above.");
+    }
     conversationStarted = true;
     log("conversation.opened");
   };
@@ -242,7 +261,9 @@ function attachHarness(socket: WebSocket): void {
 
   function pushInbound(frame: AudioFrame): void {
     inboundFrames += 1;
-    log("audio.in", { bytes: frame.data.byteLength, frames: inboundFrames });
+    if (audioDebug || inboundFrames === 1) {
+      log("audio.in", { bytes: frame.data.byteLength, frames: inboundFrames, ...(audioDebug ? { debug: true } : {}) });
+    }
     inbound.push(frame);
   }
 }
@@ -256,6 +277,12 @@ function observeRuntimeEvent(
       return;
     case "assistant.transcript":
       log(event.type, transcriptEnabled ? { final: event.final, transcript: event.text } : { final: event.final });
+      return;
+    case "tool.call":
+      log("realtime.tool.requested", { toolCallId: event.toolCallId, name: event.name });
+      return;
+    case "tool.execution":
+      log(event.phase === "completed" ? "realtime.tool.completed" : "realtime.tool.failed", { toolCallId: event.toolCallId, name: event.name });
       return;
     case "error":
       log(event.type, { code: event.code, retryable: event.retryable, error: event.message });

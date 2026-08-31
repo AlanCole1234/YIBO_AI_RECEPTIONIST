@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
-import { messages, supportedLocale, type MessageKey } from "./i18n";
+import { messages, type MessageKey } from "./i18n";
 import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 
-type Section = "overview" | "agent" | "customers" | "availability" | "appointments";
+type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings";
+const timezones = [
+  { value: "America/Denver", label: "Mountain Time (El Paso)" },
+  { value: "America/Chicago", label: "Central Time" },
+  { value: "America/New_York", label: "Eastern Time" },
+  { value: "America/Los_Angeles", label: "Pacific Time" },
+  { value: "America/Phoenix", label: "Arizona Time" },
+];
 
 const section = ref<Section>("overview");
 const business = ref<Business>();
@@ -24,16 +31,18 @@ const selectedSlot = ref<Slot>();
 const createdAppointment = ref<Appointment>();
 const lookupId = ref("");
 const lookupResult = ref<Appointment>();
+const timezone = ref("America/Denver");
 
 const selectedService = computed(() => business.value?.services.find((service) => service.id === serviceId.value));
 const eligibleEmployees = computed(() => business.value?.employees.filter(
   (employee) => selectedService.value?.eligibleEmployeeIds.includes(employee.id),
 ) ?? []);
-const locale = computed(() => supportedLocale(business.value?.locale));
+// The dashboard is intentionally English even if an older business profile has a Spanish locale.
+const locale = computed(() => "en-US" as const);
 const copy = computed(() => messages[locale.value]);
 const navItems = computed(() => [
   ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
-  ["availability", copy.value.availability], ["appointments", copy.value.appointments],
+  ["availability", copy.value.availability], ["appointments", copy.value.appointments], ["settings", "Settings"],
 ] as Array<[Section, string]>);
 const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
 const t = (key: MessageKey): string => copy.value[key];
@@ -46,6 +55,7 @@ onMounted(async () => {
     googleCalendar.value = calendarStatus;
     serviceId.value = profile.services[0]?.id ?? "";
     employeeId.value = profile.services[0]?.eligibleEmployeeIds[0] ?? "";
+    timezone.value = profile.timezone;
     customerForm.value.phone = profile.region === "US" ? "+1" : "+52";
   } catch (error) {
     globalError.value = messageFor(error);
@@ -77,14 +87,14 @@ async function saveCustomer(): Promise<void> {
 async function checkAvailability(): Promise<void> {
   if (!serviceId.value || !employeeId.value || !date.value) return;
   await run(async () => {
-    const rangeStart = `${date.value}T00:00:00.000Z`;
+    const rangeStart = zonedDayStart(date.value, business.value?.timezone ?? "America/Denver");
     const next = new Date(`${date.value}T00:00:00.000Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     slots.value = (await api.availability({
       serviceId: serviceId.value,
       employeeId: employeeId.value,
       rangeStart,
-      rangeEnd: next.toISOString(),
+      rangeEnd: zonedDayStart(next.toISOString().slice(0, 10), business.value?.timezone ?? "America/Denver"),
     })).slots;
     selectedSlot.value = undefined;
   });
@@ -108,6 +118,14 @@ async function createAppointment(): Promise<void> {
 async function findAppointment(): Promise<void> {
   if (!lookupId.value.trim()) return;
   await run(async () => { lookupResult.value = await api.appointment(lookupId.value.trim()); });
+}
+
+async function saveTimezone(): Promise<void> {
+  await run(async () => {
+    business.value = await api.updateBusinessTimezone(timezone.value);
+    slots.value = [];
+    selectedSlot.value = undefined;
+  });
 }
 
 async function run(action: () => Promise<void>): Promise<void> {
@@ -137,6 +155,21 @@ function slotTime(value: string): string {
   }).format(new Date(value));
 }
 
+function zonedDayStart(day: string, timeZone: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  const localMidnight = Date.UTC(year, month - 1, date, 0, 0, 0);
+  let instant = localMidnight;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date(instant));
+    const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+    const rendered = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+    instant = localMidnight - (rendered - instant);
+  }
+  return new Date(instant).toISOString();
+}
+
 function nextWeekday(): string {
   const value = new Date();
   value.setDate(value.getDate() + 1);
@@ -145,20 +178,18 @@ function nextWeekday(): string {
 }
 
 function statusLabel(status: string): string {
-  if (status === "CONFIRMED") return locale.value === "en-US" ? "Confirmed" : "Confirmada";
-  if (status === "CANCELLED") return locale.value === "en-US" ? "Cancelled" : "Cancelada";
-  if (status === "FAILED") return locale.value === "en-US" ? "Failed" : "Fallida";
-  return status === "PENDING_CONFIRMATION"
-    ? (locale.value === "en-US" ? "Pending confirmation" : "Pendiente de confirmación")
-    : status;
+  if (status === "CONFIRMED") return "Confirmed";
+  if (status === "CANCELLED") return "Cancelled";
+  if (status === "FAILED") return "Failed";
+  return status === "PENDING_CONFIRMATION" ? "Pending confirmation" : status;
 }
 </script>
 
 <template>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">Y</span><div><strong>YIBO</strong><small>{{ locale === 'en-US' ? 'Welcome studio' : 'Estudio de atención' }}</small></div></div>
-      <nav aria-label="Navegación principal">
+      <div class="brand"><span class="brand-mark">Y</span><div><strong>YIBO</strong><small>Welcome studio</small></div></div>
+      <nav aria-label="Main navigation">
         <button v-for="item in navItems"
           :key="item[0]" :class="{ active: section === item[0] }" @click="chooseSection(item[0])">
           <span class="nav-dot"></span>{{ item[1] }}
@@ -187,8 +218,8 @@ function statusLabel(status: string): string {
           </section>
           <article class="home-calendar">
             <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
-            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? t('calendarReady') : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }} <strong>{{ googleCalendar.calendarId }}</strong>.</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
-            <button v-if="googleCalendar.configured && !googleCalendar.connected" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? t('reconnectCalendar') : t('connectCalendar') }}</button><span v-else-if="!googleCalendar.connected" class="pill">{{ t('notConfigured') }}</span>
+            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }} <strong>{{ googleCalendar.calendarId }}</strong>.</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
+            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
           </article>
         </div>
         <div class="two-column home-details">
@@ -230,6 +261,19 @@ function statusLabel(status: string): string {
         <article v-if="createdAppointment" class="result-card success-card featured"><span class="result-label">{{ t('confirmedAppointment') }}</span><h3>{{ createdAppointment.id }}</h3><p>{{ formatDateTime(createdAppointment.startAt) }} — {{ slotTime(createdAppointment.endAt) }}</p><span class="pill success">{{ statusLabel(createdAppointment.status) }}</span><small>{{ t('externalEvent') }}: {{ createdAppointment.externalCalendarEventId }}</small></article>
         <form class="panel lookup" @submit.prevent="findAppointment"><label>{{ t('appointmentId') }}<input v-model="lookupId" placeholder="appointment-1" /></label><button class="primary" :disabled="busy">{{ t('searchAppointment') }}</button></form>
         <article v-if="lookupResult" class="panel details"><div><span>ID</span><strong>{{ lookupResult.id }}</strong></div><div><span>{{ t('customer') }}</span><strong>{{ lookupResult.customerId }}</strong></div><div><span>{{ t('service') }}</span><strong>{{ lookupResult.serviceId }}</strong></div><div><span>{{ t('professional') }}</span><strong>{{ lookupResult.employeeId }}</strong></div><div><span>{{ t('start') }}</span><strong>{{ formatDateTime(lookupResult.startAt) }}</strong></div><div><span>{{ t('status') }}</span><strong>{{ statusLabel(lookupResult.status) }}</strong></div></article>
+      </section>
+
+      <section v-else-if="section === 'settings'" class="view narrow">
+        <div class="section-heading"><div><p class="eyebrow">Business settings</p><h2>Time zone</h2><p>Choose the local time YIBO should use for availability, appointments, Google Calendar, and AI scheduling conversations.</p></div></div>
+        <form class="panel form-card" @submit.prevent="saveTimezone">
+          <label>Business time zone
+            <select v-model="timezone">
+              <option v-for="option in timezones" :key="option.value" :value="option.value">{{ option.label }} — {{ option.value }}</option>
+            </select>
+          </label>
+          <p class="settings-help">For El Paso, choose <strong>Mountain Time (El Paso)</strong>. YIBO uses IANA time zones, so daylight saving time is handled automatically.</p>
+          <button class="primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save time zone' }}</button>
+        </form>
       </section>
     </main>
   </div>

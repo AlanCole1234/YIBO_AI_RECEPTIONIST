@@ -48,7 +48,7 @@ describe("in-memory call to appointment", () => {
       toolCallId: CHECK_TOOL_CALL_ID,
       name: "check_availability",
       arguments: {
-        serviceId: "consultation",
+        service: "Consultation",
         employeeId: "employee-1",
         rangeStart: "2026-08-10T00:00:00.000Z",
         rangeEnd: "2026-08-11T00:00:00.000Z",
@@ -64,7 +64,7 @@ describe("in-memory call to appointment", () => {
       toolCallId: CREATE_TOOL_CALL_ID,
       name: "create_appointment",
       arguments: {
-        serviceId: "consultation",
+        service: "Consultation",
         employeeId: selected.employeeId,
         startAt: selected.startAt,
       },

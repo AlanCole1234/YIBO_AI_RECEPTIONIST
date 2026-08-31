@@ -69,6 +69,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         employeeId: command.employeeId,
         startAt: command.startAt,
       });
+      calendarLog("calendar.slot.recheck", { tenantId: command.tenantId, employeeId: command.employeeId, startAt: command.startAt, available: slot.ok });
       if (!slot.ok) return failure<CreateAppointmentError>(mapSchedulingError(slot.error));
 
       const pending: Appointment = {
@@ -80,6 +81,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       };
       await this.repository.save(pending);
 
+      calendarLog("calendar.booking.started", { tenantId: pending.tenantId, appointmentId: pending.id, startAt: pending.startAt });
       const external = await this.calendar.createEvent({
         tenantId: pending.tenantId,
         appointmentId: pending.id,
@@ -90,6 +92,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         idempotencyKey: pending.idempotencyKey,
       });
       if (!external.ok) {
+        calendarLog("calendar.booking.failed", { tenantId: pending.tenantId, appointmentId: pending.id, code: external.error.code });
         await this.repository.save({ ...pending, status: "FAILED" });
         return failure<CreateAppointmentError>(calendarFailure(external.error));
       }
@@ -100,6 +103,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         externalCalendarEventId: external.value.externalEventId,
       };
       await this.repository.save(confirmed);
+      calendarLog("calendar.booking.completed", { tenantId: confirmed.tenantId, appointmentId: confirmed.id, externalEventId: confirmed.externalCalendarEventId });
       return success(confirmed);
     });
   }
@@ -217,3 +221,5 @@ const calendarFailure = (error: AppointmentCalendarError) => ({
   code: "CALENDAR_SYNC_FAILED" as const,
   retryable: error.code === "PROVIDER_UNAVAILABLE" ? error.retryable : error.code === "RATE_LIMITED",
 });
+
+const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));

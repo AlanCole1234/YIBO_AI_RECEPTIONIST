@@ -82,6 +82,7 @@ export class CallOrchestratorService implements CallOrchestrator {
         conversationId: record.callId,
         agent: agent.value,
         transport: media.value,
+        ...(media.value.observeEvent ? { observeEvent: media.value.observeEvent } : {}),
       });
     } catch {
       await media.value.close();

@@ -71,6 +71,22 @@ describe("CallOrchestratorService", () => {
     }]);
   });
 
+  it("forwards optional transport diagnostics to the conversation service", async () => {
+    const system = createOrchestrator();
+    const observed: string[] = [];
+    system.voice.register(incoming.callId, {
+      inboundAudio: noAudio(),
+      outboundAudio: { write: vi.fn() },
+      close: vi.fn(async () => undefined),
+      observeEvent: (event) => observed.push(event.type),
+    });
+
+    await system.orchestrator.handleTelephonyEvent(incoming);
+    system.runtime.latestSession.emit({ type: "user.speech_started" });
+
+    await vi.waitFor(() => expect(observed).toEqual(["user.speech_started"]));
+  });
+
   it("closes the conversation and media exactly once when the call hangs up", async () => {
     const system = createOrchestrator();
     await system.orchestrator.handleTelephonyEvent(incoming);

@@ -24,6 +24,7 @@ import {
   InMemoryBusinessRepository,
   type BusinessDirectory,
   type BusinessProfile,
+  type BusinessRepository,
 } from "../modules/business/index.js";
 import {
   CallOrchestratorService,
@@ -101,6 +102,7 @@ export interface BuildApplicationOptions {
   config?: ApplicationConfiguration;
   tenantId?: string;
   businesses?: BusinessProfile[];
+  businessRepository?: BusinessRepository;
   clock?: Clock;
   ids?: IdGenerator;
   runtime?: ConversationRuntimePort;
@@ -127,7 +129,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const billing = options.billing ?? (config.openAiAdminKey
     ? new OpenAIOrganizationCostsAdapter(config.openAiAdminKey)
     : undefined);
-  const businessRepository = new InMemoryBusinessRepository(profiles);
+  const businessRepository = options.businessRepository ?? new InMemoryBusinessRepository(profiles);
   const business = new BusinessDirectoryService(businessRepository);
   const customerRepository = new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
@@ -168,15 +170,16 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("appointment"),
   );
   const transfer = options.humanTransfer ?? unavailableTransfer;
-  const tools = new ToolExecutorImpl(scheduling, appointments, transfer);
+  const tools = new ToolExecutorImpl(scheduling, appointments, transfer, business, clock, customers);
   const configurationRepository = options.agentConfigurationRepository ?? new InMemoryAgentConfigurationSource(profiles.map((profile) => ({
       tenantId: profile.tenantId,
       configuration: {
         instructions: [
           `You are the phone receptionist for ${profile.name}.`,
           "Speak warmly and naturally, using complete sentences and a conversational rhythm.",
-          "Be concise, but never cut off a sentence or end abruptly.",
-          "Do not sound like a script and do not recite unnecessary lists.",
+        "Be concise, but never cut off a sentence or end abruptly.",
+        "Do not sound like a script and do not recite unnecessary lists.",
+        "For booking, first use check_availability. Once the caller selects an available time, use create_appointment and only confirm the booking after the tool confirms it.",
         ].join(" "),
         locale: profile.locale,
         voice: config.conversationVoice,

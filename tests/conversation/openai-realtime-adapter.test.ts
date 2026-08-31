@@ -39,13 +39,17 @@ function fixture() {
   const factory: RealtimeConnectionFactory = {
     connect: async (input) => { connectedWith.push(input); return connection; },
   };
-  const logged: Array<{ message: string; code?: string }> = [];
+  const logged: Array<{ message: string; code?: string; error?: string }> = [];
   const adapter = new OpenAIRealtimeAdapter({
     apiKey: "test-key",
     model: "gpt-realtime-2.1",
     mode: "text",
     connectionFactory: factory,
-    logger: { error: (message, details) => logged.push({ message, ...(details?.code ? { code: details.code } : {}) }) },
+    logger: { error: (message, details) => logged.push({
+      message,
+      ...(details?.code ? { code: details.code } : {}),
+      ...(details?.error ? { error: details.error } : {}),
+    }) },
   });
   return { adapter, connectedWith, connection, logged };
 }
@@ -72,6 +76,8 @@ describe("OpenAIRealtimeAdapter", () => {
           "Help the caller schedule an appointment.",
           "Keep responses concise, but always finish the current sentence naturally.",
           "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
+          "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details.",
+          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
         ].join("\n"),
         tools: [{
           type: "function",
@@ -115,7 +121,9 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(update.session.audio.input.turn_detection).toEqual({
       type: "server_vad",
       create_response: true,
-      interrupt_response: false,
+      interrupt_response: true,
+      idle_timeout_ms: 6000,
+      silence_duration_ms: 800,
     });
 
     await session.sendAudio({
@@ -147,6 +155,65 @@ describe("OpenAIRealtimeAdapter", () => {
     });
   });
 
+  it("forwards response completion and uses server idle timeout rather than a local response race", async () => {
+    const value = fixture();
+    const session = await open(value);
+    const events = session.events()[Symbol.asyncIterator]();
+
+    value.connection.emit({ type: "response.done", response: { status: "completed" } });
+    await expect(events.next()).resolves.toMatchObject({ value: { type: "assistant.response_done", status: "completed" } });
+  });
+
+  it("logs the Realtime lifecycle, audio appends, and safe provider event metadata", async () => {
+    const connection = new FakeRealtimeConnection();
+    const diagnostics: Array<{ message: string; details?: Record<string, unknown> }> = [];
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      mode: "audio",
+      connectionFactory: { connect: async () => connection },
+      logger: {
+        info: (message, details) => diagnostics.push({ message, details }),
+        error: () => undefined,
+      },
+    });
+    const session = await adapter.openSession({ conversationId: "conversation-1", agent });
+
+    await session.sendAudio({
+      data: new Uint8Array([1, 2, 3, 4]),
+      codec: "pcm_s16le",
+      sampleRate: 24_000,
+      channels: 1,
+    });
+    connection.emit({ type: "input_audio_buffer.speech_stopped", event_id: "event-stop", item_id: "item-user" });
+    connection.emit({ type: "input_audio_buffer.committed", event_id: "event-commit", item_id: "item-user" });
+    connection.emit({ type: "session.updated", event_id: "event-configured", session: { model: "gpt-realtime-2.1", output_modalities: ["audio"] } });
+    connection.emit({ type: "response.created", event_id: "event-created", response: { id: "response-1" } });
+    connection.emit({
+      type: "response.output_audio.delta",
+      event_id: "event-audio",
+      response_id: "response-1",
+      item_id: "assistant-1",
+      delta: Buffer.from([5, 6, 7]).toString("base64"),
+    });
+    connection.emit({ type: "response.done", response: { status: "completed" } });
+
+    expect(diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: "OpenAI Realtime connection starting", details: { model: "gpt-realtime-2.1", mode: "audio" } }),
+      expect.objectContaining({ message: "OpenAI Realtime connection established" }),
+      expect.objectContaining({ message: "OpenAI Realtime session.update sent" }),
+      expect.objectContaining({ message: "OpenAI Realtime input_audio_buffer.append sent", details: expect.objectContaining({ bytes: 4 }) }),
+      expect.objectContaining({ message: "OpenAI Realtime speech stopped" }),
+      expect.objectContaining({ message: "OpenAI Realtime input audio buffer committed" }),
+      expect.objectContaining({ message: "OpenAI Realtime session configuration accepted", details: expect.objectContaining({ model: "gpt-realtime-2.1" }) }),
+      expect.objectContaining({ message: "OpenAI Realtime response created" }),
+      expect.objectContaining({ message: "OpenAI Realtime response done" }),
+      expect.objectContaining({ message: "OpenAI Realtime event received", details: expect.objectContaining({ type: "input_audio_buffer.speech_stopped" }) }),
+      expect.objectContaining({ message: "OpenAI Realtime event received", details: expect.objectContaining({ type: "response.created" }) }),
+      expect.objectContaining({ message: "OpenAI Realtime event received", details: expect.objectContaining({ type: "response.output_audio.delta", audioBytes: 3 }) }),
+      expect.objectContaining({ message: "OpenAI Realtime event received", details: expect.objectContaining({ type: "response.done", status: "completed" }) }),
+    ]));
+  });
+
   it("passes explicitly configured server VAD parameters", async () => {
     const connection = new FakeRealtimeConnection();
     const adapter = new OpenAIRealtimeAdapter({
@@ -165,9 +232,50 @@ describe("OpenAIRealtimeAdapter", () => {
         prefix_padding_ms: 300,
         silence_duration_ms: 500,
         create_response: true,
-        interrupt_response: false,
+        interrupt_response: true,
+        idle_timeout_ms: 6000,
       } } } },
     });
+  });
+
+  it("reports a redacted provider error when the initial connection is rejected", async () => {
+    const logged: Array<{ message: string; code?: string; error?: string }> = [];
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      connectionFactory: {
+        connect: async () => {
+          throw Object.assign(new Error("Incorrect API key sk-proj-secret-value"), {
+            error: { code: "invalid_api_key", message: "Incorrect API key sk-proj-secret-value" },
+          });
+        },
+      },
+      logger: { error: (message, details) => logged.push({ message, ...details }) },
+    });
+
+    await expect(open({ ...fixture(), adapter })).rejects.toThrow("Incorrect API key");
+    expect(logged).toEqual([{
+      message: "OpenAI Realtime WebSocket connection failed",
+      code: "invalid_api_key",
+      error: "Incorrect API key [redacted]",
+    }]);
+  });
+
+  it("redacts an invalid API-key value even when it does not use the usual key prefix", async () => {
+    const logged: Array<{ message: string; code?: string; error?: string }> = [];
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      connectionFactory: {
+        connect: async () => {
+          throw Object.assign(new Error("Incorrect API key provided: accidental-password"), {
+            error: { code: "invalid_api_key", message: "Incorrect API key provided: accidental-password" },
+          });
+        },
+      },
+      logger: { error: (message, details) => logged.push({ message, ...details }) },
+    });
+
+    await expect(open({ ...fixture(), adapter })).rejects.toThrow("Incorrect API key");
+    expect(logged[0]?.error).toBe("Incorrect API key provided: [redacted]");
   });
 
   it("sends a text turn and translates streamed and final text", async () => {
@@ -237,6 +345,43 @@ describe("OpenAIRealtimeAdapter", () => {
     ]);
   });
 
+  it("does not create a competing response when a calendar result arrives after barge-in", async () => {
+    const connection = new FakeRealtimeConnection();
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      mode: "audio",
+      connectionFactory: { connect: async () => connection },
+    });
+    const session = await open({ ...fixture(), adapter, connection });
+
+    connection.emit({ type: "response.created", response: { id: "response-1" } });
+    connection.emit({ type: "input_audio_buffer.speech_started" });
+    await session.interrupt({ assistantTurnId: "assistant-1", audioEndMs: 320 });
+    connection.emit({ type: "response.done", response: { id: "response-1", status: "cancelled" } });
+
+    await session.sendToolResult({
+      toolCallId: "calendar-1",
+      ok: true,
+      data: { earliestSlot: "2026-09-02T16:00:00.000Z" },
+    });
+
+    expect(connection.sent.filter((event) => (event as { type?: string }).type === "response.create")).toEqual([]);
+    expect(connection.sent).toContainEqual({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: "calendar-1",
+        output: JSON.stringify({ ok: true, data: { earliestSlot: "2026-09-02T16:00:00.000Z" } }),
+      },
+    });
+
+    connection.emit({ type: "input_audio_buffer.speech_stopped" });
+    connection.emit({ type: "response.created", response: { id: "response-2" } });
+    connection.emit({ type: "response.done", response: { id: "response-2", status: "completed" } });
+
+    expect(connection.sent.filter((event) => (event as { type?: string }).type === "response.create")).toEqual([]);
+  });
+
   it("logs and translates connection errors", async () => {
     const value = fixture();
     const session = await open(value);
@@ -247,6 +392,7 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(value.logged).toEqual([{
       message: "OpenAI Realtime WebSocket error",
       code: "rate_limit_exceeded",
+      error: "Capacity exceeded",
     }]);
     await expect(next(events)).resolves.toEqual({
       type: "error",
@@ -269,6 +415,7 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(value.logged).toEqual([{
       message: "OpenAI Realtime WebSocket error",
       code: "invalid_request_error",
+      error: "Invalid session configuration",
     }]);
     await expect(next(events)).resolves.toEqual({
       type: "error",
@@ -288,24 +435,23 @@ describe("OpenAIRealtimeAdapter", () => {
     await expect(next(events)).resolves.toEqual({ type: "closed", reason: "network_lost" });
   });
 
-  it("interrupts and closes the WebSocket idempotently", async () => {
+  it("uses server VAD cancellation and truncates local playback exactly once", async () => {
     const value = fixture();
     const session = await open(value);
     const events = session.events()[Symbol.asyncIterator]();
 
     await session.interrupt({ assistantTurnId: "assistant-1", audioEndMs: 1234.4 });
+    await session.interrupt({ assistantTurnId: "assistant-1", audioEndMs: 1400 });
     await session.close();
     await session.close();
 
-    expect(value.connection.sent.slice(-2)).toEqual([
-      { type: "response.cancel" },
-      {
-        type: "conversation.item.truncate",
-        item_id: "assistant-1",
-        content_index: 0,
-        audio_end_ms: 1234,
-      },
-    ]);
+    expect(value.connection.sent.filter((event) => (event as { type?: string }).type === "response.cancel")).toEqual([]);
+    expect(value.connection.sent.filter((event) => (event as { type?: string }).type === "conversation.item.truncate")).toEqual([{
+      type: "conversation.item.truncate",
+      item_id: "assistant-1",
+      content_index: 0,
+      audio_end_ms: 1234,
+    }]);
     expect(value.connection.closeCount).toBe(1);
     await expect(next(events)).resolves.toEqual({ type: "closed", reason: "client_closed" });
   });

@@ -7,6 +7,25 @@ let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("local API flow", () => {
+  it("stores a valid business timezone through the dashboard API", async () => {
+    server = await createApiServer(buildApplication());
+
+    const updated = await server.inject({
+      method: "PUT",
+      url: "/api/business/timezone",
+      payload: { timezone: "America/Denver" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({ timezone: "America/Denver" });
+
+    const invalid = await server.inject({
+      method: "PUT",
+      url: "/api/business/timezone",
+      payload: { timezone: "Not/A-Timezone" },
+    });
+    expect(invalid.statusCode).toBe(422);
+  });
+
   it("supports health, customer, availability, booking, refresh, conflict, and lookup", async () => {
     server = await createApiServer(buildApplication());
 

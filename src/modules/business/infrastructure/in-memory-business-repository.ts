@@ -20,6 +20,14 @@ export class InMemoryBusinessRepository implements BusinessRepository {
     return tenantId ? this.byTenant.get(tenantId) ?? null : null;
   }
 
+  async save(profile: BusinessProfile): Promise<void> {
+    if (!this.byTenant.has(profile.tenantId)) {
+      this.add(profile);
+      return;
+    }
+    this.byTenant.set(profile.tenantId, structuredClone(profile));
+  }
+
   private add(profile: BusinessProfile): void {
     if (this.byTenant.has(profile.tenantId)) {
       throw new Error(`Duplicate business tenant: ${profile.tenantId}`);

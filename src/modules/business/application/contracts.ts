@@ -16,6 +16,11 @@ export interface BusinessDirectory {
   getBusinessProfile(
     tenantId: TenantId,
   ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+
+  updateBusinessTimezone(
+    tenantId: TenantId,
+    timezone: IANATimeZone,
+  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
 }
 
 export interface BusinessProfile {

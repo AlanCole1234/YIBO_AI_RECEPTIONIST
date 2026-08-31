@@ -1,5 +1,8 @@
 import type { AppointmentService } from "../../appointments/index.js";
 import type { SchedulingService } from "../../scheduling/index.js";
+import type { BusinessDirectory } from "../../business/index.js";
+import type { CustomerService } from "../../customers/index.js";
+import type { Clock } from "../../../shared/application/system.js";
 import type { HumanTransferPort } from "../ports/agent-dependencies.js";
 import type {
   AgentToolCall,
@@ -7,6 +10,7 @@ import type {
   ToolExecutionContext,
   ToolExecutor,
 } from "./contracts.js";
+import { resolveNaturalDateRange } from "../domain/natural-date-range.js";
 
 type Input = Record<string, unknown>;
 
@@ -15,6 +19,9 @@ export class ToolExecutorImpl implements ToolExecutor {
     private readonly scheduling: SchedulingService,
     private readonly appointments: AppointmentService,
     private readonly transfer: HumanTransferPort,
+    private readonly businesses?: BusinessDirectory,
+    private readonly clock: Clock = { now: () => new Date() },
+    private readonly customers?: CustomerService,
   ) {}
 
   async execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult> {
@@ -25,42 +32,110 @@ export class ToolExecutorImpl implements ToolExecutor {
     switch (call.name) {
       case "check_availability": return this.checkAvailability(context, call);
       case "create_appointment": return this.createAppointment(context, call);
+      case "update_customer": return this.updateCustomer(context, call);
       case "cancel_appointment": return this.cancelAppointment(context, call);
       case "transfer_to_human": return this.transferToHuman(context, call);
     }
   }
 
+  private async updateCustomer(context: ToolExecutionContext, call: AgentToolCall) {
+    if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Ask for the caller's name and phone number before booking.", false);
+    const input = call.arguments as Input;
+    if (!exactKeys(input, ["name", "phone"], ["name", "phone"]) || !text(input.name) || !hasFirstAndLastName(input.name) || !text(input.phone) || !this.customers) {
+      return invalid(call, "A first and last name and a valid phone number are required.");
+    }
+    const updated = await this.customers.updateCustomer({ tenantId: context.tenantId, customerId: context.customerId, name: input.name, phone: input.phone });
+    return updated.ok ? { toolCallId: call.toolCallId, ok: true as const, data: { saved: true } }
+      : toolError(call, updated.error.code, "The contact information could not be saved. Ask for the phone number again.", false);
+  }
+
   private async checkAvailability(context: ToolExecutionContext, call: AgentToolCall) {
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["serviceId", "employeeId", "rangeStart", "rangeEnd"], ["serviceId", "rangeStart", "rangeEnd"]) ||
-        !text(input.serviceId) || !dateTime(input.rangeStart) || !dateTime(input.rangeEnd) ||
-        (input.employeeId !== undefined && !text(input.employeeId))) {
-      return invalid(call, "serviceId, rangeStart and rangeEnd are required and must be valid");
+    if (!exactKeys(input, ["service", "employeeId", "dateExpression", "rangeStart", "rangeEnd", "requestedStartAt"], []) ||
+        (input.service !== undefined && !text(input.service)) ||
+        (input.employeeId !== undefined && !text(input.employeeId)) ||
+        (input.requestedStartAt !== undefined && !dateTime(input.requestedStartAt))) {
+      return invalid(call, "A patient-facing service and either dateExpression or rangeStart/rangeEnd are required");
     }
+    const serviceId = await this.resolveServiceId(context.tenantId, input.service);
+    if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
+    const absoluteRange = dateTime(input.rangeStart) && dateTime(input.rangeEnd)
+      ? { rangeStart: input.rangeStart, rangeEnd: input.rangeEnd }
+      : undefined;
+    const naturalRange = text(input.dateExpression) ? await this.resolveDateExpression(context.tenantId, input.dateExpression) : undefined;
+    if ((absoluteRange && naturalRange) || (!absoluteRange && !naturalRange)) {
+      return invalid(call, "Provide either a valid dateExpression or valid rangeStart and rangeEnd");
+    }
+    const range = naturalRange ?? absoluteRange!;
+    calendarLog("calendar.availability.started", { tenantId: context.tenantId, serviceId, dateExpression: input.dateExpression });
     const result = await this.scheduling.findAvailableSlots({
       tenantId: context.tenantId,
-      serviceId: input.serviceId,
+      serviceId,
       ...(input.employeeId ? { employeeId: input.employeeId as string } : {}),
-      rangeStart: input.rangeStart,
-      rangeEnd: input.rangeEnd,
+      rangeStart: range.rangeStart,
+      rangeEnd: range.rangeEnd,
     });
     if (!result.ok) {
-      return toolError(call, result.error.code, "Availability could not be checked. Ask for another date or try again.", result.error.code === "EXTERNAL_CALENDAR_UNAVAILABLE" && result.error.retryable);
+      calendarLog("calendar.availability.failed", { tenantId: context.tenantId, code: result.error.code });
+      return toolError(call, result.error.code, availabilityMessage(result.error.code), result.error.code === "EXTERNAL_CALENDAR_UNAVAILABLE" && result.error.retryable);
     }
-    return { toolCallId: call.toolCallId, ok: true as const, data: { slots: result.value } };
+    calendarLog("calendar.availability.completed", { tenantId: context.tenantId, slotCount: result.value.length });
+    if (result.value[0]) calendarLog("calendar.slot.selected", { tenantId: context.tenantId, employeeId: result.value[0].employeeId, startAt: result.value[0].startAt });
+    const requested = text(input.requestedStartAt)
+      ? await this.scheduling.validateSlot({ tenantId: context.tenantId, serviceId, employeeId: input.employeeId ? input.employeeId as string : result.value[0]?.employeeId ?? "", startAt: input.requestedStartAt })
+      : undefined;
+    return {
+      toolCallId: call.toolCallId,
+      ok: true as const,
+      data: {
+        success: true,
+        requestedPeriod: { startAt: range.rangeStart, endAt: range.rangeEnd, ...(naturalRange ? { label: naturalRange.label } : {}) },
+        availableSlots: result.value,
+        // Kept temporarily for existing clients while Realtime uses the clearer names above.
+        slots: result.value,
+        earliestSlot: result.value[0] ?? null,
+        ...(naturalRange ? { resolvedDate: naturalRange.label } : {}),
+        ...(text(input.requestedStartAt) ? { requestedStartAt: input.requestedStartAt, requestedTimeAvailable: requested?.ok ?? false } : {}),
+      },
+    };
+  }
+
+  private async resolveDateExpression(tenantId: string, expression: string) {
+    const business = await this.businesses?.getBusinessProfile(tenantId);
+    if (!business?.ok) return undefined;
+    return resolveNaturalDateRange(expression, this.clock.now(), business.value.timezone) ?? undefined;
+  }
+
+  private async resolveServiceId(tenantId: string, value: unknown): Promise<string | undefined> {
+    const business = await this.businesses?.getBusinessProfile(tenantId);
+    if (!business?.ok) return undefined;
+    if (text(value)) {
+      const normalized = value.trim().toLocaleLowerCase();
+      // IDs remain internal: matching them here supports clinics whose configured
+      // display language differs from the caller's patient-facing choice.
+      return business.value.services.find((service) =>
+        service.name.trim().toLocaleLowerCase() === normalized
+        || service.id.trim().toLocaleLowerCase() === normalized,
+      )?.id;
+    }
+    // Business services are ordered by the clinic. Until clinics expose a separate
+    // default-service setting, the first configured patient-facing service is the default.
+    return business.value.services[0]?.id;
   }
 
   private async createAppointment(context: ToolExecutionContext, call: AgentToolCall) {
     if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before creating an appointment.", false);
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["serviceId", "employeeId", "startAt"], ["serviceId", "employeeId", "startAt"]) ||
-        !text(input.serviceId) || !text(input.employeeId) || !dateTime(input.startAt)) {
-      return invalid(call, "serviceId, employeeId and a valid startAt are required");
+    if (!exactKeys(input, ["service", "employeeId", "startAt"], ["employeeId", "startAt"]) ||
+        (input.service !== undefined && !text(input.service)) || !text(input.employeeId) || !dateTime(input.startAt)) {
+      return invalid(call, "A patient-facing service, employeeId and a valid startAt are required");
     }
+    const serviceId = await this.resolveServiceId(context.tenantId, input.service);
+    if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
     const result = await this.appointments.createAppointment({
       tenantId: context.tenantId,
       customerId: context.customerId,
-      serviceId: input.serviceId,
+      serviceId,
       employeeId: input.employeeId,
       startAt: input.startAt,
       idempotencyKey: `${context.callId}:${call.toolCallId}`,
@@ -129,3 +204,13 @@ const toolError = (call: AgentToolCall, code: string, messageForAgent: string, r
   ok: false,
   error: { code, messageForAgent, retryable },
 });
+
+const availabilityMessage = (code: string): string => {
+  if (code === "CALENDAR_NOT_CONNECTED") return "The clinic calendar is not connected. Ask the caller to try again after it is connected.";
+  if (code === "CALENDAR_AUTHORIZATION_REQUIRED") return "The clinic calendar needs to be reconnected. Do not offer an appointment time.";
+  if (code === "CALENDAR_RATE_LIMITED") return "The calendar is temporarily busy. Ask the caller to try again shortly.";
+  return "The calendar could not be reached right now. Do not invent availability or offer a time.";
+};
+
+const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
+const hasFirstAndLastName = (value: string): boolean => value.trim().split(/\s+/).length >= 2;

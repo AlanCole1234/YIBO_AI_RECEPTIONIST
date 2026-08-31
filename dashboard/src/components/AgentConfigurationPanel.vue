@@ -8,20 +8,20 @@ import {
   type ReasoningEffort,
 } from "../services/api";
 
-const props = defineProps<{ locale: "es-MX" | "en-US" }>();
+defineProps<{ locale: "es-MX" | "en-US" }>();
 
 type Step = "identity" | "conversation" | "abilities" | "instructions";
 type VadPreset = "auto" | "fast" | "balanced" | "patient" | "custom";
 
-const steps: Array<{ id: Step; number: string; es: string; en: string }> = [
-  { id: "identity", number: "01", es: "Identidad", en: "Identity" },
-  { id: "conversation", number: "02", es: "Conversación", en: "Conversation" },
-  { id: "abilities", number: "03", es: "Acciones", en: "Actions" },
-  { id: "instructions", number: "04", es: "Instrucciones", en: "Instructions" },
+const steps: Array<{ id: Step; number: string; label: string }> = [
+  { id: "identity", number: "01", label: "Identity" },
+  { id: "conversation", number: "02", label: "Conversation" },
+  { id: "abilities", number: "03", label: "Actions" },
+  { id: "instructions", number: "04", label: "Instructions" },
 ];
 const models = [
-  { value: "gpt-realtime-2.1", label: "GPT Realtime 2.1", note: "Mejor calidad conversacional" },
-  { value: "gpt-realtime-2.1-mini", label: "GPT Realtime 2.1 Mini", note: "Menor costo" },
+  { value: "gpt-realtime-2.1", label: "GPT Realtime 2.1", note: "Best conversational quality" },
+  { value: "gpt-realtime-2.1-mini", label: "GPT Realtime 2.1 Mini", note: "Lower cost" },
 ];
 const voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
 const reasoningEfforts: ReasoningEffort[] = ["minimal", "low", "medium", "high"];
@@ -37,10 +37,10 @@ const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conve
   patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
 };
 const toolCopy: Record<AgentToolName, { title: string; help: string; route: string; icon: string }> = {
-  check_availability: { title: "Consultar disponibilidad", help: "Revisa servicios, profesionales y horarios libres. No modifica datos.", route: "Scheduling", icon: "⌕" },
-  create_appointment: { title: "Crear citas", help: "Propone una cita; YIBO valida identidad, disponibilidad e idempotencia.", route: "Appointments", icon: "+" },
-  cancel_appointment: { title: "Cancelar citas", help: "Sólo cancela citas que pertenecen al cliente verificado.", route: "Appointments", icon: "×" },
-  transfer_to_human: { title: "Transferir a una persona", help: "Solicita una transferencia al destino configurado por el negocio.", route: "HumanTransferPort", icon: "↗" },
+  check_availability: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕" },
+  create_appointment: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+" },
+  cancel_appointment: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×" },
+  transfer_to_human: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗" },
 };
 
 const loading = ref(true);
@@ -64,7 +64,6 @@ const vadPreset = computed<VadPreset>(() => {
   return "custom";
 });
 const activeToolCount = computed(() => configuration.value?.enabledTools.length ?? 0);
-const isSpanish = computed(() => props.locale === "es-MX");
 
 onMounted(load);
 
@@ -155,8 +154,8 @@ function sameVad(
 
 function clone(value: AgentConfiguration): AgentConfiguration { return structuredClone(value); }
 function errorMessage(caught: unknown): string {
-  if (caught instanceof ApiError) return `No se pudo guardar la configuración (${caught.code}).`;
-  return caught instanceof Error ? caught.message : "No se pudo cargar la configuración.";
+  if (caught instanceof ApiError) return `Could not save the configuration (${caught.code}).`;
+  return caught instanceof Error ? caught.message : "Could not load the configuration.";
 }
 </script>
 
@@ -164,78 +163,78 @@ function errorMessage(caught: unknown): string {
   <section class="agent-config agent-config-v2" aria-labelledby="agent-config-title">
     <div class="config-intro">
       <div>
-        <p class="config-kicker">02 · AJUSTES DEL AGENTE</p>
-        <h2 id="agent-config-title">Ahora afina cómo conversa.</h2>
-        <p>Escucha primero, cambia una cosa y vuelve a probar. Los ajustes se guardan para este negocio y se aplican a la siguiente conversación.</p>
+        <p class="config-kicker">02 · AGENT SETTINGS</p>
+        <h2 id="agent-config-title">Fine-tune how YIBO talks.</h2>
+        <p>Listen first, change one thing, then test again. Settings are saved for this business and apply to the next conversation.</p>
       </div>
       <div :class="['connection-chip', { ready: apiKeyConfigured }]">
-        <i></i>{{ apiKeyConfigured ? "API lista" : "Falta API key" }}
+        <i></i>{{ apiKeyConfigured ? "API ready" : "API key needed" }}
       </div>
     </div>
 
-    <div v-if="loading" class="config-state"><i></i>Preparando la configuración…</div>
+    <div v-if="loading" class="config-state"><i></i>Preparing settings…</div>
     <div v-else-if="!configuration" class="config-state error-state">{{ error }}</div>
 
     <form v-else @submit.prevent="save">
-      <nav class="config-steps" aria-label="Pasos de configuración">
+      <nav class="config-steps" aria-label="Configuration steps">
         <button v-for="(item, index) in steps" :key="item.id" type="button"
           :class="{ active: step === item.id, complete: index < currentStep }" @click="selectStep(item.id)">
-          <small>{{ item.number }}</small><span>{{ isSpanish ? item.es : item.en }}</span>
+          <small>{{ item.number }}</small><span>{{ item.label }}</span>
         </button>
       </nav>
 
       <div class="config-layout">
         <div class="config-stage">
           <section v-if="step === 'identity'" class="step-panel">
-            <div class="step-heading"><span>01</span><div><h3>Personalidad de la conversación</h3><p>Elige el modelo, la voz y el idioma que escuchará quien llama.</p></div></div>
+            <div class="step-heading"><span>01</span><div><h3>Conversation personality</h3><p>Choose the model, voice, and language callers will hear.</p></div></div>
             <div class="field-grid">
-              <label>Modelo de conversación<select v-model="configuration.conversation.model"><option v-for="model in models" :key="model.value" :value="model.value">{{ model.label }} — {{ model.note }}</option></select><small>Define la calidad, velocidad y costo aproximado de cada turno.</small></label>
-              <label>Voz de YIBO<select v-model="configuration.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>Es el timbre que escuchará el caller. Marin y Cedar son buenos puntos de partida.</small></label>
-              <label>Idioma y región<select v-model="configuration.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Ajusta pronunciación, vocabulario, fechas y horarios.</small></label>
-              <label>Razonamiento<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>Más razonamiento agrega latencia y consumo; mínimo es el recomendado.</small></label>
+              <label>Conversation model<select v-model="configuration.conversation.model"><option v-for="model in models" :key="model.value" :value="model.value">{{ model.label }} — {{ model.note }}</option></select><small>Sets the approximate quality, speed, and cost of each turn.</small></label>
+              <label>YIBO voice<select v-model="configuration.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>This is the sound callers will hear. Marin and Cedar are good starting points.</small></label>
+              <label>Language and region<select v-model="configuration.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Adjusts pronunciation, vocabulary, dates, and times.</small></label>
+              <label>Reasoning<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>More reasoning adds latency and cost; minimal is recommended.</small></label>
             </div>
-            <label class="token-control"><span>Extensión máxima <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" min="64" max="4096" step="64"><small>Es un techo, no una meta. Una respuesta normal puede usar mucho menos.</small></label>
+            <label class="token-control"><span>Maximum response length <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" min="64" max="4096" step="64"><small>This is a ceiling, not a target. A normal response can use much less.</small></label>
           </section>
 
           <section v-else-if="step === 'conversation'" class="step-panel">
-            <div class="step-heading"><span>02</span><div><h3>Ritmo de la charla</h3><p>Controla cuándo YIBO entiende que terminaste de hablar.</p></div></div>
+            <div class="step-heading"><span>02</span><div><h3>Conversation pacing</h3><p>Control when YIBO understands that you have finished speaking.</p></div></div>
             <div class="preset-grid">
-              <button v-for="preset in (['auto','fast','balanced','patient'] as const)" :key="preset" type="button" :class="{ selected: vadPreset === preset }" @click="applyVad(preset)"><i>{{ preset === 'auto' ? '✦' : preset === 'fast' ? '⚡' : preset === 'balanced' ? '◉' : '◌' }}</i><strong>{{ {auto:'Automático',fast:'Ágil',balanced:'Equilibrado',patient:'Paciente'}[preset] }}</strong><small>{{ preset === 'auto' ? 'Usa los valores administrados por el proveedor.' : preset === 'fast' ? 'Responde pronto en ambientes silenciosos.' : preset === 'balanced' ? 'Punto de partida para recepción telefónica.' : 'Tolera pausas largas antes de responder.' }}</small></button>
+              <button v-for="preset in (['auto','fast','balanced','patient'] as const)" :key="preset" type="button" :class="{ selected: vadPreset === preset }" @click="applyVad(preset)"><i>{{ preset === 'auto' ? '✦' : preset === 'fast' ? '⚡' : preset === 'balanced' ? '◉' : '◌' }}</i><strong>{{ {auto:'Automatic',fast:'Fast',balanced:'Balanced',patient:'Patient'}[preset] }}</strong><small>{{ preset === 'auto' ? 'Uses provider-managed values.' : preset === 'fast' ? 'Responds quickly in quiet environments.' : preset === 'balanced' ? 'A good starting point for a phone receptionist.' : 'Allows longer pauses before responding.' }}</small></button>
             </div>
-            <details class="advanced"><summary>Ajustes avanzados <span>{{ vadPreset === 'custom' ? 'Personalizados' : 'Opcional' }}</span></summary><p>Cámbialos sólo después de escuchar conversaciones reales.</p><div class="advanced-grid">
-              <label>Sensibilidad <output>{{ configuration.conversation.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.conversation.turnDetection.threshold" type="range" min="0" max="1" step="0.01"></label>
-              <label>Audio previo <output>{{ configuration.conversation.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.conversation.turnDetection.prefixPaddingMs" type="range" min="0" max="1000" step="20"></label>
-              <label>Silencio de cierre <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
+            <details class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
+              <label>Sensitivity <output>{{ configuration.conversation.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.conversation.turnDetection.threshold" type="range" min="0" max="1" step="0.01"></label>
+              <label>Audio before speech <output>{{ configuration.conversation.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.conversation.turnDetection.prefixPaddingMs" type="range" min="0" max="1000" step="20"></label>
+              <label>End-of-turn silence <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
             </div></details>
           </section>
 
           <section v-else-if="step === 'abilities'" class="step-panel">
-            <div class="step-heading"><span>03</span><div><h3>Capacidades y límites</h3><p>El modelo puede solicitar estas acciones; ToolExecutor sigue validando y ejecutando.</p></div></div>
-            <div class="permission-flow"><span>Modelo<small>propone</small></span><b>→</b><span class="gate">ToolExecutor<small>valida</small></span><b>→</b><span>YIBO<small>ejecuta</small></span></div>
-            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ toolCopy[tool.name].icon }}</i><span><small>{{ tool.kind === 'consult' ? 'Sólo lectura' : tool.kind === 'mutate' ? 'Modifica datos' : 'Acción externa' }}</small><strong>{{ toolCopy[tool.name].title }}</strong><p>{{ toolCopy[tool.name].help }}</p><em>Ruta segura: {{ toolCopy[tool.name].route }}</em></span><b></b></button></div>
-            <p class="security-note">El modelo nunca recibe acceso directo a la base de datos. Tenant, llamada y cliente llegan como contexto confiable del sistema.</p>
+            <div class="step-heading"><span>03</span><div><h3>Capabilities and limits</h3><p>The model can request these actions; ToolExecutor still validates and executes them.</p></div></div>
+            <div class="permission-flow"><span>Model<small>requests</small></span><b>→</b><span class="gate">ToolExecutor<small>validates</small></span><b>→</b><span>YIBO<small>executes</small></span></div>
+            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ toolCopy[tool.name].icon }}</i><span><small>{{ tool.kind === 'consult' ? 'Read only' : tool.kind === 'mutate' ? 'Changes data' : 'External action' }}</small><strong>{{ toolCopy[tool.name].title }}</strong><p>{{ toolCopy[tool.name].help }}</p><em>Safe route: {{ toolCopy[tool.name].route }}</em></span><b></b></button></div>
+            <p class="security-note">The model never receives direct database access. Tenant, call, and customer arrive as trusted system context.</p>
           </section>
 
           <section v-else class="step-panel">
-            <div class="step-heading"><span>04</span><div><h3>Instrucciones maestras</h3><p>Describe el rol, tono y límites de YIBO con reglas claras.</p></div></div>
-            <label class="prompt-field">Instrucciones activas<textarea v-model="configuration.instructions" rows="12"></textarea><small>No incluyas secretos ni datos personales. {{ configuration.instructions.length }} caracteres.</small></label>
+            <div class="step-heading"><span>04</span><div><h3>Core instructions</h3><p>Describe YIBO's role, tone, and limits with clear rules.</p></div></div>
+            <label class="prompt-field">Active instructions<textarea v-model="configuration.instructions" rows="12"></textarea><small>Do not include secrets or personal data. {{ configuration.instructions.length }} characters.</small></label>
           </section>
 
-          <div class="step-actions"><button type="button" :disabled="currentStep === 0" @click="move(-1)">← Anterior</button><span>Paso {{ currentStep + 1 }} de 4</span><button type="button" :disabled="currentStep === 3" @click="move(1)">Siguiente →</button></div>
+          <div class="step-actions"><button type="button" :disabled="currentStep === 0" @click="move(-1)">← Previous</button><span>Step {{ currentStep + 1 }} of 4</span><button type="button" :disabled="currentStep === 3" @click="move(1)">Next →</button></div>
         </div>
 
         <aside class="agent-preview">
-          <small>VISTA PREVIA</small><div class="voice-orb"><i></i><i></i><i></i><i></i><i></i></div>
-          <h3>{{ configuration.conversation.model.replace('gpt-', 'GPT ') }}</h3><p>Voz <strong>{{ configuration.voice }}</strong> · {{ configuration.locale }}</p>
+          <small>PREVIEW</small><div class="voice-orb"><i></i><i></i><i></i><i></i><i></i></div>
+          <h3>{{ configuration.conversation.model.replace('gpt-', 'GPT ') }}</h3><p>Voice <strong>{{ configuration.voice }}</strong> · {{ configuration.locale }}</p>
           <blockquote>“{{ configuration.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
-          <button type="button" class="preview-button" @click="playVoicePreview">{{ speechPlaying ? '■ Detener referencia' : '▶ Escuchar referencia gratis' }}</button>
-          <small class="preview-note">Usa la voz local del navegador. No consume API y no representa exactamente la voz OpenAI.</small>
-          <dl><div><dt>Respuesta</dt><dd>{{ configuration.conversation.maxOutputTokens }} tokens máx.</dd></div><div><dt>Capacidades</dt><dd>{{ activeToolCount }} activas</dd></div><div><dt>Protección</dt><dd>Contexto confiable</dd></div></dl>
+          <button type="button" class="preview-button" @click="playVoicePreview">{{ speechPlaying ? '■ Stop preview' : '▶ Listen to a free preview' }}</button>
+          <small class="preview-note">Uses your browser's local voice. It does not use the API and does not exactly represent the OpenAI voice.</small>
+          <dl><div><dt>Response</dt><dd>{{ configuration.conversation.maxOutputTokens }} max tokens</dd></div><div><dt>Capabilities</dt><dd>{{ activeToolCount }} active</dd></div><div><dt>Protection</dt><dd>Trusted context</dd></div></dl>
         </aside>
       </div>
 
       <p v-if="error" class="config-error" role="alert">{{ error }}</p>
-      <footer class="config-actions"><div><strong>{{ saved ? 'Configuración guardada' : 'Se aplicará a la próxima conversación' }}</strong><small>El runtime activo no cambia a mitad de una llamada.</small></div><button type="button" class="restore" @click="restoreRecommended">Restaurar recomendado</button><button class="save" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar configuración' }}</button></footer>
+      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
     </form>
   </section>
 </template>

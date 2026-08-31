@@ -8,6 +8,7 @@ import { SqliteAgentConfigurationRepository } from "../infrastructure/database/s
 import { SqliteCallRepository } from "../infrastructure/database/sqlite-call-repository.js";
 import { SqliteConversationUsageRepository } from "../infrastructure/database/sqlite-conversation-usage-repository.js";
 import { SqliteGoogleTokenStore } from "../infrastructure/database/sqlite-google-token-store.js";
+import { SqliteBusinessRepository } from "../infrastructure/database/sqlite-business-repository.js";
 import { AgentConfigurationService } from "../modules/agents/index.js";
 import {
   GoogleCalendarAdapter,
@@ -34,6 +35,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   const database = openRegionalDatabase(tenant.region, path);
   migrateDatabase(database);
   seedBusiness(database, tenant);
+  const businessRepository = new SqliteBusinessRepository(database, tenant.region);
 
   const configurationRepository = options.agentConfigurationRepository
     ?? new SqliteAgentConfigurationRepository(database, tenant.region);
@@ -42,7 +44,8 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   const callRepository = options.callRepository
     ?? new SqliteCallRepository(database, tenant.region);
   const configurationService = new AgentConfigurationService(configurationRepository);
-  if (!await configurationService.get(tenantId)) {
+  const existingConfiguration = await configurationService.get(tenantId);
+  if (!existingConfiguration) {
     const applicationConfig = options.config;
     const model = applicationConfig?.openAiRealtimeModel
       ?? environment.OPENAI_REALTIME_MODEL?.trim()
@@ -51,13 +54,22 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
       tenantId,
       configurationService.recommended(tenant.locale, tenant.name, model),
     );
+  } else if (existingConfiguration.enabledTools.includes("create_appointment")
+    && !existingConfiguration.enabledTools.includes("update_customer")) {
+    // Existing booking agents should collect the new minimum contact details too.
+    // Persist this small migration so the dashboard and the live agent agree.
+    await configurationService.update(tenantId, {
+      ...existingConfiguration,
+      enabledTools: [...existingConfiguration.enabledTools, "update_customer"],
+    });
   }
 
-  const google = buildGoogleIntegration(environment, tenant, database);
+  const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
   return buildApplication({
     ...options,
     environment,
     businesses,
+    businessRepository,
     tenantId,
     agentConfigurationRepository: configurationRepository,
     usageRecorder,
@@ -70,6 +82,7 @@ function buildGoogleIntegration(
   environment: NodeJS.ProcessEnv,
   tenant: BusinessProfile,
   database: ReturnType<typeof openRegionalDatabase>,
+  businesses: SqliteBusinessRepository,
 ): { oauth: GoogleOAuthService; calendar: GoogleCalendarAdapter } | undefined {
   const clientId = environment.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = environment.GOOGLE_CLIENT_SECRET?.trim();
@@ -81,5 +94,12 @@ function buildGoogleIntegration(
     { clientId, clientSecret, redirectUri, calendarId, stateSigningKey },
     new SqliteGoogleTokenStore(database, tenant.region, stateSigningKey),
   );
-  return { oauth, calendar: new GoogleCalendarAdapter(calendarId, tenant.timezone, oauth) };
+  return {
+    oauth,
+    calendar: new GoogleCalendarAdapter(
+      calendarId,
+      async (tenantId) => (await businesses.findByTenantId(tenantId))?.timezone ?? tenant.timezone,
+      oauth,
+    ),
+  };
 }

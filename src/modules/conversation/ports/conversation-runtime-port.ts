@@ -41,6 +41,11 @@ export type ConversationRuntimeEvent =
       arguments: unknown;
     }
   | { type: "assistant.transcript"; text: string; final: boolean }
+  | { type: "assistant.response_created"; responseId?: string }
+  | { type: "assistant.response_done"; status?: string }
+  | { type: "assistant.audio_completed"; assistantTurnId?: string }
+  | { type: "silence.timeout" }
+  | { type: "tool.execution"; phase: "started" | "completed" | "failed"; toolCallId: string; name: AgentToolName }
   | {
       type: "usage";
       inputTokens?: number;

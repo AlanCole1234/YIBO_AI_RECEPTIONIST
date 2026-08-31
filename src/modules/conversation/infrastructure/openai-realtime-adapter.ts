@@ -12,6 +12,8 @@ import type {
 import type { AudioFrame } from "../ports/conversation-runtime-port.js";
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 512;
+const DEFAULT_VAD_SILENCE_DURATION_MS = 800;
+const DEFAULT_IDLE_TIMEOUT_MS = 6_000;
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
@@ -31,7 +33,8 @@ export interface ServerTurnDetectionOptions {
 }
 
 export interface RealtimeErrorLogger {
-  error(message: string, details?: { code?: string }): void;
+  info?(message: string, details?: Record<string, unknown>): void;
+  error(message: string, details?: { code?: string; error?: string }): void;
 }
 
 export interface RealtimeConnectionFactory {
@@ -73,17 +76,19 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
     const turnDetection = validateTurnDetection(input.agent.conversation.turnDetection);
     const threshold = turnDetection.threshold ?? this.turnDetection.threshold;
     const prefixPaddingMs = turnDetection.prefixPaddingMs ?? this.turnDetection.prefixPaddingMs;
-    const silenceDurationMs = turnDetection.silenceDurationMs ?? this.turnDetection.silenceDurationMs;
+    const silenceDurationMs = turnDetection.silenceDurationMs ?? this.turnDetection.silenceDurationMs ?? DEFAULT_VAD_SILENCE_DURATION_MS;
     let connection: RealtimeConnection;
+    this.logger.info?.("OpenAI Realtime connection starting", { model, mode: this.mode });
     try {
       connection = await this.connectionFactory.connect({
         apiKey: this.options.apiKey,
         model,
       });
     } catch (error) {
-      this.logger.error("OpenAI Realtime WebSocket connection failed", { code: "CONNECTION_FAILED" });
+      this.logger.error("OpenAI Realtime WebSocket connection failed", connectionErrorDetails(error));
       throw error;
     }
+    this.logger.info?.("OpenAI Realtime connection established", { model, mode: this.mode });
     const session = new OpenAIRealtimeSession(connection, input, this.logger, this.mode);
     connection.send({
       type: "session.update",
@@ -95,7 +100,14 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
           input.agent.instructions,
           "Keep responses concise, but always finish the current sentence naturally.",
           "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
-        ].join("\n"),
+          input.agent.tools.some((tool) => tool.name === "check_availability")
+            ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details."
+            : "Do not claim calendar access when a calendar tool is not provided.",
+          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
+          input.agent.tools.some((tool) => tool.name === "update_customer")
+            ? "After the caller accepts a verified time, ask exactly one question at a time: first 'What's your first and last name?', then 'What's the best phone number to reach you?', then 'Is this for a cleaning or a consultation?'. After name and phone are collected, call update_customer. Use the caller's Cleaning or Consultation answer as the service argument for create_appointment; never expose IDs. Do not ask for symptoms or medical details."
+            : "",
+        ].filter(Boolean).join("\n"),
         ...(this.mode === "audio" ? {
           audio: {
             input: {
@@ -104,7 +116,8 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
               turn_detection: {
                 type: this.turnDetection.type ?? "server_vad",
                 create_response: true,
-                interrupt_response: false,
+                interrupt_response: true,
+                idle_timeout_ms: DEFAULT_IDLE_TIMEOUT_MS,
                 ...(threshold === undefined ? {} : { threshold }),
                 ...(prefixPaddingMs === undefined ? {} : { prefix_padding_ms: prefixPaddingMs }),
                 ...(silenceDurationMs === undefined ? {} : { silence_duration_ms: silenceDurationMs }),
@@ -129,6 +142,20 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
         tracing: null,
       },
     });
+    this.logger.info?.("OpenAI Realtime session.update sent", {
+      model,
+      mode: this.mode,
+      outputAudioFormat: this.mode === "audio" ? "pcm_s16le/24000/mono" : undefined,
+      turnDetection: this.mode === "audio" ? {
+        type: this.turnDetection.type ?? "server_vad",
+        createResponse: true,
+        interruptResponse: true,
+        idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
+        ...(threshold === undefined ? {} : { threshold }),
+        ...(prefixPaddingMs === undefined ? {} : { prefixPaddingMs }),
+        ...(silenceDurationMs === undefined ? {} : { silenceDurationMs }),
+      } : undefined,
+    });
     return session;
   }
 }
@@ -138,6 +165,12 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private readonly allowedTools: Set<string>;
   private closed = false;
   private readonly audioContentIndexes = new Map<string, number>();
+  private readonly truncatedAssistantTurns = new Set<string>();
+  private state: RealtimeTurnState = "listening";
+  private activeResponseId?: string;
+  private toolResponsePending = false;
+  private inputAudioFrames = 0;
+  private callerIsSpeaking = false;
 
   constructor(
     private readonly connection: RealtimeConnection,
@@ -163,7 +196,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         content: [{ type: "input_text", text: normalized }],
       },
     });
+    this.logger.info?.("OpenAI Realtime response.create sent", { source: "text_turn" });
     this.connection.send({ type: "response.create" });
+    this.setState("thinking", { source: "text_turn" });
   }
 
   async sendAudio(frame: AudioFrame): Promise<void> {
@@ -178,6 +213,16 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       type: "input_audio_buffer.append",
       audio: Buffer.from(frame.data).toString("base64"),
     });
+    this.inputAudioFrames += 1;
+    if (process.env.YIBO_VOICE_DEBUG === "1" || this.inputAudioFrames === 1) {
+      this.logger.info?.("OpenAI Realtime input_audio_buffer.append sent", {
+        bytes: frame.data.byteLength,
+        sampleRate: frame.sampleRate,
+        channels: frame.channels,
+        frames: this.inputAudioFrames,
+        ...(process.env.YIBO_VOICE_DEBUG === "1" ? { debug: true } : {}),
+      });
+    }
   }
 
   async sendToolResult(result: ToolResultEnvelope): Promise<void> {
@@ -192,25 +237,43 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
           : { ok: false, error: result.error }),
       },
     });
+    if (this.callerIsSpeaking) {
+      this.logger.info?.("OpenAI Realtime tool result will be included in the caller's next server-VAD response", { state: this.state });
+      return;
+    }
+    if (this.activeResponseId) {
+      this.toolResponsePending = true;
+      this.logger.info?.("OpenAI Realtime tool result queued until the active response completes", { state: this.state });
+      return;
+    }
     this.connection.send({ type: "response.create" });
+    this.logger.info?.("OpenAI Realtime response.create sent", { source: "tool_result" });
+    this.setState("thinking", { source: "tool_result" });
   }
 
   async interrupt(position?: AssistantPlaybackPosition): Promise<void> {
     this.assertOpen();
-    this.connection.send({ type: "response.cancel" });
-    if (position) {
-      this.connection.send({
-        type: "conversation.item.truncate",
-        item_id: position.assistantTurnId,
-        content_index: this.audioContentIndexes.get(position.assistantTurnId) ?? 0,
-        audio_end_ms: Math.max(0, Math.round(position.audioEndMs)),
-      });
-    }
+    // With interrupt_response=true, OpenAI cancels the response on VAD speech start.
+    // We only synchronize the amount of audio the caller actually heard.
+    if (!position || this.truncatedAssistantTurns.has(position.assistantTurnId)) return;
+    this.truncatedAssistantTurns.add(position.assistantTurnId);
+    this.setState("interrupted", { assistantTurnId: position.assistantTurnId, source: "local_playback_clear" });
+    this.connection.send({
+      type: "conversation.item.truncate",
+      item_id: position.assistantTurnId,
+      content_index: this.audioContentIndexes.get(position.assistantTurnId) ?? 0,
+      audio_end_ms: Math.max(0, Math.round(position.audioEndMs)),
+    });
+    this.logger.info?.("OpenAI Realtime assistant audio truncated", {
+      assistantTurnId: position.assistantTurnId,
+      audioEndMs: Math.max(0, Math.round(position.audioEndMs)),
+    });
   }
 
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.logger.info?.("OpenAI Realtime connection closing", { reason: "client_closed" });
     this.connection.close();
     this.queue.push({ type: "closed", reason: "client_closed" });
     this.queue.end();
@@ -222,7 +285,21 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   private handleEvent(value: unknown): void {
     if (this.closed || !isRecord(value) || typeof value.type !== "string") return;
+    this.logger.info?.("OpenAI Realtime event received", eventLogDetails(value));
     switch (value.type) {
+      case "session.created":
+        this.logger.info?.("OpenAI Realtime session created", sessionLogDetails(value));
+        return;
+      case "session.updated":
+        this.logger.info?.("OpenAI Realtime session configuration accepted", sessionLogDetails(value));
+        return;
+      case "input_audio_buffer.committed":
+        this.logger.info?.("OpenAI Realtime input audio buffer committed", eventLogDetails(value));
+        return;
+      case "input_audio_buffer.timeout_triggered":
+        this.logger.info?.("OpenAI Realtime idle timeout triggered", eventLogDetails(value));
+        this.queue.push({ type: "silence.timeout" });
+        return;
       case "response.output_text.delta":
         if (typeof value.delta === "string") {
           this.queue.push({ type: "assistant.transcript", text: value.delta, final: false });
@@ -248,7 +325,12 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
               channels: 1,
             },
           });
+          this.setState("assistant_speaking", { assistantTurnId: value.item_id });
         }
+        return;
+      case "response.output_audio.done":
+        this.logger.info?.("OpenAI Realtime assistant audio completed", eventLogDetails(value));
+        this.queue.push({ type: "assistant.audio_completed", ...(typeof value.item_id === "string" ? { assistantTurnId: value.item_id } : {}) });
         return;
       case "response.output_audio_transcript.delta":
         if (typeof value.delta === "string") {
@@ -264,13 +346,41 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.handleToolCall(value);
         return;
       case "input_audio_buffer.speech_started":
+        this.logger.info?.("OpenAI Realtime speech started", eventLogDetails(value));
+        this.callerIsSpeaking = true;
+        this.setState("user_speaking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_started" });
         return;
       case "input_audio_buffer.speech_stopped":
+        this.logger.info?.("OpenAI Realtime speech stopped", eventLogDetails(value));
+        this.callerIsSpeaking = false;
+        this.setState("thinking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_stopped" });
         return;
+      case "response.created":
+        this.logger.info?.("OpenAI Realtime response created", eventLogDetails(value));
+        this.activeResponseId = responseId(value);
+        this.setState("thinking", { ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
+        this.queue.push({ type: "assistant.response_created", ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
+        return;
       case "response.done":
+        this.logger.info?.("OpenAI Realtime response done", eventLogDetails(value));
+        const status = responseStatus(value);
+        if (status === "cancelled") this.logger.info?.("OpenAI Realtime response cancelled", eventLogDetails(value));
+        this.activeResponseId = undefined;
+        if (status === "cancelled") this.toolResponsePending = false;
+        // A cancellation can arrive after the caller has already started speaking.
+        // Preserve that fact so a late tool result cannot start a competing response.
+        this.setState(this.callerIsSpeaking ? "user_speaking" : "listening", { reason: status ?? "done" });
+        this.logger.info?.("OpenAI Realtime response state reset", { reason: status ?? "done" });
+        this.queue.push({ type: "assistant.response_done", ...(status ? { status } : {}) });
         this.handleUsage(value.response);
+        if (this.toolResponsePending && !this.callerIsSpeaking && status !== "cancelled") {
+          this.toolResponsePending = false;
+          this.connection.send({ type: "response.create" });
+          this.logger.info?.("OpenAI Realtime response.create sent", { source: "queued_tool_result" });
+          this.setState("thinking", { source: "queued_tool_result" });
+        }
         return;
       case "error":
         this.handleProviderEventError(value.error);
@@ -297,7 +407,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as "check_availability" | "create_appointment" | "cancel_appointment" | "transfer_to_human",
+      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "transfer_to_human",
       arguments: argumentsValue,
     });
   }
@@ -331,7 +441,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   }
 
   private logAndEmit(code: string, message: string, retryable: boolean): void {
-    this.logger.error("OpenAI Realtime WebSocket error", { code });
+    this.logger.error("OpenAI Realtime WebSocket error", { code, error: redactCredential(message) });
     this.emitError(code, message, retryable);
   }
 
@@ -342,6 +452,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private finish(reason?: string): void {
     if (this.closed) return;
     this.closed = true;
+    this.logger.info?.("OpenAI Realtime connection closed", { ...(reason ? { reason } : {}) });
     this.queue.push({ type: "closed", ...(reason ? { reason } : {}) });
     this.queue.end();
   }
@@ -349,11 +460,22 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private assertOpen(): void {
     if (this.closed) throw new Error("Conversation runtime session is closed");
   }
+
+  private setState(next: RealtimeTurnState, details: Record<string, unknown> = {}): void {
+    if (this.state === next) return;
+    const previous = this.state;
+    this.state = next;
+    this.logger.info?.("OpenAI Realtime turn state changed", { from: previous, to: next, ...details });
+  }
 }
+
+type RealtimeTurnState = "listening" | "user_speaking" | "thinking" | "assistant_speaking" | "interrupted";
 
 class SDKRealtimeConnection implements RealtimeConnection {
   private readonly realtime: OpenAIRealtimeWS;
   private readonly opened: Promise<void>;
+  private eventHandler?: (event: unknown) => void;
+  private readonly pendingEvents: unknown[] = [];
 
   constructor(input: { apiKey: string; model: string }) {
     const client = new OpenAI({ apiKey: input.apiKey });
@@ -367,6 +489,10 @@ class SDKRealtimeConnection implements RealtimeConnection {
       };
       this.realtime.socket.once("open", onOpen);
       this.realtime.socket.once("error", onError);
+    });
+    this.realtime.on("event", (event: RealtimeServerEvent) => {
+      if (this.eventHandler) this.eventHandler(event);
+      else this.pendingEvents.push(event);
     });
   }
 
@@ -383,7 +509,8 @@ class SDKRealtimeConnection implements RealtimeConnection {
   }
 
   onEvent(handler: (event: unknown) => void): void {
-    this.realtime.on("event", (event: RealtimeServerEvent) => handler(event));
+    this.eventHandler = handler;
+    for (const event of this.pendingEvents.splice(0)) handler(event);
   }
 
   onError(handler: (error: { message: string; code?: string }) => void): void {
@@ -407,8 +534,69 @@ const sdkConnectionFactory: RealtimeConnectionFactory = {
 };
 
 const consoleLogger: RealtimeErrorLogger = {
+  info: (message, details) => console.log(message, details ?? {}),
   error: (message, details) => console.error(message, details ?? {}),
 };
+
+function connectionErrorDetails(error: unknown): { code: string; error: string } {
+  const value = isRecord(error) ? error : {};
+  const providerError = isRecord(value.error) ? value.error : {};
+  const code = typeof providerError.code === "string"
+    ? providerError.code
+    : typeof value.code === "string"
+      ? value.code
+      : "CONNECTION_FAILED";
+  const message = typeof providerError.message === "string"
+    ? providerError.message
+    : error instanceof Error
+      ? error.message
+      : "Unable to connect to OpenAI Realtime";
+  return { code, error: redactCredential(message) };
+}
+
+function redactCredential(message: string): string {
+  return message
+    .replace(/(?:sk|sess)-[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/(Incorrect API key provided:\s*)[^.\s]+/gi, "$1[redacted]");
+}
+
+function eventLogDetails(event: Record<string, unknown>): Record<string, unknown> {
+  const details: Record<string, unknown> = { type: event.type };
+  for (const key of ["event_id", "response_id", "item_id", "call_id"] as const) {
+    if (typeof event[key] === "string") details[key] = event[key];
+  }
+  if (typeof event.content_index === "number") details.contentIndex = event.content_index;
+  if (event.type === "response.output_audio.delta" && typeof event.delta === "string") {
+    details.audioBytes = Buffer.byteLength(event.delta, "base64");
+  }
+  if (event.type === "error" && isRecord(event.error)) {
+    if (typeof event.error.code === "string") details.code = event.error.code;
+    if (typeof event.error.message === "string") details.error = redactCredential(event.error.message);
+  }
+  if (event.type === "response.done" && isRecord(event.response) && typeof event.response.status === "string") {
+    details.status = event.response.status;
+  }
+  return details;
+}
+
+function sessionLogDetails(event: Record<string, unknown>): Record<string, unknown> {
+  const session = isRecord(event.session) ? event.session : {};
+  return {
+    ...eventLogDetails(event),
+    ...(typeof session.model === "string" ? { model: session.model } : {}),
+    ...(Array.isArray(session.output_modalities) ? { outputModalities: session.output_modalities } : {}),
+  };
+}
+
+function responseId(event: Record<string, unknown>): string | undefined {
+  const response = isRecord(event.response) ? event.response : {};
+  return typeof response.id === "string" ? response.id : typeof event.response_id === "string" ? event.response_id : undefined;
+}
+
+function responseStatus(event: Record<string, unknown>): string | undefined {
+  const response = isRecord(event.response) ? event.response : {};
+  return typeof response.status === "string" ? response.status : undefined;
+}
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = [];

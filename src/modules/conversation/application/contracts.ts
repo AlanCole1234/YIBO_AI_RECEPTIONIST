@@ -19,6 +19,12 @@ export interface ConversationTransport {
   inboundAudio: AsyncIterable<AudioFrame>;
   outboundAudio: AudioSink;
   close(): Promise<void>;
+  /**
+   * Optional, non-persistent runtime diagnostics for a call transport.  This
+   * lets the development voice harness display VAD, usage, and provider errors
+   * without coupling the Calls module to that harness.
+   */
+  observeEvent?(event: ConversationRuntimeEvent): void;
 }
 
 export interface StartConversationCommand {

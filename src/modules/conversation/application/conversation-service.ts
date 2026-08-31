@@ -107,7 +107,7 @@ class ActiveConversationSession implements ConversationSession {
         }
         return;
       case "tool.call":
-        await this.executeTool(event);
+        void this.executeTool(event);
         return;
       case "user.speech_started":
         await this.handleBargeIn();
@@ -123,8 +123,13 @@ class ActiveConversationSession implements ConversationSession {
         this.settle({ status: "closed", ...(event.reason ? { reason: event.reason } : {}) });
         await this.close();
         return;
-      case "user.speech_stopped":
+      case "assistant.response_done":
+      case "assistant.response_created":
+      case "assistant.audio_completed":
       case "assistant.transcript":
+      case "silence.timeout":
+        return;
+      case "user.speech_stopped":
         return;
       case "usage":
         await this.recordUsage(event);
@@ -154,6 +159,7 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }>): Promise<void> {
+    this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: "started", toolCallId: event.toolCallId, name: event.name });
     try {
       const result = await this.dependencies.command.agent.toolExecutor.execute(
         this.dependencies.command.agent.trustedContext,
@@ -164,7 +170,9 @@ class ActiveConversationSession implements ConversationSession {
         },
       );
       await this.dependencies.runtimeSession.sendToolResult(toEnvelope(result));
+      this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: result.ok ? "completed" : "failed", toolCallId: event.toolCallId, name: event.name });
     } catch (error) {
+      this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: "failed", toolCallId: event.toolCallId, name: event.name });
       await this.fail({ code: "TOOL_EXECUTION_ERROR", message: errorMessage(error) });
     }
   }
@@ -197,6 +205,7 @@ class ActiveConversationSession implements ConversationSession {
     this.completionSettled = true;
     this.resolveCompleted(completion);
   }
+
 }
 
 const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok

@@ -1,5 +1,5 @@
 import { failure, success } from "../../../shared/domain/result.js";
-import type { TenantId } from "../../../shared/types/identifiers.js";
+import type { IANATimeZone, TenantId } from "../../../shared/types/identifiers.js";
 import {
   normalizePhoneNumber,
   validateBusinessProfile,
@@ -23,6 +23,21 @@ export class BusinessDirectoryService implements BusinessDirectory {
 
   async getBusinessProfile(tenantId: TenantId) {
     return this.toLookupResult(await this.repository.findByTenantId(tenantId));
+  }
+
+  async updateBusinessTimezone(tenantId: TenantId, timezone: IANATimeZone) {
+    const profile = await this.repository.findByTenantId(tenantId);
+    if (!profile) return failure<BusinessLookupError>({ code: "BUSINESS_NOT_FOUND" });
+    const updated = { ...profile, timezone };
+    const validationError = validateBusinessProfile(updated);
+    if (validationError) {
+      return failure<BusinessLookupError>({
+        code: "BUSINESS_CONFIGURATION_INVALID",
+        message: validationError.message,
+      });
+    }
+    await this.repository.save(updated);
+    return success(updated);
   }
 
   private toLookupResult(profile: BusinessProfile | null) {

@@ -177,6 +177,9 @@ export class SchedulingServiceImpl implements SchedulingService {
       this.calendar.getBusyIntervals(query),
     ]);
     if (!externalIntervals.ok) {
+      if (externalIntervals.error.code === "CALENDAR_NOT_CONNECTED") return failure<SchedulingError>({ code: "CALENDAR_NOT_CONNECTED" });
+      if (externalIntervals.error.code === "AUTHORIZATION_REQUIRED") return failure<SchedulingError>({ code: "CALENDAR_AUTHORIZATION_REQUIRED" });
+      if (externalIntervals.error.code === "RATE_LIMITED") return failure<SchedulingError>({ code: "CALENDAR_RATE_LIMITED" });
       return failure<SchedulingError>({
         code: "EXTERNAL_CALENDAR_UNAVAILABLE",
         retryable: externalIntervals.error.code === "PROVIDER_UNAVAILABLE" ? externalIntervals.error.retryable : false,

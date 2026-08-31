@@ -43,4 +43,7 @@ export type SchedulingError =
   | { code: "EMPLOYEE_UNAVAILABLE" }
   | { code: "SLOT_CONFLICT" }
   | { code: "INVALID_TIME_RANGE" }
+  | { code: "CALENDAR_NOT_CONNECTED" }
+  | { code: "CALENDAR_AUTHORIZATION_REQUIRED" }
+  | { code: "CALENDAR_RATE_LIMITED" }
   | { code: "EXTERNAL_CALENDAR_UNAVAILABLE"; retryable: boolean };

@@ -33,6 +33,7 @@ export interface AppointmentCalendarPort {
 }
 
 export type AppointmentCalendarError =
+  | { code: "CALENDAR_NOT_CONNECTED" }
   | { code: "AUTHORIZATION_REQUIRED" }
   | { code: "RATE_LIMITED"; retryAfterMs?: number }
   | { code: "PROVIDER_UNAVAILABLE"; retryable: boolean }
