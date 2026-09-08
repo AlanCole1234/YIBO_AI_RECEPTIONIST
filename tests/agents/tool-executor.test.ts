@@ -37,21 +37,23 @@ function fixture() {
   const createAppointment = vi.fn(async () => success(confirmedAppointment));
   const getAppointment = vi.fn(async () => success(confirmedAppointment));
   const cancelAppointment = vi.fn(async () => success({ ...confirmedAppointment, status: "CANCELLED" as const }));
+  const rescheduleAppointment = vi.fn(async () => success({ ...confirmedAppointment, startAt: "2026-08-11T21:00:00.000Z", endAt: "2026-08-11T21:30:00.000Z" }));
   const appointments = {
     createAppointment,
     getAppointment,
     cancelAppointment,
-    rescheduleAppointment: vi.fn(),
+    rescheduleAppointment,
   } as unknown as AppointmentService;
   const transferToConfiguredDestination = vi.fn(async () => success(undefined));
   const transfer: HumanTransferPort = { transferToConfiguredDestination };
   const updateCustomer = vi.fn(async () => success({ id: "customer-1", tenantId: "tenant-a", name: "John Smith", phone: "9155551234" }));
-  const customers = { updateCustomer, findOrCreateByPhone: vi.fn() } as unknown as CustomerService;
+  const customers = { updateCustomer, findOrCreateByPhone: vi.fn(async () => success({ id: "test-customer", tenantId: "tenant-a", name: "YIBO Test Patient", phone: "+15550000000" })) } as unknown as CustomerService;
   const businesses = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
   return {
     appointments,
     createAppointment,
     cancelAppointment,
+    rescheduleAppointment,
     findAvailableSlots,
     getAppointment,
     updateCustomer,
@@ -72,6 +74,41 @@ const business: BusinessProfile = {
 };
 
 describe("ToolExecutorImpl", () => {
+  it("allows Developer Test Mode only from server-authorized local contexts", async () => {
+    const { executor } = fixture();
+    const denied = await executor.execute(context, { toolCallId: "test-denied", name: "enable_developer_test_mode", arguments: {} });
+    const allowed = await executor.execute({ ...context, callId: "developer-call", developerTestModeAuthorized: true }, { toolCallId: "test-enabled", name: "enable_developer_test_mode", arguments: {} });
+
+    expect(denied).toMatchObject({ ok: false, error: { code: "TEST_MODE_NOT_AUTHORIZED" } });
+    expect(allowed).toMatchObject({ ok: true, data: { enabled: true } });
+  });
+
+  it("creates and deletes only appointments created during the authorized test session", async () => {
+    const { executor, createAppointment, cancelAppointment } = fixture();
+    const developerContext = { ...context, callId: "developer-call", developerTestModeAuthorized: true as const };
+
+    await executor.execute(developerContext, { toolCallId: "enable-test", name: "enable_developer_test_mode", arguments: {} });
+    await executor.execute(developerContext, {
+      toolCallId: "create-test", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+    const deleted = await executor.execute(developerContext, { toolCallId: "delete-test", name: "delete_test_appointments", arguments: {} });
+
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+      customerId: "test-customer", source: "DEVELOPER_TEST", sourceCallId: "developer-call",
+    }));
+    expect(deleted).toEqual({ toolCallId: "delete-test", ok: true, data: { deleted: 1 } });
+    expect(cancelAppointment).toHaveBeenCalledWith({ tenantId: "tenant-a", appointmentId: "appointment-1" });
+  });
+
+  it("cannot delete normal appointments through a public session", async () => {
+    const { executor, cancelAppointment } = fixture();
+    const result = await executor.execute(context, { toolCallId: "delete-public", name: "delete_test_appointments", arguments: {} });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "TEST_MODE_NOT_AUTHORIZED" } });
+    expect(cancelAppointment).not.toHaveBeenCalled();
+  });
+
   it("uses the trusted tenant when checking availability", async () => {
     const { executor, findAvailableSlots } = fixture();
     const result = await executor.execute(context, {
@@ -152,6 +189,84 @@ describe("ToolExecutorImpl", () => {
     });
   });
 
+  it("normalizes a caller's bare local time in the clinic timezone before booking", async () => {
+    const { createAppointment, executor } = fixture();
+    await executor.execute(context, {
+      toolCallId: "tool-local-time",
+      name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00" },
+    });
+
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+      startAt: "2026-08-10T21:00:00.000Z",
+    }));
+  });
+
+  it("books the verified 3:00 PM availability instant instead of a reconstructed 3:00 PM UTC value", async () => {
+    const { appointments, createAppointment, findAvailableSlots } = fixture();
+    const validateSlot = vi.fn(async (query: { startAt: string; employeeId: string }) => success({
+      employeeId: query.employeeId,
+      startAt: query.startAt,
+      endAt: "2026-08-10T21:30:00.000Z",
+      validatedAt: "2026-08-10T00:00:00.000Z",
+    }));
+    const executor = new ToolExecutorImpl(
+      { findAvailableSlots, validateSlot } as unknown as SchedulingService,
+      appointments,
+      { transferToConfiguredDestination: vi.fn() },
+      new BusinessDirectoryService(new InMemoryBusinessRepository([business])),
+      { now: () => new Date("2026-08-10T12:00:00.000Z") },
+    );
+
+    await executor.execute(context, {
+      toolCallId: "tool-check-3pm",
+      name: "check_availability",
+      arguments: {
+        service: "Consultation", employeeId: "employee-1",
+        rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00",
+        requestedStartAt: "2026-08-10T15:00",
+      },
+    });
+    await executor.execute(context, {
+      toolCallId: "tool-book-3pm",
+      name: "create_appointment",
+      // This simulates the original failure mode: the model incorrectly labels 3 PM as UTC.
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+      startAt: "2026-08-10T21:00:00.000Z",
+    }));
+  });
+
+  it("does not book a rebuilt UTC time that is not one of the available slots", async () => {
+    const { appointments, createAppointment, executor, findAvailableSlots } = fixture();
+    findAvailableSlots.mockResolvedValueOnce(success([{
+      employeeId: "employee-1",
+      startAt: "2026-08-10T21:00:00.000Z",
+      endAt: "2026-08-10T21:30:00.000Z",
+    }]));
+
+    await executor.execute(context, {
+      toolCallId: "tool-check-slots",
+      name: "check_availability",
+      arguments: {
+        service: "Consultation", employeeId: "employee-1",
+        rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00",
+      },
+    });
+    const result = await executor.execute(context, {
+      toolCallId: "tool-book-rebuilt-utc",
+      name: "create_appointment",
+      // 3 PM local incorrectly rebuilt as 3 PM UTC would be 9 AM in Denver.
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "SLOT_NOT_REVALIDATED" } });
+    expect(createAppointment).not.toHaveBeenCalled();
+    expect(appointments.createAppointment).not.toHaveBeenCalled();
+  });
+
   it("does not create an appointment without a verified customer", async () => {
     const { createAppointment, executor } = fixture();
     const result = await executor.execute({ tenantId: "tenant-a", callId: "call-1" }, {
@@ -175,6 +290,19 @@ describe("ToolExecutorImpl", () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
     expect(cancelAppointment).not.toHaveBeenCalled();
+  });
+
+  it("reschedules only an appointment owned by the verified caller using the clinic timezone", async () => {
+    const { executor, rescheduleAppointment } = fixture();
+    const result = await executor.execute(context, {
+      toolCallId: "tool-reschedule", name: "reschedule_appointment",
+      arguments: { appointmentId: "appointment-1", startAt: "2026-08-11T15:00" },
+    });
+
+    expect(rescheduleAppointment).toHaveBeenCalledWith({
+      tenantId: "tenant-a", appointmentId: "appointment-1", startAt: "2026-08-11T21:00:00.000Z",
+    });
+    expect(result).toMatchObject({ ok: true, data: { appointment: { id: "appointment-1", startAt: "2026-08-11T21:00:00.000Z" } } });
   });
 
   it("maps a patient-facing service and saves contact details without returning them", async () => {

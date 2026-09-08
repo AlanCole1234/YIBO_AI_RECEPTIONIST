@@ -10,6 +10,7 @@ import type {
 
 export interface CustomerReader {
   exists(tenantId: TenantId, customerId: CustomerId): Promise<boolean>;
+  get(tenantId: TenantId, customerId: CustomerId): Promise<{ name?: string; phone: string } | null>;
 }
 
 export interface AppointmentConcurrencyGuard {
@@ -22,6 +23,8 @@ export interface AppointmentCalendarPort {
     appointmentId: AppointmentId;
     employeeId: EmployeeId;
     title: string;
+    serviceName: string;
+    patient?: { name?: string; phone: string };
     startAt: ISODateTime;
     endAt: ISODateTime;
     idempotencyKey: IdempotencyKey;

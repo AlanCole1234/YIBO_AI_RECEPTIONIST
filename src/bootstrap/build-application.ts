@@ -63,7 +63,7 @@ import {
   type VoiceMediaGateway,
 } from "../modules/voice/index.js";
 import type { Clock, IdGenerator } from "../shared/application/system.js";
-import { failure } from "../shared/domain/result.js";
+import { failure, success } from "../shared/domain/result.js";
 import {
   DEVELOPMENT_BUSINESS,
   DEVELOPMENT_US_BUSINESS,
@@ -94,6 +94,7 @@ export interface YiboApplication {
   ids: IdGenerator;
   billing?: OrganizationCostReader;
   googleOAuth?: GoogleOAuthService;
+  developerTestModeAuthorized?: boolean;
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -113,6 +114,8 @@ export interface BuildApplicationOptions {
   billing?: OrganizationCostReader;
   calendar?: ApplicationCalendar;
   googleOAuth?: GoogleOAuthService;
+  /** Only the local development voice harness may set this true. */
+  developerTestModeAuthorized?: boolean;
 }
 
 export function buildApplication(options: BuildApplicationOptions = {}): YiboApplication {
@@ -142,6 +145,10 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const customerReader: CustomerReader = {
     exists: async (candidateTenantId, customerId) =>
       (await customerRepository.findById(candidateTenantId, customerId)) !== null,
+    get: async (candidateTenantId, customerId) => {
+      const customer = await customerRepository.findById(candidateTenantId, customerId);
+      return customer ? { name: customer.name, phone: customer.phone } : null;
+    },
   };
   const workingHours: EmployeeWorkingHoursProvider = {
     getWorkingHours: async ({ tenantId: candidateTenantId, employeeId }) => {
@@ -169,8 +176,44 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     new InMemoryAppointmentConcurrencyGuard(),
     () => ids.generate("appointment"),
   );
+  // Developer Test Mode must be repeatable without touching a connected Google
+  // Calendar. It uses the same scheduling and appointment services, with an
+  // isolated in-memory calendar and demo clinic hours beginning at 7:00 AM.
+  const developerTestBusiness: BusinessDirectory = {
+    getBusinessByCalledNumber: async (phoneNumber) => demoBusiness(await business.getBusinessByCalledNumber(phoneNumber)),
+    getBusinessProfile: async (candidateTenantId) => demoBusiness(await business.getBusinessProfile(candidateTenantId)),
+    updateBusinessTimezone: async (candidateTenantId, timezone) => demoBusiness(await business.updateBusinessTimezone(candidateTenantId, timezone)),
+  };
+  const developerTestCalendar = new InMemoryCalendarAdapter();
+  const developerTestWorkingHours: EmployeeWorkingHoursProvider = {
+    getWorkingHours: async ({ tenantId: candidateTenantId, employeeId }) => {
+      const profile = await developerTestBusiness.getBusinessProfile(candidateTenantId);
+      return profile.ok && profile.value.employees.some((employee) => employee.id === employeeId && employee.active)
+        ? profile.value.openingHours.map((rule) => ({ ...rule }))
+        : [];
+    },
+  };
+  const developerTestScheduling = new SchedulingServiceImpl(
+    developerTestBusiness,
+    developerTestWorkingHours,
+    confirmedAppointments,
+    developerTestCalendar,
+    clock,
+  );
+  const developerTestAppointments = new AppointmentServiceImpl(
+    new InMemoryAppointmentRepository(),
+    customerReader,
+    developerTestBusiness,
+    developerTestScheduling,
+    developerTestCalendar,
+    new InMemoryAppointmentConcurrencyGuard(),
+    () => ids.generate("appointment"),
+  );
   const transfer = options.humanTransfer ?? unavailableTransfer;
-  const tools = new ToolExecutorImpl(scheduling, appointments, transfer, business, clock, customers);
+  const tools = new ToolExecutorImpl(scheduling, appointments, transfer, business, clock, customers, {
+    scheduling: developerTestScheduling,
+    appointments: developerTestAppointments,
+  });
   const configurationRepository = options.agentConfigurationRepository ?? new InMemoryAgentConfigurationSource(profiles.map((profile) => ({
       tenantId: profile.tenantId,
       configuration: {
@@ -213,6 +256,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     voice,
     conversations,
     callRepository,
+    options.developerTestModeAuthorized ?? false,
   );
 
   return {
@@ -246,6 +290,16 @@ const unavailableTransfer: HumanTransferPort = {
     code: "DESTINATION_NOT_CONFIGURED" as const,
     retryable: false,
   }),
+};
+
+type BusinessProfileResult = Awaited<ReturnType<BusinessDirectory["getBusinessProfile"]>>;
+
+const demoBusiness = (result: BusinessProfileResult): BusinessProfileResult => {
+  if (!result.ok) return result;
+  return success({
+    ...result.value,
+    openingHours: result.value.openingHours.map((rule) => ({ ...rule, startTime: "07:00" })),
+  });
 };
 
 function selectRuntime(

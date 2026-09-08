@@ -59,4 +59,24 @@ describe("AgentDefinitionService", () => {
       error: { code: "CONFIGURATION_NOT_FOUND" },
     });
   });
+
+  it("exposes Developer Test Mode tools only to a server-authorized local session", async () => {
+    const configuration = new InMemoryAgentConfigurationSource([{
+      tenantId: "tenant-a",
+      configuration: {
+        instructions: "Be helpful", locale: "en-US",
+        enabledTools: ["check_availability"],
+        conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal", turnDetection: {} },
+      },
+    }]);
+    const service = new AgentDefinitionService(configuration, { execute: vi.fn() });
+
+    const publicSession = await service.prepare({ tenantId: "tenant-a", callId: "call-public" });
+    const localDeveloperSession = await service.prepare({ tenantId: "tenant-a", callId: "call-dev", developerTestModeAuthorized: true });
+
+    expect(publicSession.ok && publicSession.value.tools.map((tool) => tool.name)).not.toContain("enable_developer_test_mode");
+    expect(localDeveloperSession.ok && localDeveloperSession.value.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+      "enable_developer_test_mode", "delete_test_appointments",
+    ]));
+  });
 });

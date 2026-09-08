@@ -14,7 +14,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
         dateExpression: { type: "string", minLength: 1, description: "A supported natural date phrase from the caller." },
         rangeStart: { type: "string", format: "date-time" },
         rangeEnd: { type: "string", format: "date-time" },
-        requestedStartAt: { type: "string", format: "date-time", description: "Optional exact appointment time the caller asked about." },
+        requestedStartAt: { type: "string", format: "date-time", description: "Optional exact appointment time. Copy a returned slot's startAt unchanged whenever possible. If constructing from a caller saying 3 PM, send 2026-09-02T15:00 without Z; never label a local clock time as UTC." },
       },
     },
   },
@@ -28,7 +28,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
       properties: {
         service: { type: "string", minLength: 1, description: "Patient-facing service choice: Cleaning or Consultation. Omit only when the clinic default was already selected." },
         employeeId: { type: "string", minLength: 1 },
-        startAt: { type: "string", format: "date-time" },
+        startAt: { type: "string", format: "date-time", description: "Copy the accepted calendar slot's startAt exactly. Never reconstruct it as UTC or use the server timezone." },
       },
     },
   },
@@ -50,8 +50,31 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     },
   },
   {
+    name: "reschedule_appointment",
+    description: "Reschedule an appointment owned by the verified customer in this call. Use a previously confirmed appointment ID and an exact verified available slot. Never reconstruct a local time as UTC.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["appointmentId", "startAt"],
+      properties: {
+        appointmentId: { type: "string", minLength: 1 },
+        startAt: { type: "string", format: "date-time", description: "Copy the accepted availability slot startAt unchanged." },
+      },
+    },
+  },
+  {
     name: "transfer_to_human",
     description: "Transfer this call to the business's configured human destination.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  },
+  {
+    name: "enable_developer_test_mode",
+    description: "Enable local Developer Test Mode. This is only available to a server-authorized local developer session; never claim it is enabled unless this tool succeeds.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  },
+  {
+    name: "delete_test_appointments",
+    description: "Delete only test appointments created during this authorized Developer Test Mode session. Never use this for normal patient appointments.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
 ];

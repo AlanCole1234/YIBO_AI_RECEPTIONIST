@@ -25,6 +25,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     private readonly voice: VoiceMediaGateway,
     private readonly conversations: ConversationServiceContract,
     private readonly calls: CallRepository,
+    private readonly developerTestModeAuthorized = false,
   ) {}
 
   async handleTelephonyEvent(event: TelephonyEvent): Promise<void> {
@@ -70,6 +71,7 @@ export class CallOrchestratorService implements CallOrchestrator {
       callId: record.callId,
       tenantId: record.tenantId,
       customerId: customer.value.id,
+      ...(this.developerTestModeAuthorized ? { developerTestModeAuthorized: true as const } : {}),
     });
     if (!agent.ok) return this.fail(record.callId, event.occurredAt);
 

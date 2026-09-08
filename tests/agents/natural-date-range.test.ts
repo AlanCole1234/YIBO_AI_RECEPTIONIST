@@ -28,4 +28,21 @@ describe("resolveNaturalDateRange", () => {
   ])("resolves %s from the actual clinic-local date", (expression, rangeStart) => {
     expect(resolveNaturalDateRange(expression, now, timezone)).toMatchObject({ rangeStart });
   });
+
+  it("keeps today, tomorrow, this week, and Friday correct across a year boundary", () => {
+    const yearEnd = new Date("2026-12-31T18:00:00.000Z"); // Thursday morning in Denver.
+
+    expect(resolveNaturalDateRange("today", yearEnd, timezone)).toMatchObject({
+      rangeStart: "2026-12-31T07:00:00.000Z", rangeEnd: "2027-01-01T07:00:00.000Z",
+    });
+    expect(resolveNaturalDateRange("tomorrow", yearEnd, timezone)).toMatchObject({
+      rangeStart: "2027-01-01T07:00:00.000Z", rangeEnd: "2027-01-02T07:00:00.000Z",
+    });
+    expect(resolveNaturalDateRange("this Friday", yearEnd, timezone)).toMatchObject({
+      rangeStart: "2027-01-01T07:00:00.000Z", rangeEnd: "2027-01-02T07:00:00.000Z",
+    });
+    expect(resolveNaturalDateRange("this week", yearEnd, timezone)).toMatchObject({
+      rangeStart: "2026-12-28T07:00:00.000Z", rangeEnd: "2027-01-04T07:00:00.000Z",
+    });
+  });
 });

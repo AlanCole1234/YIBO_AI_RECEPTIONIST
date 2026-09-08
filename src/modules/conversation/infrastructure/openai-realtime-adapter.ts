@@ -103,9 +103,12 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
           input.agent.tools.some((tool) => tool.name === "check_availability")
             ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details."
             : "Do not claim calendar access when a calendar tool is not provided.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
+          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
           input.agent.tools.some((tool) => tool.name === "update_customer")
             ? "After the caller accepts a verified time, ask exactly one question at a time: first 'What's your first and last name?', then 'What's the best phone number to reach you?', then 'Is this for a cleaning or a consultation?'. After name and phone are collected, call update_customer. Use the caller's Cleaning or Consultation answer as the service argument for create_appointment; never expose IDs. Do not ask for symptoms or medical details."
+            : "",
+          input.agent.tools.some((tool) => tool.name === "enable_developer_test_mode")
+            ? "This is an authorized local Developer Test Mode session. When the developer says 'test mode', call enable_developer_test_mode and say it is enabled only after success. In Test Mode, use the normal check_availability and create_appointment tools, but skip patient questions. For an available slot, create it as the supplied test customer and state the exact time only after success. Use delete_test_appointments only when asked to remove this session's test bookings."
             : "",
         ].filter(Boolean).join("\n"),
         ...(this.mode === "audio" ? {
@@ -407,7 +410,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "transfer_to_human",
+      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human" | "enable_developer_test_mode" | "delete_test_appointments",
       arguments: argumentsValue,
     });
   }

@@ -36,6 +36,9 @@ const business: BusinessProfile = {
 
 const customers: CustomerReader = {
   exists: async (tenantId, customerId) => tenantId === "tenant-a" && customerId === "customer-1",
+  get: async (tenantId, customerId) => tenantId === "tenant-a" && customerId === "customer-1"
+    ? { name: "John Smith", phone: "9155551234" }
+    : null,
 };
 
 const scheduling = (validate: SchedulingService["validateSlot"] = async (query) => success({
@@ -92,12 +95,13 @@ describe("AppointmentServiceImpl", () => {
   });
 
   it("returns the previous result for a semantically identical idempotent retry", async () => {
-    const { service } = fixture();
+    const { calendar, service } = fixture();
     const first = await service.createAppointment(command);
     const retry = await service.createAppointment(command);
 
     expect(first.ok).toBe(true);
     expect(retry).toEqual(first);
+    expect(calendar.eventCount()).toBe(1);
   });
 
   it("rejects reuse of an idempotency key for a different request", async () => {

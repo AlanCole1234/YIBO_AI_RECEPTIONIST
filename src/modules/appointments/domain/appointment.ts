@@ -25,7 +25,7 @@ export interface Appointment {
   endAt: ISODateTime;
   status: AppointmentStatus;
   idempotencyKey: IdempotencyKey;
-  source: "AI_CALL" | "DASHBOARD" | "API";
+  source: "AI_CALL" | "DASHBOARD" | "API" | "DEVELOPER_TEST";
   sourceCallId?: CallId;
   externalCalendarEventId?: string;
 }

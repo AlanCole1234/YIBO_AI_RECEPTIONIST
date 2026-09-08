@@ -13,7 +13,7 @@ describe("SQLite agent configuration and usage", () => {
     };
 
     expect(result.configuration.voice).toBe("marin");
-    expect(result.configuration.enabledTools).toHaveLength(5);
+    expect(result.configuration.enabledTools).toHaveLength(6);
     expect(result.usage).toEqual({
       inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,
     });

@@ -18,32 +18,82 @@ export const defaultDatabasePath = (region: RegionId): string =>
 export function openRegionalDatabase(region: RegionId, path = defaultDatabasePath(region)): DatabaseSync {
   mkdirSync(dirname(path), { recursive: true });
   const database = new DatabaseSync(path);
-  database.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+  // These settings belong to this connection, so every API/voice connection needs them.
+  // Set the timeout first: changing journal mode can briefly need an exclusive lock.
+  database.exec("PRAGMA busy_timeout = 5000;");
+  database.exec("PRAGMA foreign_keys = ON;");
+
+  // journal_mode is database-wide. Re-applying WAL from every process races while
+  // SQLite upgrades its lock, so only request the change when the file is not yet
+  // in WAL mode. A simultaneous first startup is retried below.
+  const currentMode = String(
+    (database.prepare("PRAGMA journal_mode").get() as { journal_mode?: string } | undefined)?.journal_mode ?? "",
+  ).toLowerCase();
+  if (currentMode !== "wal") {
+    withSqliteBusyRetry(() => database.prepare("PRAGMA journal_mode = WAL").get());
+  }
   return database;
 }
 
 export function migrateDatabase(database: DatabaseSync): void {
-  database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-    version INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
-  )`);
-  for (const migration of migrations) {
-    const applied = database.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(migration.version);
-    if (applied) continue;
-    database.exec(readFileSync(migration.path, "utf8"));
-    database.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)")
-      .run(migration.version, new Date().toISOString());
-  }
+  withWriteTransaction(database, () => {
+    database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )`);
+    for (const migration of migrations) {
+      const applied = database.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(migration.version);
+      if (applied) continue;
+      database.exec(readFileSync(migration.path, "utf8"));
+      database.prepare("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+        .run(migration.version, new Date().toISOString());
+    }
+  });
 }
 
 export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {
-  database.prepare(`
-    INSERT INTO businesses(region_id, tenant_id, business_id, profile_json)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(region_id, tenant_id) DO NOTHING
-  `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
-  const insertNumber = database.prepare(
-    "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
-  );
-  for (const phone of profile.calledNumbers) insertNumber.run(profile.region, profile.tenantId, phone);
+  withWriteTransaction(database, () => {
+    database.prepare(`
+      INSERT INTO businesses(region_id, tenant_id, business_id, profile_json)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(region_id, tenant_id) DO NOTHING
+    `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
+    const insertNumber = database.prepare(
+      "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
+    );
+    for (const phone of profile.calledNumbers) insertNumber.run(profile.region, profile.tenantId, phone);
+  });
+}
+
+const SQLITE_BUSY_RETRIES = 3;
+
+function withWriteTransaction(database: DatabaseSync, operation: () => void): void {
+  withSqliteBusyRetry(() => {
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      operation();
+      database.exec("COMMIT");
+    } catch (error) {
+      try { database.exec("ROLLBACK"); } catch { /* The transaction may not have started. */ }
+      throw error;
+    }
+  });
+}
+
+function withSqliteBusyRetry<T>(operation: () => T): T {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      if (!isSqliteBusy(error) || attempt >= SQLITE_BUSY_RETRIES) throw error;
+      // DatabaseSync is synchronous; a short local wait gives the other startup
+      // process time to finish its WAL/migration transaction without a hot loop.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1));
+    }
+  }
+}
+
+function isSqliteBusy(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /SQLITE_BUSY|database is locked|database is busy/i.test(message);
 }

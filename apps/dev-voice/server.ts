@@ -26,6 +26,7 @@ import {
 
 const transcriptEnabled = process.argv.includes("--transcript");
 const audioDebug = process.env.YIBO_VOICE_DEBUG === "1";
+const developerTestModeAuthorized = process.env.YIBO_LOCAL_DEVELOPER_TEST_MODE === "1";
 const port = Number(process.env.DEV_VOICE_PORT ?? 4317);
 const tenantId = process.env.YIBO_TENANT_ID?.trim() || DEVELOPMENT_BUSINESS.tenantId;
 const profile = [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS].find((value) => value.tenantId === tenantId);
@@ -50,6 +51,7 @@ const app = await buildConfiguredApplication({
   agentConfigurationRepository: configurationRepository,
   usageRecorder: usageRepository,
   callRepository,
+  developerTestModeAuthorized,
 });
 const server = Fastify({ logger: false });
 const htmlPath = new URL("./index.html", import.meta.url);

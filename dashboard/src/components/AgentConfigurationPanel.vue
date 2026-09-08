@@ -40,6 +40,7 @@ const toolCopy: Record<AgentToolName, { title: string; help: string; route: stri
   check_availability: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕" },
   create_appointment: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+" },
   cancel_appointment: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×" },
+  reschedule_appointment: { title: "Reschedule appointments", help: "Checks the new time and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺" },
   transfer_to_human: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗" },
 };
 

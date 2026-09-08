@@ -12,6 +12,10 @@ export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
     this.nextFailure = error;
   }
 
+  eventCount(): number {
+    return this.events.size;
+  }
+
   async createEvent(command: Parameters<AppointmentCalendarPort["createEvent"]>[0]) {
     const error = this.consumeFailure();
     if (error) return failure<AppointmentCalendarError>(error);

@@ -54,6 +54,8 @@ export class AppointmentServiceImpl implements AppointmentService {
     if (!configuration.value.employees.some((employee) => employee.id === command.employeeId && employee.active)) {
       return failure<CreateAppointmentError>({ code: "EMPLOYEE_NOT_FOUND" });
     }
+    const service = configuration.value.services.find((candidate) => candidate.id === command.serviceId)!;
+    const customer = await this.customers.get(command.tenantId, command.customerId);
 
     return this.guard.execute(command.tenantId, command.employeeId, async () => {
       const raced = await this.repository.findByIdempotencyKey(command.tenantId, command.idempotencyKey);
@@ -81,12 +83,21 @@ export class AppointmentServiceImpl implements AppointmentService {
       };
       await this.repository.save(pending);
 
+      calendarLog("calendar.trace.booking.service", {
+        tenantId: pending.tenantId,
+        appointmentId: pending.id,
+        startAt: pending.startAt,
+        endAt: pending.endAt,
+      });
+      calendarLog("calendar.user.confirmed", { tenantId: pending.tenantId, appointmentId: pending.id });
       calendarLog("calendar.booking.started", { tenantId: pending.tenantId, appointmentId: pending.id, startAt: pending.startAt });
       const external = await this.calendar.createEvent({
         tenantId: pending.tenantId,
         appointmentId: pending.id,
         employeeId: pending.employeeId,
-        title: `Appointment: ${pending.serviceId}`,
+        title: command.source === "DEVELOPER_TEST" ? "[YIBO TEST] Test Appointment" : `${service.name} appointment`,
+        serviceName: service.name,
+        ...(customer ? { patient: customer } : {}),
         startAt: pending.startAt,
         endAt: pending.endAt,
         idempotencyKey: pending.idempotencyKey,
@@ -150,11 +161,18 @@ export class AppointmentServiceImpl implements AppointmentService {
         );
       }
 
+      const configuration = await this.businesses.getBusinessProfile(appointment.tenantId);
+      const service = configuration.ok
+        ? configuration.value.services.find((candidate) => candidate.id === appointment.serviceId)
+        : undefined;
+      const customer = await this.customers.get(appointment.tenantId, appointment.customerId);
       const replacement = await this.calendar.createEvent({
         tenantId: appointment.tenantId,
         appointmentId: appointment.id,
         employeeId: appointment.employeeId,
-        title: `Appointment: ${appointment.serviceId}`,
+        title: `${service?.name ?? "Appointment"} appointment`,
+        serviceName: service?.name ?? "Appointment",
+        ...(customer ? { patient: customer } : {}),
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
         idempotencyKey: `${appointment.idempotencyKey}:reschedule:${slot.value.startAt}`,

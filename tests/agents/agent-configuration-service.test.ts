@@ -11,7 +11,7 @@ describe("AgentConfigurationService", () => {
     const recommended = service.recommended("es-MX", "Clínica YIBO", "gpt-realtime-2.1");
 
     expect(recommended.enabledTools).toEqual([
-      "check_availability", "create_appointment", "update_customer", "cancel_appointment", "transfer_to_human",
+      "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     recommended.enabledTools = ["check_availability"];
     const saved = await service.update("tenant-1", recommended);

@@ -26,10 +26,17 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       locale: configuration.locale,
       ...(configuration.voice ? { voice: configuration.voice } : {}),
       conversation: structuredClone(configuration.conversation),
-      tools: AGENT_TOOL_DEFINITIONS.filter((tool) => configuration.enabledTools.includes(tool.name)),
+      tools: AGENT_TOOL_DEFINITIONS.filter((tool) =>
+        isDeveloperTestTool(tool.name)
+          ? command.developerTestModeAuthorized
+          : configuration.enabledTools.includes(tool.name),
+      ),
       toolExecutor: this.toolExecutor,
       trustedContext: { ...command },
     };
     return success(definition);
   }
 }
+
+const isDeveloperTestTool = (name: string): boolean =>
+  name === "enable_developer_test_mode" || name === "delete_test_appointments";

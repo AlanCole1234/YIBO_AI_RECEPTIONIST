@@ -21,7 +21,7 @@ export async function registerAgentConfigurationRoutes(
         business.value.name,
         app.config.openAiRealtimeModel,
       ),
-      availableTools: AGENT_TOOL_DEFINITIONS.map(({ name, description }) => ({
+      availableTools: AGENT_TOOL_DEFINITIONS.filter(({ name }) => !isDeveloperTestTool(name)).map(({ name, description }) => ({
         name,
         description,
         kind: toolKind(name),
@@ -44,6 +44,9 @@ export async function registerAgentConfigurationRoutes(
     }
   });
 }
+
+const isDeveloperTestTool = (name: AgentToolName): boolean =>
+  name === "enable_developer_test_mode" || name === "delete_test_appointments";
 
 function toolKind(name: AgentToolName): "consult" | "mutate" | "external" {
   if (name === "check_availability") return "consult";

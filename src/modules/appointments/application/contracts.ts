@@ -18,7 +18,7 @@ export interface CreateAppointmentCommand {
   employeeId: EmployeeId;
   startAt: ISODateTime;
   idempotencyKey: IdempotencyKey;
-  source: "AI_CALL" | "DASHBOARD" | "API";
+  source: "AI_CALL" | "DASHBOARD" | "API" | "DEVELOPER_TEST";
   sourceCallId?: CallId;
 }
 
