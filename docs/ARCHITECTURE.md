@@ -102,7 +102,9 @@ frontera de tools.
 
 - SQLite se separa por región MX/US y todas las claves operativas incluyen
   `tenant_id`.
-- Las migraciones viven en `src/infrastructure/database/migrations/`.
+- Las migraciones viven en `src/infrastructure/database/migrations/`; la v7
+  agrega `location_id` a números, llamadas y citas y rellena registros previos
+  con `default`.
 - Google OAuth guarda tokens cifrados por tenant.
 - Google Calendar usa hoy un `calendarId` global del entorno y resuelve la zona
   desde el perfil del tenant.
