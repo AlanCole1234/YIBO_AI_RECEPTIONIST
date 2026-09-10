@@ -12,6 +12,7 @@ export {
   createDefaultAgentConfiguration,
 } from "./application/agent-configuration-defaults.js";
 export type { DefaultAgentConfigurationInput } from "./application/agent-configuration-defaults.js";
+export { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./application/upgrade-agent-configuration.js";
 export type {
   AgentDefinition,
   ConversationBehavior,
@@ -29,6 +30,8 @@ export type {
   AgentConfiguration,
   AgentConfigurationSource,
   AgentConfigurationRepository,
+  LegacyAgentConfiguration,
+  VersionedAgentConfiguration,
   HumanTransferPort,
 } from "./ports/agent-dependencies.js";
 export { InMemoryAgentConfigurationSource } from "./infrastructure/in-memory-agent-configuration.js";

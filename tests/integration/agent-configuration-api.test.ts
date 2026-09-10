@@ -43,8 +43,8 @@ describe("agent configuration API", () => {
     const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      current: { locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
-      recommended: { locale: "es-MX" },
+      current: { schemaVersion: 1, locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
+      recommended: { schemaVersion: 1, locale: "es-MX" },
       secrets: { apiKeyConfigured: false },
     });
     expect(response.json<{ availableTools: unknown[] }>().availableTools).toHaveLength(6);

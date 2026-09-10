@@ -38,6 +38,7 @@ export type AgentToolName = "check_availability" | "create_appointment" | "updat
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export interface AgentConfiguration {
+  schemaVersion: 1;
   instructions: string;
   locale: string;
   voice?: string;

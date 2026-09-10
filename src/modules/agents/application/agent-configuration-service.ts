@@ -1,14 +1,15 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
-import type { AgentConfiguration, AgentConfigurationRepository } from "../ports/agent-dependencies.js";
+import type { AgentConfiguration, AgentConfigurationRepository, VersionedAgentConfiguration } from "../ports/agent-dependencies.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import {
   createDefaultAgentConfiguration,
   type DefaultAgentConfigurationInput,
 } from "./agent-configuration-defaults.js";
+import { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./upgrade-agent-configuration.js";
 
 export interface AgentConfigurationServiceContract {
   get(tenantId: TenantId): Promise<AgentConfiguration | null>;
-  update(tenantId: TenantId, configuration: AgentConfiguration): Promise<AgentConfiguration>;
+  update(tenantId: TenantId, configuration: VersionedAgentConfiguration): Promise<AgentConfiguration>;
   recommended(
     locale: string,
     businessName: string,
@@ -24,8 +25,8 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
     return this.repository.getConfiguration(tenantId);
   }
 
-  async update(tenantId: TenantId, configuration: AgentConfiguration): Promise<AgentConfiguration> {
-    const validated = validateConfiguration(configuration);
+  async update(tenantId: TenantId, configuration: VersionedAgentConfiguration): Promise<AgentConfiguration> {
+    const validated = validateConfiguration(upgradeAgentConfiguration(configuration));
     await this.repository.saveConfiguration(tenantId, validated);
     return structuredClone(validated);
   }
@@ -41,6 +42,7 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
 }
 
 function validateConfiguration(value: AgentConfiguration): AgentConfiguration {
+  if (value.schemaVersion !== AGENT_CONFIGURATION_SCHEMA_VERSION) throw new Error("unsupported agent configuration schemaVersion");
   if (!value.instructions.trim()) throw new Error("instructions are required");
   if (!value.locale.trim()) throw new Error("locale is required");
   if (!value.conversation.model.trim()) throw new Error("conversation.model is required");

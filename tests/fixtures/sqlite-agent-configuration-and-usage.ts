@@ -13,7 +13,14 @@ try {
   const configurations = new SqliteAgentConfigurationRepository(database, "MX");
   const service = new AgentConfigurationService(configurations);
   const recommended = service.recommended("es-MX", DEVELOPMENT_BUSINESS.name, "gpt-realtime-2.1");
-  await service.update(DEVELOPMENT_BUSINESS.tenantId, recommended);
+  const { schemaVersion: _legacyVersion, ...legacyConfiguration } = recommended;
+  database.prepare(`INSERT INTO agent_configurations(region_id, tenant_id, configuration_json, updated_at)
+    VALUES (?, ?, ?, ?)`).run(
+      "MX", DEVELOPMENT_BUSINESS.tenantId, JSON.stringify(legacyConfiguration), new Date().toISOString(),
+    );
+  const configuration = await service.get(DEVELOPMENT_BUSINESS.tenantId);
+  const persisted = JSON.parse((database.prepare(`SELECT configuration_json FROM agent_configurations
+    WHERE region_id = ? AND tenant_id = ?`).get("MX", DEVELOPMENT_BUSINESS.tenantId) as { configuration_json: string }).configuration_json) as { schemaVersion?: number };
   const usage = new SqliteConversationUsageRepository(database, "MX");
   const calls = new SqliteCallRepository(database, "MX");
   await calls.create({
@@ -27,7 +34,8 @@ try {
     inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,
   });
   console.log(JSON.stringify({
-    configuration: await service.get(DEVELOPMENT_BUSINESS.tenantId),
+    configuration,
+    persistedSchemaVersion: persisted.schemaVersion,
     usage: await usage.summarize(DEVELOPMENT_BUSINESS.tenantId),
     calls: await calls.listByTenant(DEVELOPMENT_BUSINESS.tenantId, 25),
   }));

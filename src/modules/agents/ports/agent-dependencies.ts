@@ -3,12 +3,24 @@ import type { CallId, LocationId, TenantId } from "../../../shared/types/identif
 import type { AgentToolName, ConversationBehavior } from "../application/contracts.js";
 
 export interface AgentConfiguration {
+  schemaVersion: 1;
   instructions: string;
   locale: string;
   voice?: string;
   enabledTools: AgentToolName[];
   conversation: ConversationBehavior;
 }
+
+export interface LegacyAgentConfiguration {
+  schemaVersion?: undefined;
+  instructions: string;
+  locale: string;
+  voice?: string;
+  enabledTools: AgentToolName[];
+  conversation: ConversationBehavior;
+}
+
+export type VersionedAgentConfiguration = AgentConfiguration | LegacyAgentConfiguration;
 
 export interface AgentConfigurationSource {
   getConfiguration(tenantId: TenantId): Promise<AgentConfiguration | null>;

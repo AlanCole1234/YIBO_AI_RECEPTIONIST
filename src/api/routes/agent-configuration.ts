@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import {
-  AGENT_CONFIGURATION_DEFAULTS_VERSION,
   AGENT_TOOL_DEFINITIONS,
   type AgentToolName,
 } from "../../modules/agents/index.js";
@@ -54,7 +53,7 @@ export async function registerAgentConfigurationRoutes(
       entityType: "agent_configuration",
       entityId: app.tenantId,
       action: before ? "update" : "create",
-      entityVersion: AGENT_CONFIGURATION_DEFAULTS_VERSION,
+      entityVersion: configuration.schemaVersion,
       before,
       after: configuration,
     });

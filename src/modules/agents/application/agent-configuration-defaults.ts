@@ -22,6 +22,7 @@ export function createDefaultAgentConfiguration(
   input: DefaultAgentConfigurationInput,
 ): AgentConfiguration {
   return {
+    schemaVersion: 1,
     instructions: [
       `You are the phone receptionist for ${input.businessName}.`,
       "Speak warmly and naturally, using complete sentences and a conversational rhythm.",

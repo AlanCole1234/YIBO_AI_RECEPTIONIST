@@ -14,6 +14,7 @@ describe("AgentConfigurationService", () => {
       "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     expect(recommended).toMatchObject({
+      schemaVersion: 1,
       voice: "marin",
       conversation: {
         model: "gpt-realtime-2.1",
@@ -26,6 +27,28 @@ describe("AgentConfigurationService", () => {
     const saved = await service.update("tenant-1", recommended);
 
     await expect(service.get("tenant-1")).resolves.toEqual(saved);
+  });
+
+  it("upgrades unversioned documents conservatively and rejects unknown future versions", async () => {
+    const repository = new InMemoryAgentConfigurationSource([{
+      tenantId: "tenant-legacy",
+      configuration: {
+        instructions: "Keep this prompt", locale: "es-MX", voice: "cedar",
+        enabledTools: ["check_availability"],
+        conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 321, reasoningEffort: "low", turnDetection: {} },
+      },
+    }]);
+    const service = new AgentConfigurationService(repository);
+    await expect(service.get("tenant-legacy")).resolves.toEqual({
+      schemaVersion: 1,
+      instructions: "Keep this prompt", locale: "es-MX", voice: "cedar",
+      enabledTools: ["check_availability"],
+      conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 321, reasoningEffort: "low", turnDetection: {} },
+    });
+    await expect(service.update("tenant-legacy", {
+      schemaVersion: 99,
+      instructions: "future",
+    } as never)).rejects.toThrow("unsupported agent configuration schemaVersion");
   });
 
   it("rejects unknown tools and unsafe output limits", async () => {

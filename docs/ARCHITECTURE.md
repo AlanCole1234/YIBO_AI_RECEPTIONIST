@@ -148,6 +148,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 - `TelephonyHumanTransferAdapter` resuelve ese destino con el contexto confiable,
   persiste `TRANSFERRING` y luego `TRANSFERRED`; un fallo del gateway compensa el
   estado a `IN_CONVERSATION` para que el agente pueda seguir atendiendo.
+- La configuración del agente es un documento versionado. Los repositorios
+  convierten la forma histórica sin versión a la forma canónica v1 y SQLite la
+  reescribe al primer acceso; versiones futuras desconocidas fallan cerradas.
 
 ## Invariantes
 

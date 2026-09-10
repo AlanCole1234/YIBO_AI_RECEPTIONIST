@@ -3,6 +3,7 @@ import type {
   AgentConfiguration,
   AgentConfigurationRepository,
 } from "../../modules/agents/index.js";
+import { upgradeAgentConfiguration } from "../../modules/agents/index.js";
 import type { RegionId, TenantId } from "../../shared/types/identifiers.js";
 
 type ConfigurationRow = { configuration_json: string };
@@ -15,7 +16,13 @@ export class SqliteAgentConfigurationRepository implements AgentConfigurationRep
       SELECT configuration_json FROM agent_configurations
       WHERE region_id = ? AND tenant_id = ?
     `).get(this.region, tenantId) as ConfigurationRow | undefined;
-    return row ? JSON.parse(row.configuration_json) as AgentConfiguration : null;
+    if (!row) return null;
+    const parsed: unknown = JSON.parse(row.configuration_json);
+    const upgraded = upgradeAgentConfiguration(parsed);
+    if (JSON.stringify(parsed) !== JSON.stringify(upgraded)) {
+      await this.saveConfiguration(tenantId, upgraded);
+    }
+    return upgraded;
   }
 
   async saveConfiguration(tenantId: TenantId, configuration: AgentConfiguration): Promise<void> {

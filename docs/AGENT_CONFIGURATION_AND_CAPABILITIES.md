@@ -31,6 +31,11 @@ Los valores recomendados se construyen en una única fábrica versionada del
 módulo Agents. Bootstrap y el panel consumen esa fábrica; el adaptador Realtime
 usa siempre la definición ya resuelta y no sustituye modelo, voz o tokens.
 
+El documento canónico incluye `schemaVersion: 1`. Las configuraciones históricas
+sin versión se actualizan en los repositorios de memoria y SQLite, preservando
+sus valores y completando sólo campos ausentes. SQLite guarda la forma canónica
+al primer acceso y una versión futura desconocida se rechaza.
+
 El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
 interrupción automáticas, timeout de silencio, tool choice automático y tools
 secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el

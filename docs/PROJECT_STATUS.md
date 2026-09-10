@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 5 — Esquema avanzado del agente y Realtime**.
-- Tarea activa: **AGENT-001 — esquema versionado y migración de configuración**.
+- Tarea activa: **AGENT-002 — compilador de prompt y reglas inmutables**.
 - Último checkpoint cerrado: Checkpoint 4; `pnpm typecheck`, 215 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -78,8 +78,8 @@ con `pnpm test` y `pnpm build`.
 | CAL-004 | DONE | FreeBusy/create/cancel resuelven asignación y registran sólo metadata segura |
 | TRANSFER-001 | DONE | Destino phone/extension validado, normalizado y versionado por sucursal |
 | TRANSFER-002 | DONE | HumanTransfer usa telefonía, estados persistidos y compensación a conversación |
-| AGENT-001 | IN_PROGRESS | Esquema versionado y migración de configuración |
-| AGENT-002 | TODO | Compilador de prompt con reglas inmutables |
+| AGENT-001 | DONE | ADR-004, schemaVersion y upgrade automático conservador en memoria/SQLite |
+| AGENT-002 | IN_PROGRESS | Compilador de prompt con reglas inmutables |
 | AGENT-003 | TODO | Registro de capacidades por modelo |
 | AGENT-004 | TODO | Controles soportados de audio, VAD, tracing y truncación |
 | AGENT-005 | TODO | Comportamiento conversacional estructurado |
