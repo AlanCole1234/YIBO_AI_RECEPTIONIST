@@ -117,8 +117,9 @@ Los endpoints administrativos usan sesiones firmadas en cookie HttpOnly. El
 rol `tenant_admin` administra agente, negocio y calendarios; `operator` puede
 consultar el negocio y operar clientes, disponibilidad y citas. Las mutaciones
 exigen el `Origin` configurado y ningún endpoint acepta tenant o región desde
-datos no confiables. La auditoría redactada sigue pendiente en el checkpoint
-activo.
+datos no confiables. Cada mutación administrativa actual registra sujeto,
+tenant, entidad, acción, versión, instante y diff; credenciales, PII e
+instrucciones se sustituyen por marcadores o huellas antes de persistir.
 
 ## Superficie y brechas activas
 

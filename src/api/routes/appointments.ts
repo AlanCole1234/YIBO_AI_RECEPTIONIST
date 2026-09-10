@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
-import { createAdminGuard } from "../admin-guard.js";
+import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AppointmentBody {
@@ -36,6 +36,14 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
+    await app.adminAudit.recordMutation({
+      principal: adminPrincipalFor(request),
+      entityType: "appointment",
+      entityId: result.value.id,
+      action: "create",
+      before: null,
+      after: result.value,
+    });
     return reply.code(201).send(result.value);
     },
   );

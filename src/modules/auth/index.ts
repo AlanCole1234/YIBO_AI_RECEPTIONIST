@@ -16,3 +16,11 @@ export type {
 export { ScryptPasswordHasher } from "./infrastructure/scrypt-password-hasher.js";
 export { SignedAdminSession } from "./infrastructure/signed-admin-session.js";
 export { InMemoryAdminIdentityRepository } from "./infrastructure/in-memory-admin-identity-repository.js";
+export { AdminAuditService } from "./application/admin-audit-service.js";
+export type { RecordAdminMutation } from "./application/admin-audit-service.js";
+export { InMemoryAdminAuditLog } from "./infrastructure/in-memory-admin-audit-log.js";
+export type {
+  AdminAuditDiffValue,
+  AdminAuditEntry,
+  AdminAuditLogPort,
+} from "./ports/admin-audit-log-port.js";

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
-import { createAdminGuard } from "../admin-guard.js";
+import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface CustomerBody { phone?: unknown; name?: unknown; email?: unknown }
@@ -25,6 +25,14 @@ export async function registerCustomerRoutes(server: FastifyInstance, app: YiboA
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
+    await app.adminAudit.recordMutation({
+      principal: adminPrincipalFor(request),
+      entityType: "customer",
+      entityId: result.value.id,
+      action: "find_or_create",
+      before: null,
+      after: result.value,
+    });
     return reply.code(200).send(result.value);
     },
   );

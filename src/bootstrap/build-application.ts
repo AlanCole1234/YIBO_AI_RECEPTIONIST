@@ -74,10 +74,13 @@ import type { OrganizationCostReader } from "../modules/billing/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
 import {
   AdminCredentialService,
+  AdminAuditService,
+  InMemoryAdminAuditLog,
   InMemoryAdminIdentityRepository,
   ScryptPasswordHasher,
   SignedAdminSession,
   type AdminIdentityRepository,
+  type AdminAuditLogPort,
   type AdminSessionPort,
 } from "../modules/auth/index.js";
 type ApplicationCalendar = CalendarPort & AppointmentCalendarPort;
@@ -107,6 +110,7 @@ export interface YiboApplication {
     credentials: AdminCredentialService;
     sessions: AdminSessionPort;
   };
+  adminAudit: AdminAuditService;
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -127,6 +131,7 @@ export interface BuildApplicationOptions {
   calendar?: ApplicationCalendar;
   googleOAuth?: GoogleOAuthService;
   adminIdentityRepository?: AdminIdentityRepository;
+  adminAuditLog?: AdminAuditLogPort;
   adminSession?: AdminSessionPort;
   adminSessionSecret?: string;
   /** Only the local development voice harness may set this true. */
@@ -159,6 +164,11 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
       options.adminSessionSecret ?? randomBytes(32).toString("base64url"),
     ),
   };
+  const adminAudit = new AdminAuditService(
+    options.adminAuditLog ?? new InMemoryAdminAuditLog(),
+    () => clock.now(),
+    () => ids.generate("audit"),
+  );
   const business = new BusinessDirectoryService(businessRepository);
   const customerRepository = new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
@@ -298,6 +308,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     telephony,
     ids,
     adminAuth,
+    adminAudit,
     ...(billing ? { billing } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
     registerCallMedia: (callId, transport) => voice.register(callId, transport),

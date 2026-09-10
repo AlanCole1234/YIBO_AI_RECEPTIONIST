@@ -1,7 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
-import { AGENT_TOOL_DEFINITIONS, type AgentToolName } from "../../modules/agents/index.js";
-import { createAdminGuard } from "../admin-guard.js";
+import {
+  AGENT_CONFIGURATION_DEFAULTS_VERSION,
+  AGENT_TOOL_DEFINITIONS,
+  type AgentToolName,
+} from "../../modules/agents/index.js";
+import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 export async function registerAgentConfigurationRoutes(
@@ -32,9 +36,10 @@ export async function registerAgentConfigurationRoutes(
   });
 
   server.put("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (request, reply) => {
+    const before = await app.agentConfiguration.get(app.tenantId);
+    let configuration;
     try {
-      const configuration = await app.agentConfiguration.update(app.tenantId, request.body as never);
-      return { configuration, appliesTo: "next-conversation" as const };
+      configuration = await app.agentConfiguration.update(app.tenantId, request.body as never);
     } catch (error) {
       return reply.code(400).send({
         error: {
@@ -43,6 +48,16 @@ export async function registerAgentConfigurationRoutes(
         },
       });
     }
+    await app.adminAudit.recordMutation({
+      principal: adminPrincipalFor(request),
+      entityType: "agent_configuration",
+      entityId: app.tenantId,
+      action: before ? "update" : "create",
+      entityVersion: AGENT_CONFIGURATION_DEFAULTS_VERSION,
+      before,
+      after: configuration,
+    });
+    return { configuration, appliesTo: "next-conversation" as const };
   });
 }
 

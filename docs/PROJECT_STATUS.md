@@ -9,8 +9,10 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 1 — Autenticación, autorización y auditoría**.
-- Tarea activa: **AUD-001 — auditoría administrativa redactada**.
+- Checkpoint activo: **Checkpoint 2 — Dominio multi-sucursal y migración**.
+- Tarea activa: **LOC-001 — tipos y validación multi-sucursal**.
+- Último checkpoint cerrado: Checkpoint 1; `pnpm typecheck`, 159 pruebas
+  aprobadas, 1 omitida y `pnpm build` aprobados.
 
 ## Capacidades existentes
 
@@ -54,8 +56,8 @@ con `pnpm test` y `pnpm build`.
 | AUTH-003 | DONE | Login/logout/me y sesión HMAC HttpOnly de ocho horas |
 | AUTH-004 | DONE | Guard central, Origin explícito y rechazo recursivo de tenant/region |
 | AUTH-005 | DONE | Configuración y administración sólo para tenant_admin; operación para operator |
-| AUD-001 | IN_PROGRESS | Auditoría administrativa redactada |
-| LOC-001 | TODO | Tipos y validación multi-sucursal |
+| AUD-001 | DONE | Sujeto, entidad, versión y diff redactado persistidos por tenant |
+| LOC-001 | IN_PROGRESS | Tipos y validación multi-sucursal |
 | LOC-002 | TODO | Perfil versionado y upgrader a sucursal default |
 | LOC-003 | TODO | Migración SQLite con `location_id` |
 | LOC-004 | TODO | Contexto confiable tenant/location por número marcado |

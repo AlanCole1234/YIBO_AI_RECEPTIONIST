@@ -63,6 +63,12 @@ describe("agent configuration API", () => {
       appliesTo: "next-conversation",
     });
     expect(await app.agentConfiguration.get(app.tenantId)).toMatchObject({ voice: "cedar" });
+    await expect(app.adminAudit.listByTenant(app.tenantId)).resolves.toMatchObject([{
+      entityType: "agent_configuration",
+      action: "update",
+      entityVersion: "1",
+      diff: { voice: { before: "marin", after: "cedar" } },
+    }]);
   });
 
   it("rejects invalid configuration without changing the current value", async () => {
