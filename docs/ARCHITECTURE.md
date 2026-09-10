@@ -139,6 +139,8 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
   `{tenantId, locationId, employeeId}` confiable. La asignación del profesional
   gana y el default de sucursal actúa como fallback. `GOOGLE_CALENDAR_ID` sólo
   existe como importación transitoria al documento, no dirige operaciones.
+  FreeBusy, alta y cancelación usan esa misma resolución; los logs conservan
+  IDs correlacionables y metadata operativa, pero no calendar IDs, tokens ni PII.
 - El modo de prueba usa negocio, agenda y calendario en memoria aislados.
 
 ## Invariantes

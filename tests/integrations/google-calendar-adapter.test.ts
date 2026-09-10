@@ -119,4 +119,49 @@ describe("GoogleCalendarAdapter", () => {
       startAt: "2026-08-24T17:00:00.000Z", endAt: "2026-08-24T17:45:00.000Z", idempotencyKey: "request-1",
     })).resolves.toEqual({ ok: false, error: { code: "PROVIDER_UNAVAILABLE", retryable: true } });
   });
+
+  it("resolves the target for create and cancel and logs no calendar credentials or customer data", async () => {
+    const requests: Array<{ url: string; method: string }> = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      requests.push({ url: String(input), method: init?.method ?? "GET" });
+      return init?.method === "DELETE"
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify({ id: "event-safe" }), { status: 200 });
+    });
+    const resolver: CalendarAssignmentResolver = {
+      resolve: async ({ employeeId }) => ({
+        ok: true,
+        value: {
+          calendarId: employeeId === "employee-2" ? "private-calendar@example.com" : "fallback@example.com",
+          timezone: "America/Mexico_City",
+          source: employeeId === "employee-2" ? "professional" : "location",
+        },
+      }),
+    };
+    const oauth = {
+      status: async () => ({ configured: true, connected: true }), accessToken: async () => "secret-oauth-token",
+    } as unknown as GoogleOAuthService;
+    const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const adapter = new GoogleCalendarAdapter(resolver, oauth, fetcher);
+
+    await adapter.createEvent({
+      tenantId: "tenant-1", locationId: "north", employeeId: "employee-2", appointmentId: "appointment-safe",
+      title: "Appointment", serviceName: "Private service", patient: { name: "Sensitive Name", phone: "+525512345678" },
+      startAt: "2026-09-11T15:00:00.000Z", endAt: "2026-09-11T15:30:00.000Z", idempotencyKey: "safe-request",
+    });
+    await adapter.cancelEvent({
+      tenantId: "tenant-1", locationId: "north", employeeId: "employee-2", externalEventId: "event-safe",
+    });
+
+    expect(requests).toEqual([
+      { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events", method: "POST" },
+      { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events/event-safe", method: "DELETE" },
+    ]);
+    const serializedLogs = logs.mock.calls.flat().join("\n");
+    expect(serializedLogs).not.toContain("private-calendar@example.com");
+    expect(serializedLogs).not.toContain("secret-oauth-token");
+    expect(serializedLogs).not.toContain("Sensitive Name");
+    expect(serializedLogs).not.toContain("12345678");
+    logs.mockRestore();
+  });
 });
