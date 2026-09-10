@@ -1,12 +1,28 @@
 import { failure, success } from "../../../shared/domain/result.js";
 import type { TenantId } from "../../../shared/types/identifiers.js";
-import type { TenantServiceDefinition } from "../domain/multi-location-business.js";
+import type {
+  LocationProfessionalAssignment,
+  ProfessionalDefinition,
+  TenantServiceDefinition,
+} from "../domain/multi-location-business.js";
 import type { BusinessDirectory, BusinessLookupError } from "./contracts.js";
 
 export type BusinessCatalogError = BusinessLookupError
   | { code: "SERVICE_ALREADY_EXISTS" }
   | { code: "SERVICE_NOT_FOUND" }
-  | { code: "SERVICE_IN_USE" };
+  | { code: "SERVICE_IN_USE" }
+  | { code: "PROFESSIONAL_ALREADY_EXISTS" }
+  | { code: "PROFESSIONAL_NOT_FOUND" }
+  | { code: "PROFESSIONAL_INACTIVE" }
+  | { code: "PROFESSIONAL_IN_USE" };
+
+export interface ProfessionalUsageReader {
+  hasProfessionalReferences(query: {
+    tenantId: TenantId;
+    professionalId: string;
+    locationId?: string;
+  }): Promise<boolean>;
+}
 
 export interface ServiceCatalogSnapshot {
   version: number;
@@ -18,8 +34,17 @@ export interface ServiceCatalogMutation {
   service: TenantServiceDefinition;
 }
 
+export interface ProfessionalCatalogSnapshot {
+  version: number;
+  professionals: ProfessionalDefinition[];
+  assignments: Array<{ locationId: string; professionals: LocationProfessionalAssignment[] }>;
+}
+
 export class BusinessCatalogService {
-  constructor(private readonly businesses: BusinessDirectory) {}
+  constructor(
+    private readonly businesses: BusinessDirectory,
+    private readonly professionalUsage: ProfessionalUsageReader = noProfessionalUsage,
+  ) {}
 
   async listServices(tenantId: TenantId) {
     const current = await this.businesses.getBusinessConfiguration(tenantId);
@@ -86,6 +111,144 @@ export class BusinessCatalogService {
       ? success({ version: updated.value.version, deletedServiceId: serviceId })
       : failure<BusinessCatalogError>(updated.error);
   }
+
+  async listProfessionals(tenantId: TenantId) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    return current.ok
+      ? success<ProfessionalCatalogSnapshot>({
+          version: current.value.version,
+          professionals: structuredClone(current.value.configuration.professionals),
+          assignments: current.value.configuration.locations.map((location) => ({
+            locationId: location.id,
+            professionals: structuredClone(location.professionals),
+          })),
+        })
+      : failure<BusinessCatalogError>(current.error);
+  }
+
+  async createProfessional(tenantId: TenantId, professional: ProfessionalDefinition, expectedVersion: number) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (current.value.configuration.professionals.some(({ id }) => id === professional.id)) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_ALREADY_EXISTS" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      professionals: [...current.value.configuration.professionals, structuredClone(professional)],
+    }, expectedVersion);
+    return updated.ok
+      ? success({ version: updated.value.version, professional: structuredClone(professional) })
+      : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async updateProfessional(
+    tenantId: TenantId,
+    professionalId: string,
+    replacement: Omit<ProfessionalDefinition, "id">,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (!current.value.configuration.professionals.some(({ id }) => id === professionalId)) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_NOT_FOUND" });
+    }
+    if (!replacement.active && (isProfessionalAssigned(current.value.configuration.locations, professionalId)
+      || await this.professionalUsage.hasProfessionalReferences({ tenantId, professionalId }))) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_IN_USE" });
+    }
+    const professional = { id: professionalId, ...structuredClone(replacement) };
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      professionals: current.value.configuration.professionals.map((candidate) =>
+        candidate.id === professionalId ? professional : candidate),
+    }, expectedVersion);
+    return updated.ok
+      ? success({ version: updated.value.version, professional })
+      : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async deleteProfessional(tenantId: TenantId, professionalId: string, expectedVersion: number) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (!current.value.configuration.professionals.some(({ id }) => id === professionalId)) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_NOT_FOUND" });
+    }
+    if (isProfessionalAssigned(current.value.configuration.locations, professionalId)
+      || await this.professionalUsage.hasProfessionalReferences({ tenantId, professionalId })) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_IN_USE" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      professionals: current.value.configuration.professionals.filter(({ id }) => id !== professionalId),
+    }, expectedVersion);
+    return updated.ok
+      ? success({ version: updated.value.version, deletedProfessionalId: professionalId })
+      : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async setProfessionalAssignment(
+    tenantId: TenantId,
+    locationId: string,
+    professionalId: string,
+    assignment: Omit<LocationProfessionalAssignment, "professionalId">,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const professional = current.value.configuration.professionals.find(({ id }) => id === professionalId);
+    if (!professional) return failure<BusinessCatalogError>({ code: "PROFESSIONAL_NOT_FOUND" });
+    if (!professional.active && assignment.active) return failure<BusinessCatalogError>({ code: "PROFESSIONAL_INACTIVE" });
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    if (!location) return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    const existing = location.professionals.find(({ professionalId: id }) => id === professionalId);
+    const removesExistingUse = existing && (!assignment.active
+      || existing.serviceIds.some((serviceId) => !assignment.serviceIds.includes(serviceId)));
+    if (removesExistingUse && await this.professionalUsage.hasProfessionalReferences({ tenantId, locationId, professionalId })) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_IN_USE" });
+    }
+    const replacement = { professionalId, ...structuredClone(assignment) };
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((candidate) => candidate.id === locationId
+        ? {
+            ...candidate,
+            professionals: existing
+              ? candidate.professionals.map((value) => value.professionalId === professionalId ? replacement : value)
+              : [...candidate.professionals, replacement],
+          }
+        : candidate),
+    }, expectedVersion);
+    return updated.ok
+      ? success({ version: updated.value.version, locationId, assignment: replacement })
+      : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async deleteProfessionalAssignment(
+    tenantId: TenantId,
+    locationId: string,
+    professionalId: string,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    if (!location) return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    if (!location.professionals.some(({ professionalId: id }) => id === professionalId)) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_NOT_FOUND" });
+    }
+    if (await this.professionalUsage.hasProfessionalReferences({ tenantId, locationId, professionalId })) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_IN_USE" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((candidate) => candidate.id === locationId
+        ? { ...candidate, professionals: candidate.professionals.filter(({ professionalId: id }) => id !== professionalId) }
+        : candidate),
+    }, expectedVersion);
+    return updated.ok
+      ? success({ version: updated.value.version, locationId, deletedProfessionalId: professionalId })
+      : failure<BusinessCatalogError>(updated.error);
+  }
 }
 
 const isServiceAssigned = (
@@ -94,3 +257,13 @@ const isServiceAssigned = (
 ): boolean => locations.some((location) =>
   location.services.some((assignment) => assignment.serviceId === serviceId)
   || location.professionals.some((assignment) => assignment.serviceIds.includes(serviceId)));
+
+const isProfessionalAssigned = (
+  locations: Array<{ professionals: Array<{ professionalId: string }> }>,
+  professionalId: string,
+): boolean => locations.some((location) =>
+  location.professionals.some((assignment) => assignment.professionalId === professionalId));
+
+const noProfessionalUsage: ProfessionalUsageReader = {
+  hasProfessionalReferences: async () => false,
+};

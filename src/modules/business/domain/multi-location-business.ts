@@ -113,6 +113,8 @@ export const validateMultiLocationBusiness = (
 
   const serviceIds = new Set(profile.services.map(({ id }) => id));
   const professionalIds = new Set(profile.professionals.map(({ id }) => id));
+  const activeServiceIds = new Set(profile.services.filter(({ active }) => active).map(({ id }) => id));
+  const activeProfessionalIds = new Set(profile.professionals.filter(({ active }) => active).map(({ id }) => id));
   for (const [index, service] of profile.services.entries()) {
     required(errors, `services.${index}.name`, service.name);
     if (!Number.isInteger(service.durationMinutes) || service.durationMinutes <= 0) {
@@ -154,6 +156,9 @@ export const validateMultiLocationBusiness = (
     for (const [assignmentIndex, assignment] of location.services.entries()) {
       const assignmentPath = `${path}.services.${assignmentIndex}`;
       if (!serviceIds.has(assignment.serviceId)) errors.push({ path: `${assignmentPath}.serviceId`, message: "Unknown tenant service." });
+      if (assignment.active && !activeServiceIds.has(assignment.serviceId)) {
+        errors.push({ path: `${assignmentPath}.active`, message: "An active assignment requires an active tenant service." });
+      }
       if (!Number.isSafeInteger(assignment.priceAmountMinor) || assignment.priceAmountMinor < 0) {
         errors.push({ path: `${assignmentPath}.priceAmountMinor`, message: "Must be non-negative minor units." });
       }
@@ -165,6 +170,9 @@ export const validateMultiLocationBusiness = (
     for (const [assignmentIndex, assignment] of location.professionals.entries()) {
       const assignmentPath = `${path}.professionals.${assignmentIndex}`;
       if (!professionalIds.has(assignment.professionalId)) errors.push({ path: `${assignmentPath}.professionalId`, message: "Unknown tenant professional." });
+      if (assignment.active && !activeProfessionalIds.has(assignment.professionalId)) {
+        errors.push({ path: `${assignmentPath}.active`, message: "An active assignment requires an active tenant professional." });
+      }
       if (new Set(assignment.serviceIds).size !== assignment.serviceIds.length
         || assignment.serviceIds.some((serviceId) => !location.services.some((service) => service.serviceId === serviceId))) {
         errors.push({ path: `${assignmentPath}.serviceIds`, message: "Services must be unique assignments of this location." });

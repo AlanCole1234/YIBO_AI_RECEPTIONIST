@@ -11,6 +11,8 @@ import { SqliteGoogleTokenStore } from "../infrastructure/database/sqlite-google
 import { SqliteBusinessRepository } from "../infrastructure/database/sqlite-business-repository.js";
 import { SqliteAdminIdentityRepository } from "../infrastructure/database/sqlite-admin-identity-repository.js";
 import { SqliteAdminAuditLog } from "../infrastructure/database/sqlite-admin-audit-log.js";
+import { SqliteCustomerRepository } from "../infrastructure/database/sqlite-customer-repository.js";
+import { SqliteAppointmentRepository } from "../infrastructure/database/sqlite-appointment-repository.js";
 import { AgentConfigurationService, DEFAULT_REALTIME_MODEL } from "../modules/agents/index.js";
 import {
   GoogleCalendarAdapter,
@@ -46,6 +48,10 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     ?? new SqliteConversationUsageRepository(database, tenant.region);
   const callRepository = options.callRepository
     ?? new SqliteCallRepository(database, tenant.region);
+  const customerRepository = options.customerRepository
+    ?? new SqliteCustomerRepository(database, tenant.region);
+  const appointmentRepository = options.appointmentRepository
+    ?? new SqliteAppointmentRepository(database, tenant.region);
   const configurationService = new AgentConfigurationService(configurationRepository);
   const existingConfiguration = await configurationService.get(tenantId);
   if (!existingConfiguration) {
@@ -94,6 +100,8 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     agentConfigurationRepository: configurationRepository,
     usageRecorder,
     callRepository,
+    customerRepository,
+    appointmentRepository,
     adminIdentityRepository: options.adminIdentityRepository
       ?? new SqliteAdminIdentityRepository(database, tenant.region),
     adminAuditLog: options.adminAuditLog ?? new SqliteAdminAuditLog(database, tenant.region),

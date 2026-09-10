@@ -106,6 +106,9 @@ frontera de tools.
 
 - SQLite se separa por región MX/US y todas las claves operativas incluyen
   `tenant_id`.
+- El bootstrap configurado usa repositorios SQLite para negocio, clientes,
+  citas y llamadas; las referencias profesionales consideran también citas
+  persistidas antes de permitir una eliminación.
 - Las migraciones viven en `src/infrastructure/database/migrations/`; la v7
   agrega `location_id` a números, llamadas y citas y la v8 agrega la versión
   optimista del documento de negocio. Ambas conservan los registros previos.
@@ -143,6 +146,10 @@ editor ganó la carrera.
 El catálogo tenant-wide de servicios cuenta además con endpoints CRUD en
 `/api/admin/services`; cada mutación usa la misma versión del documento,
 auditoría y protección contra borrar o desactivar referencias asignadas.
+`/api/admin/professionals` administra el catálogo de profesionales y
+`/api/admin/locations/:locationId/professionals/:professionalId` administra su
+asignación, servicios, horario y calendario por sucursal. Las referencias en
+asignaciones o citas deben migrarse antes de desactivar o eliminar.
 
 ## Superficie y brechas activas
 

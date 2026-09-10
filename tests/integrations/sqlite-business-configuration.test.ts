@@ -11,6 +11,7 @@ describe("SQLite business configuration", () => {
       saved: { saved: true, version: 2 },
       stale: { saved: false, currentVersion: 2 },
       final: { version: 2, profile: { name: "SQLite updated" } },
+      professionalUsage: { anyLocation: true, defaultLocation: true, otherLocation: false },
     });
   });
 });

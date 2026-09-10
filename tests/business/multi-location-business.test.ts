@@ -81,4 +81,14 @@ describe("multi-location business model", () => {
       "locations.0.timezone",
     ]));
   });
+
+  it("rejects active assignments to inactive catalog entries", () => {
+    const invalid = structuredClone(profile);
+    invalid.services[0]!.active = false;
+    invalid.professionals[0]!.active = false;
+    expect(validateMultiLocationBusiness(invalid)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "locations.0.services.0.active" }),
+      expect.objectContaining({ path: "locations.0.professionals.0.active" }),
+    ]));
+  });
 });

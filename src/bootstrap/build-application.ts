@@ -17,6 +17,7 @@ import {
   InMemoryAppointmentRepository,
   type AppointmentService,
   type AppointmentCalendarPort,
+  type AppointmentRepository,
   type CustomerReader,
 } from "../modules/appointments/index.js";
 import {
@@ -48,6 +49,7 @@ import {
   DefaultCustomerService,
   InMemoryCustomerRepository,
   type CustomerService,
+  type CustomerRepository,
 } from "../modules/customers/index.js";
 import {
   GoogleOAuthService,
@@ -86,6 +88,7 @@ import {
   type AdminSessionPort,
 } from "../modules/auth/index.js";
 type ApplicationCalendar = CalendarPort & AppointmentCalendarPort;
+type ApplicationAppointmentRepository = AppointmentRepository & ConfirmedAppointmentReader;
 
 export interface YiboApplication {
   tenantId: string;
@@ -123,6 +126,8 @@ export interface BuildApplicationOptions {
   tenantId?: string;
   businesses?: VersionedBusinessProfile[];
   businessRepository?: BusinessRepository;
+  customerRepository?: CustomerRepository;
+  appointmentRepository?: ApplicationAppointmentRepository;
   clock?: Clock;
   ids?: IdGenerator;
   runtime?: ConversationRuntimePort;
@@ -174,13 +179,13 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("audit"),
   );
   const business = new BusinessDirectoryService(businessRepository);
-  const businessCatalog = new BusinessCatalogService(business);
-  const customerRepository = new InMemoryCustomerRepository();
+  const customerRepository = options.customerRepository ?? new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
     customerRepository,
     () => ids.generate("customer"),
   );
-  const appointmentRepository = new InMemoryAppointmentRepository();
+  const appointmentRepository = options.appointmentRepository ?? new InMemoryAppointmentRepository();
+  const businessCatalog = new BusinessCatalogService(business, appointmentRepository);
   const calendar = options.calendar ?? new InMemoryCalendarAdapter();
 
   const customerReader: CustomerReader = {
@@ -198,9 +203,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
       return profile.value.location.openingHours.map((rule) => ({ ...rule }));
     },
   };
-  const confirmedAppointments: ConfirmedAppointmentReader = {
-    findConfirmedIntervals: async () => [],
-  };
+  const confirmedAppointments: ConfirmedAppointmentReader = appointmentRepository;
   const scheduling = new SchedulingServiceImpl(
     business,
     workingHours,
@@ -231,6 +234,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
       business.updateBusinessConfiguration(candidateTenantId, configuration, version),
   };
   const developerTestCalendar = new InMemoryCalendarAdapter();
+  const developerTestAppointmentRepository = new InMemoryAppointmentRepository();
   const developerTestWorkingHours: EmployeeWorkingHoursProvider = {
     getWorkingHours: async ({ tenantId: candidateTenantId, locationId, employeeId }) => {
       const profile = await developerTestBusiness.getLocation(candidateTenantId, locationId);
@@ -242,12 +246,12 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const developerTestScheduling = new SchedulingServiceImpl(
     developerTestBusiness,
     developerTestWorkingHours,
-    confirmedAppointments,
+    developerTestAppointmentRepository,
     developerTestCalendar,
     clock,
   );
   const developerTestAppointments = new AppointmentServiceImpl(
-    new InMemoryAppointmentRepository(),
+    developerTestAppointmentRepository,
     customerReader,
     developerTestBusiness,
     developerTestScheduling,

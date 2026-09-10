@@ -74,7 +74,7 @@ export async function registerBusinessServiceRoutes(server: FastifyInstance, app
   );
 }
 
-const requireVersion = (header: string | string[] | undefined, reply: FastifyReply): number | null => {
+export const requireVersion = (header: string | string[] | undefined, reply: FastifyReply): number | null => {
   const version = parseIfMatch(header);
   if (version !== null) return version;
   void reply.code(header === undefined ? 428 : 400).send({
@@ -83,12 +83,12 @@ const requireVersion = (header: string | string[] | undefined, reply: FastifyRep
   return null;
 };
 
-const sendCatalogError = (reply: FastifyReply, error: BusinessCatalogError) => {
+export const sendCatalogError = (reply: FastifyReply, error: BusinessCatalogError) => {
   if (error.code === "CONFIGURATION_VERSION_CONFLICT") {
     return reply.code(409).send({ error: { code: error.code, currentVersion: error.currentVersion } });
   }
-  const status = error.code === "SERVICE_NOT_FOUND" ? 404
-    : ["SERVICE_ALREADY_EXISTS", "SERVICE_IN_USE"].includes(error.code) ? 409 : 422;
+  const status = ["SERVICE_NOT_FOUND", "PROFESSIONAL_NOT_FOUND", "LOCATION_NOT_FOUND"].includes(error.code) ? 404
+    : ["SERVICE_ALREADY_EXISTS", "SERVICE_IN_USE", "PROFESSIONAL_ALREADY_EXISTS", "PROFESSIONAL_IN_USE"].includes(error.code) ? 409 : 422;
   return reply.code(status).send({ error: { code: error.code, ...(error.code === "BUSINESS_CONFIGURATION_INVALID" ? { message: error.message } : {}) } });
 };
 

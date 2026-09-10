@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 3 — Catálogos, precios y políticas de agenda**.
-- Tarea activa: **CAT-002 — profesionales y asignaciones por sucursal**.
+- Tarea activa: **PRICE-001 — valor monetario por oferta de sucursal**.
 - Último checkpoint cerrado: Checkpoint 2; `pnpm typecheck`, 175 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -64,8 +64,8 @@ con `pnpm test` y `pnpm build`.
 | LOC-005 | DONE | Fixtures MX/US y persistencia en memoria usan exclusivamente v2 canónica |
 | LOC-006 | DONE | GET/PUT admin, If-Match, CAS SQLite/memoria, 409 y auditoría versionada |
 | CAT-001 | DONE | CRUD admin versionado, validación, auditoría y protección de referencias |
-| CAT-002 | IN_PROGRESS | CRUD de profesionales y asignaciones |
-| PRICE-001 | TODO | Money ISO 4217 por oferta de sucursal |
+| CAT-002 | DONE | CRUD de profesionales/asignaciones, horario y bloqueo de referencias usadas |
+| PRICE-001 | IN_PROGRESS | Money ISO 4217 por oferta de sucursal |
 | PRICE-002 | TODO | Snapshot de nombre y precio en la cita |
 | SCHED-001 | TODO | Horario de sucursal intersectado con horario profesional |
 | SCHED-002 | TODO | Cierres administrativos privados |

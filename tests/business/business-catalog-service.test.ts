@@ -56,4 +56,55 @@ describe("BusinessCatalogService", () => {
     await expect(catalog.deleteService(DEVELOPMENT_BUSINESS.tenantId, consultation.id, 1))
       .resolves.toEqual({ ok: false, error: { code: "SERVICE_IN_USE" } });
   });
+
+  it("manages professionals and their location assignments as separate steps", async () => {
+    const catalog = createCatalog();
+    const created = await catalog.createProfessional(DEVELOPMENT_BUSINESS.tenantId, {
+      id: "employee-3", displayName: "Dra. Elena", active: true,
+    }, 1);
+    expect(created).toMatchObject({ ok: true, value: { version: 2 } });
+
+    const assigned = await catalog.setProfessionalAssignment(
+      DEVELOPMENT_BUSINESS.tenantId,
+      "default",
+      "employee-3",
+      { active: true, serviceIds: ["consultation"], openingHours: [] },
+      2,
+    );
+    expect(assigned).toMatchObject({
+      ok: true,
+      value: { version: 3, assignment: { professionalId: "employee-3", serviceIds: ["consultation"] } },
+    });
+    await expect(catalog.deleteProfessional(DEVELOPMENT_BUSINESS.tenantId, "employee-3", 3))
+      .resolves.toEqual({ ok: false, error: { code: "PROFESSIONAL_IN_USE" } });
+
+    await expect(catalog.deleteProfessionalAssignment(
+      DEVELOPMENT_BUSINESS.tenantId, "default", "employee-3", 3,
+    )).resolves.toEqual({
+      ok: true,
+      value: { version: 4, locationId: "default", deletedProfessionalId: "employee-3" },
+    });
+    await expect(catalog.deleteProfessional(DEVELOPMENT_BUSINESS.tenantId, "employee-3", 4))
+      .resolves.toEqual({ ok: true, value: { version: 5, deletedProfessionalId: "employee-3" } });
+  });
+
+  it("does not remove a professional referenced by an appointment", async () => {
+    const businesses = new BusinessDirectoryService(new InMemoryBusinessRepository([DEVELOPMENT_BUSINESS]));
+    const catalog = new BusinessCatalogService(businesses, {
+      hasProfessionalReferences: async () => true,
+    });
+    const current = await businesses.getBusinessConfiguration(DEVELOPMENT_BUSINESS.tenantId);
+    if (!current.ok) throw new Error("Expected configuration");
+    const withoutAssignment = {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((location) => ({
+        ...location,
+        professionals: location.professionals.filter(({ professionalId }) => professionalId !== "employee-2"),
+      })),
+    };
+    await businesses.updateBusinessConfiguration(DEVELOPMENT_BUSINESS.tenantId, withoutAssignment, 1);
+
+    await expect(catalog.deleteProfessional(DEVELOPMENT_BUSINESS.tenantId, "employee-2", 2))
+      .resolves.toEqual({ ok: false, error: { code: "PROFESSIONAL_IN_USE" } });
+  });
 });

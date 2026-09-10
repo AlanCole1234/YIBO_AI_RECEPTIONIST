@@ -22,6 +22,15 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       .get(this.region, tenantId, key) as AppointmentRow | undefined);
   }
 
+  async hasProfessionalReferences(query: { tenantId: TenantId; professionalId: string; locationId?: string }) {
+    const row = this.database.prepare(`SELECT 1 AS found FROM appointments
+      WHERE region_id = ? AND tenant_id = ? AND employee_id = ?
+        AND (? IS NULL OR location_id = ?) LIMIT 1`
+    ).get(this.region, query.tenantId, query.professionalId,
+      query.locationId ?? null, query.locationId ?? null) as { found: number } | undefined;
+    return row?.found === 1;
+  }
+
   async save(value: Appointment): Promise<void> {
     this.database.prepare(`
       INSERT INTO appointments(

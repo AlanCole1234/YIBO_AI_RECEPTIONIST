@@ -2,6 +2,8 @@ export { BusinessDirectoryService } from "./application/business-directory-servi
 export { BusinessCatalogService } from "./application/business-catalog-service.js";
 export type {
   BusinessCatalogError,
+  ProfessionalCatalogSnapshot,
+  ProfessionalUsageReader,
   ServiceCatalogMutation,
   ServiceCatalogSnapshot,
 } from "./application/business-catalog-service.js";
