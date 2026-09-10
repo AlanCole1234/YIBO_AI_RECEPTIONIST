@@ -46,7 +46,7 @@ const profile: BusinessConfigurationV2 = {
       calendarId: "professional-one@example.com",
     }],
     defaultCalendarId: "centro@example.com",
-    transferDestination: "+529991112233",
+    transferDestination: { type: "PHONE_NUMBER", value: "+529991112233" },
   }],
 };
 
@@ -104,5 +104,15 @@ describe("multi-location business model", () => {
       path: "locations.0.services.0.price",
       message: "Currency must be an uppercase ISO 4217 code.",
     });
+  });
+
+  it("accepts only normalized phone numbers or numeric extensions for transfer", () => {
+    const invalid = structuredClone(profile);
+    invalid.locations[0]!.transferDestination = { type: "EXTENSION", value: "sip:attacker" };
+    expect(validateMultiLocationBusiness(invalid)).toContainEqual({
+      path: "locations.0.transferDestination", message: "Invalid phone number or extension.",
+    });
+    invalid.locations[0]!.transferDestination = { type: "PHONE_NUMBER", value: "+529991112233" };
+    expect(validateMultiLocationBusiness(invalid)).toEqual([]);
   });
 });

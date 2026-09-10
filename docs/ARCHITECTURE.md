@@ -142,6 +142,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
   FreeBusy, alta y cancelación usan esa misma resolución; los logs conservan
   IDs correlacionables y metadata operativa, pero no calendar IDs, tokens ni PII.
 - El modo de prueba usa negocio, agenda y calendario en memoria aislados.
+- Cada sucursal puede guardar un destino de transferencia tipado como teléfono
+  normalizado o extensión numérica. La API versionada no admite URI, SIP ni un
+  destino proporcionado por el modelo.
 
 ## Invariantes
 

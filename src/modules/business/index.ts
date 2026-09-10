@@ -3,6 +3,7 @@ export { BusinessCatalogService } from "./application/business-catalog-service.j
 export type {
   BusinessCatalogError,
   LocationCalendarSnapshot,
+  LocationTransferSnapshot,
   LocationPolicySnapshot,
   ProfessionalCatalogSnapshot,
   ProfessionalUsageReader,
@@ -32,6 +33,7 @@ export {
   SLOT_INCREMENT_MINUTES,
   validateMultiLocationBusiness,
   isValidCalendarId,
+  isValidTransferDestination,
 } from "./domain/multi-location-business.js";
 export { validateMoney } from "./domain/money.js";
 export type { Money } from "./domain/money.js";
@@ -47,6 +49,7 @@ export type {
   LocationDefinition,
   LocationProfessionalAssignment,
   LocationSchedulingPolicy,
+  LocationTransferDestination,
   LocationServiceAssignment,
   MultiLocationBusinessValidationError,
   ProfessionalDefinition,

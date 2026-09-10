@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 4 — Calendarios y transferencia**.
-- Tarea activa: **TRANSFER-001 — destino validado por sucursal**.
+- Tarea activa: **TRANSFER-002 — transferencia real y estados de llamada**.
 - Último checkpoint cerrado: Checkpoint 3; `pnpm typecheck`, 198 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -76,8 +76,8 @@ con `pnpm test` y `pnpm build`.
 | CAL-002 | DONE | API versionada: default de sucursal, override profesional y fallback explícito |
 | CAL-003 | DONE | OAuth cifrado por tenant valida acceso antes de activar y publica estado seguro |
 | CAL-004 | DONE | FreeBusy/create/cancel resuelven asignación y registran sólo metadata segura |
-| TRANSFER-001 | IN_PROGRESS | Destino validado por sucursal |
-| TRANSFER-002 | TODO | Transferencia real y estados de llamada |
+| TRANSFER-001 | DONE | Destino phone/extension validado, normalizado y versionado por sucursal |
+| TRANSFER-002 | IN_PROGRESS | Transferencia real y estados de llamada |
 | AGENT-001 | TODO | Esquema versionado y migración de configuración |
 | AGENT-002 | TODO | Compilador de prompt con reglas inmutables |
 | AGENT-003 | TODO | Registro de capacidades por modelo |

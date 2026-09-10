@@ -3,6 +3,7 @@ import type { TenantId } from "../../../shared/types/identifiers.js";
 import type {
   LocationProfessionalAssignment,
   LocationSchedulingPolicy,
+  LocationTransferDestination,
   ProfessionalDefinition,
   TenantServiceDefinition,
 } from "../domain/multi-location-business.js";
@@ -58,6 +59,12 @@ export interface LocationCalendarSnapshot {
     effectiveCalendarId?: string;
     source: "professional" | "location" | "unconfigured";
   }>;
+}
+
+export interface LocationTransferSnapshot {
+  version: number;
+  locationId: string;
+  destination?: LocationTransferDestination;
 }
 
 export class BusinessCatalogService {
@@ -380,6 +387,44 @@ export class BusinessCatalogService {
     }, expectedVersion);
     if (!updated.ok) return failure<BusinessCatalogError>(updated.error);
     return this.getLocationCalendars(tenantId, locationId);
+  }
+
+  async getLocationTransferDestination(tenantId: TenantId, locationId: string) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    return location
+      ? success<LocationTransferSnapshot>({
+          version: current.value.version,
+          locationId,
+          ...(location.transferDestination ? { destination: structuredClone(location.transferDestination) } : {}),
+        })
+      : failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+  }
+
+  async updateLocationTransferDestination(
+    tenantId: TenantId,
+    locationId: string,
+    destination: LocationTransferDestination | undefined,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (!current.value.configuration.locations.some(({ id }) => id === locationId)) {
+      return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((location) => {
+        if (location.id !== locationId) return location;
+        const { transferDestination: _removed, ...withoutDestination } = location;
+        return destination
+          ? { ...withoutDestination, transferDestination: structuredClone(destination) }
+          : withoutDestination;
+      }),
+    }, expectedVersion);
+    if (!updated.ok) return failure<BusinessCatalogError>(updated.error);
+    return this.getLocationTransferDestination(tenantId, locationId);
   }
 }
 

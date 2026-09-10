@@ -15,7 +15,7 @@ export const upgradeBusinessProfile = (
   input: VersionedBusinessProfile,
 ): BusinessConfigurationV2 => {
   if (isBusinessConfigurationV2(input)) {
-    const cloned = normalizeLegacyV2Prices(structuredClone(input));
+    const cloned = normalizeLegacyV2(structuredClone(input));
     assertValid(cloned);
     return cloned;
   }
@@ -99,10 +99,11 @@ export const upgradeBusinessProfile = (
   return upgraded;
 };
 
-const normalizeLegacyV2Prices = (profile: BusinessConfigurationV2): BusinessConfigurationV2 => ({
+const normalizeLegacyV2 = (profile: BusinessConfigurationV2): BusinessConfigurationV2 => ({
   ...profile,
   locations: profile.locations.map((location) => ({
     ...location,
+    ...normalizeLegacyTransferDestination(location),
     services: location.services.map((assignment) => {
       const legacy = assignment as typeof assignment & { priceAmountMinor?: number; priceCurrency?: string };
       if (assignment.price) return assignment;
@@ -117,6 +118,20 @@ const normalizeLegacyV2Prices = (profile: BusinessConfigurationV2): BusinessConf
     }),
   })),
 });
+
+const normalizeLegacyTransferDestination = (location: BusinessConfigurationV2["locations"][number]) => {
+  const value = (location as unknown as { transferDestination?: unknown }).transferDestination;
+  if (typeof value !== "string") return {};
+  const digits = value.replace(/\D/g, "");
+  return /^\d{1,8}$/.test(value.trim())
+    ? { transferDestination: { type: "EXTENSION" as const, value: digits } }
+    : {
+        transferDestination: {
+          type: "PHONE_NUMBER" as const,
+          value: value.trim().startsWith("+") ? `+${digits}` : digits,
+        },
+      };
+};
 
 const assertValid = (profile: BusinessConfigurationV2): void => {
   const errors = validateMultiLocationBusiness(profile);

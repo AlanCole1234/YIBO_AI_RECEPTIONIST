@@ -69,6 +69,10 @@ export interface LocationProfessionalAssignment {
   calendarId?: string;
 }
 
+export type LocationTransferDestination =
+  | { type: "PHONE_NUMBER"; value: string }
+  | { type: "EXTENSION"; value: string };
+
 export interface LocationDefinition {
   id: LocationId;
   name: string;
@@ -83,7 +87,7 @@ export interface LocationDefinition {
   services: LocationServiceAssignment[];
   professionals: LocationProfessionalAssignment[];
   defaultCalendarId?: string;
-  transferDestination?: string;
+  transferDestination?: LocationTransferDestination;
 }
 
 export interface BusinessConfigurationV2 {
@@ -201,6 +205,9 @@ export const validateMultiLocationBusiness = (
     if (location.defaultCalendarId !== undefined && !isValidCalendarId(location.defaultCalendarId)) {
       errors.push({ path: `${path}.defaultCalendarId`, message: "Invalid calendar identifier." });
     }
+    if (location.transferDestination !== undefined && !isValidTransferDestination(location.transferDestination)) {
+      errors.push({ path: `${path}.transferDestination`, message: "Invalid phone number or extension." });
+    }
   }
   if (profile.active && !profile.locations.some(({ active }) => active)) {
     errors.push({ path: "locations", message: "An active business requires an active location." });
@@ -210,6 +217,11 @@ export const validateMultiLocationBusiness = (
 
 export const isValidCalendarId = (value: string): boolean =>
   value.length <= 255 && /^[^\s\u0000-\u001F\u007F]+$/.test(value);
+
+export const isValidTransferDestination = (destination: LocationTransferDestination): boolean =>
+  destination.type === "PHONE_NUMBER"
+    ? /^\+?[1-9]\d{6,14}$/.test(destination.value)
+    : destination.type === "EXTENSION" && /^\d{1,8}$/.test(destination.value);
 
 const required = (errors: MultiLocationBusinessValidationError[], path: string, value: string): void => {
   if (!value.trim()) errors.push({ path, message: "Required." });

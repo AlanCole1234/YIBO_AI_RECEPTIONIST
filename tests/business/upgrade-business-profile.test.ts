@@ -100,4 +100,15 @@ describe("upgradeBusinessProfile", () => {
     expect(upgraded.locations[0]!.services[0]!.price).toEqual({ amountMinor: 125000, currency: "MXN" });
     expect(upgraded.locations[0]!.services[0]).not.toHaveProperty("priceAmountMinor");
   });
+
+  it("normalizes the former free-text transfer destination", () => {
+    const transitional = structuredClone(DEVELOPMENT_BUSINESS) as unknown as {
+      locations: Array<Record<string, unknown>>;
+    };
+    transitional.locations[0]!.transferDestination = "+52 (999) 111-2233";
+    const upgraded = upgradeBusinessProfile(transitional as never);
+    expect(upgraded.locations[0]!.transferDestination).toEqual({
+      type: "PHONE_NUMBER", value: "+529991112233",
+    });
+  });
 });
