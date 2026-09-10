@@ -7,7 +7,7 @@ class MemoryTokenStore implements GoogleTokenStore {
   async save(_tenantId: string, token: GoogleToken): Promise<void> { this.value = token; }
 }
 
-const config = { clientId: "client-id", clientSecret: "client-secret", redirectUri: "http://localhost:3000/api/integrations/google/callback", calendarId: "calendar@example.com", stateSigningKey: "a".repeat(64) };
+const config = { clientId: "client-id", clientSecret: "client-secret", redirectUri: "http://localhost:3000/api/integrations/google/callback", stateSigningKey: "a".repeat(64) };
 
 describe("GoogleOAuthService", () => {
   it("creates an authorization URL with a short-lived state and exchanges the matching callback", async () => {

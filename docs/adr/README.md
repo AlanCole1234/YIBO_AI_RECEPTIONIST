@@ -10,7 +10,7 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 | [ADR-002](ADR-002-admin-authentication.md) | Aceptado | Autenticación, sesión y roles administrativos |
 | [ADR-003](ADR-003-multi-location-business.md) | Aceptado | Modelo multi-sucursal y migración |
 | ADR-004 | Pendiente | Configuración versionada del agente |
-| ADR-005 | Pendiente | Enrutamiento de calendarios |
+| [ADR-005](ADR-005-calendar-routing.md) | Aceptado | Enrutamiento de calendarios por asignación |
 | [ADR-006](ADR-006-appointment-price-snapshots.md) | Aceptado | Money y snapshot de precios en citas |
 | ADR-007 | Pendiente | Confirmación de mutaciones solicitadas por IA |
 

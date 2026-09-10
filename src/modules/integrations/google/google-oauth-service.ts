@@ -5,7 +5,6 @@ export interface GoogleOAuthConfig {
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
-  calendarId?: string;
   stateSigningKey?: string;
 }
 
@@ -21,7 +20,7 @@ export class GoogleOAuthService {
   async status(tenantId: string): Promise<GoogleIntegrationStatus> {
     const configured = this.isConfigured();
     const token = configured ? await this.tokens.get(tenantId) : null;
-    return { configured, connected: token !== null, ...(this.config.calendarId ? { calendarId: this.config.calendarId } : {}) };
+    return { configured, connected: token !== null };
   }
 
   authorizationUrl(tenantId: string, returnTo: string): string | null {
@@ -86,7 +85,7 @@ export class GoogleOAuthService {
   }
 
   private isConfigured(): boolean {
-    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.calendarId && this.config.stateSigningKey);
+    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.stateSigningKey);
   }
 
   private signState(value: AuthorizationState): string {

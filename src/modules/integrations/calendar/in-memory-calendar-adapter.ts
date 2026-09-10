@@ -75,9 +75,10 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
     return success({ provider: "in-memory", externalEventId });
   }
 
-  async cancelEvent(command: { tenantId: string; locationId: string; externalEventId: string }) {
+  async cancelEvent(command: { tenantId: string; locationId: string; employeeId: string; externalEventId: string }) {
     const event = this.events.get(command.externalEventId);
-    if (!event || event.tenantId !== command.tenantId || event.locationId !== command.locationId) {
+    if (!event || event.tenantId !== command.tenantId || event.locationId !== command.locationId
+      || event.employeeId !== command.employeeId) {
       return failure({ code: "EVENT_NOT_FOUND" as const });
     }
     this.events.set(event.externalEventId, { ...event, cancelled: true });

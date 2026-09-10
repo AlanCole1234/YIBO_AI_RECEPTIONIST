@@ -17,8 +17,9 @@ import { AgentConfigurationService, DEFAULT_REALTIME_MODEL } from "../modules/ag
 import {
   GoogleCalendarAdapter,
   GoogleOAuthService,
+  BusinessCalendarAssignmentResolver,
 } from "../modules/integrations/index.js";
-import { upgradeBusinessProfile, type BusinessConfigurationV2 } from "../modules/business/index.js";
+import { BusinessDirectoryService, upgradeBusinessProfile, type BusinessConfigurationV2 } from "../modules/business/index.js";
 import {
   DEVELOPMENT_BUSINESS,
   DEVELOPMENT_US_BUSINESS,
@@ -41,6 +42,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   migrateDatabase(database);
   seedBusiness(database, tenant);
   const businessRepository = new SqliteBusinessRepository(database, tenant.region);
+  await importLegacyDefaultCalendar(environment, tenantId, businessRepository);
 
   const configurationRepository = options.agentConfigurationRepository
     ?? new SqliteAgentConfigurationRepository(database, tenant.region);
@@ -121,22 +123,33 @@ function buildGoogleIntegration(
   const clientId = environment.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = environment.GOOGLE_CLIENT_SECRET?.trim();
   const redirectUri = environment.GOOGLE_REDIRECT_URI?.trim();
-  const calendarId = environment.GOOGLE_CALENDAR_ID?.trim();
   const stateSigningKey = environment.YIBO_TOKEN_ENCRYPTION_KEY?.trim();
-  if (!clientId || !clientSecret || !redirectUri || !calendarId || !stateSigningKey) return undefined;
+  if (!clientId || !clientSecret || !redirectUri || !stateSigningKey) return undefined;
   const oauth = new GoogleOAuthService(
-    { clientId, clientSecret, redirectUri, calendarId, stateSigningKey },
+    { clientId, clientSecret, redirectUri, stateSigningKey },
     new SqliteGoogleTokenStore(database, tenant.region, stateSigningKey),
   );
   return {
     oauth,
     calendar: new GoogleCalendarAdapter(
-      calendarId,
-      async (tenantId) => {
-        const profile = await businesses.findByTenantId(tenantId);
-        return profile ? upgradeBusinessProfile(profile).locations[0]!.timezone : tenant.locations[0]!.timezone;
-      },
+      new BusinessCalendarAssignmentResolver(new BusinessDirectoryService(businesses)),
       oauth,
     ),
   };
+}
+
+async function importLegacyDefaultCalendar(
+  environment: NodeJS.ProcessEnv,
+  tenantId: string,
+  repository: SqliteBusinessRepository,
+): Promise<void> {
+  const calendarId = environment.GOOGLE_CALENDAR_ID?.trim();
+  if (!calendarId) return;
+  const stored = await repository.findConfigurationByTenantId(tenantId);
+  if (!stored) return;
+  const profile = upgradeBusinessProfile(stored.profile);
+  const location = profile.locations.find(({ id }) => id === "default") ?? profile.locations[0];
+  if (!location || location.defaultCalendarId) return;
+  location.defaultCalendarId = calendarId;
+  await repository.saveIfVersion(profile, stored.version);
 }

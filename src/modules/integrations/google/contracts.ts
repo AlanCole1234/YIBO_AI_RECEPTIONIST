@@ -12,5 +12,4 @@ export interface GoogleTokenStore {
 export interface GoogleIntegrationStatus {
   configured: boolean;
   connected: boolean;
-  calendarId?: string;
 }

@@ -50,11 +50,11 @@ export class SqliteCalendarAdapter implements CalendarPort, AppointmentCalendarP
     return success({ provider: "sqlite-local", externalEventId });
   }
 
-  async cancelEvent(command: { tenantId: string; externalEventId: string }) {
+  async cancelEvent(command: { tenantId: string; locationId: string; employeeId: string; externalEventId: string }) {
     const result = this.database.prepare(`
       UPDATE calendar_events SET cancelled = 1
-      WHERE region_id = ? AND tenant_id = ? AND external_event_id = ?
-    `).run(this.region, command.tenantId, command.externalEventId);
+      WHERE region_id = ? AND tenant_id = ? AND employee_id = ? AND external_event_id = ?
+    `).run(this.region, command.tenantId, command.employeeId, command.externalEventId);
     return result.changes > 0 ? success(undefined) : failure({ code: "EVENT_NOT_FOUND" as const });
   }
 }

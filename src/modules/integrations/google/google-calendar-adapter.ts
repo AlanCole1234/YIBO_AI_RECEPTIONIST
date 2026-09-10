@@ -3,20 +3,22 @@ import type { AppointmentCalendarPort } from "../../appointments/index.js";
 import type { BusyInterval, CalendarPort } from "../../scheduling/index.js";
 import { dateTimeInTimezone } from "../../scheduling/domain/time.js";
 import type { GoogleOAuthService } from "./google-oauth-service.js";
+import type { CalendarAssignmentResolver } from "../calendar/calendar-assignment-resolver.js";
 
 export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarPort {
   constructor(
-    private readonly calendarId: string,
-    private readonly timeZone: string | ((tenantId: string) => string | Promise<string>),
+    private readonly calendars: CalendarAssignmentResolver,
     private readonly oauth: GoogleOAuthService,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  async getBusyIntervals(query: { tenantId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
+  async getBusyIntervals(query: { tenantId: string; locationId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
+    const assignment = await this.calendars.resolve(query);
+    if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
     const token = await this.tokenFor(query.tenantId);
     if (!token.ok) return token;
     try {
-      const timeZone = await this.timeZoneFor(query.tenantId);
+      const { calendarId, timezone: timeZone } = assignment.value;
       googleLog("calendar.trace.google.availability.request", {
         tenantId: query.tenantId,
         clinicTimezone: timeZone,
@@ -25,12 +27,12 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
       });
       const response = await this.fetcher(new URL("https://www.googleapis.com/calendar/v3/freeBusy"), {
         method: "POST", headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json" },
-        body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, timeZone, items: [{ id: this.calendarId }] }),
+        body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, timeZone, items: [{ id: calendarId }] }),
       });
       if (!response.ok) return failure(providerError(response.status));
       const body = await response.json() as { calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: unknown[] }> };
-      if (body.calendars?.[this.calendarId]?.errors?.length) return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: false });
-      const busy = body.calendars?.[this.calendarId]?.busy ?? [];
+      if (body.calendars?.[calendarId]?.errors?.length) return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: false });
+      const busy = body.calendars?.[calendarId]?.busy ?? [];
       googleLog("calendar.trace.google.availability.response", {
         tenantId: query.tenantId,
         busyIntervals: busy.map((interval) => ({
@@ -41,13 +43,15 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     } catch { return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true }); }
   }
 
-  async createEvent(command: { tenantId: string; appointmentId: string; employeeId: string; title: string; serviceName: string; patient?: { name?: string; phone: string }; startAt: string; endAt: string; idempotencyKey: string }) {
+  async createEvent(command: { tenantId: string; locationId: string; appointmentId: string; employeeId: string; title: string; serviceName: string; patient?: { name?: string; phone: string }; startAt: string; endAt: string; idempotencyKey: string }) {
+    const assignment = await this.calendars.resolve(command);
+    if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
     const token = await this.tokenFor(command.tenantId);
     if (!token.ok) return token;
     const externalEventId = googleEventId(command.appointmentId);
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/events`;
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(assignment.value.calendarId)}/events`;
     try {
-      const timeZone = await this.timeZoneFor(command.tenantId);
+      const timeZone = assignment.value.timezone;
       const start = dateTimeInTimezone(new Date(command.startAt), timeZone);
       const end = dateTimeInTimezone(new Date(command.endAt), timeZone);
       googleLog("calendar.trace.google.adapter.input", {
@@ -110,17 +114,15 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     }
   }
 
-  async cancelEvent(command: { tenantId: string; externalEventId: string }) {
+  async cancelEvent(command: { tenantId: string; locationId: string; employeeId: string; externalEventId: string }) {
+    const assignment = await this.calendars.resolve(command);
+    if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
     const token = await this.oauth.accessToken(command.tenantId);
     if (!token) return failure({ code: "AUTHORIZATION_REQUIRED" as const });
-    const response = await this.fetcher(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/events/${encodeURIComponent(command.externalEventId)}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+    const response = await this.fetcher(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(assignment.value.calendarId)}/events/${encodeURIComponent(command.externalEventId)}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
     if (response.status === 404) return failure({ code: "EVENT_NOT_FOUND" as const });
     if (!response.ok) return failure(providerError(response.status));
     return success(undefined);
-  }
-
-  private async timeZoneFor(tenantId: string): Promise<string> {
-    return typeof this.timeZone === "string" ? this.timeZone : this.timeZone(tenantId);
   }
 
   private async tokenFor(tenantId: string) {

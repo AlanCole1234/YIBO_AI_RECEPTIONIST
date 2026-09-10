@@ -218,7 +218,7 @@ function statusLabel(status: string): string {
           </section>
           <article class="home-calendar">
             <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
-            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }} <strong>{{ googleCalendar.calendarId }}</strong>.</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
+            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }}</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
             <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
           </article>
         </div>

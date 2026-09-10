@@ -34,6 +34,7 @@ export interface AppointmentCalendarPort {
   cancelEvent(command: {
     tenantId: TenantId;
     locationId: LocationId;
+    employeeId: EmployeeId;
     externalEventId: string;
   }): Promise<Result<void, AppointmentCalendarError>>;
 }

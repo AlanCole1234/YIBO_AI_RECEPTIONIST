@@ -132,8 +132,10 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
   optimista del documento de negocio. La v9 rellena nombre/precio histórico en
   citas existentes. Todas conservan los registros previos.
 - Google OAuth guarda tokens cifrados por tenant.
-- Google Calendar usa hoy un `calendarId` global del entorno y resuelve la zona
-  desde el perfil del tenant.
+- Google Calendar resuelve `{calendarId, timezone}` desde
+  `{tenantId, locationId, employeeId}` confiable. La asignación del profesional
+  gana y el default de sucursal actúa como fallback. `GOOGLE_CALENDAR_ID` sólo
+  existe como importación transitoria al documento, no dirige operaciones.
 - El modo de prueba usa negocio, agenda y calendario en memoria aislados.
 
 ## Invariantes

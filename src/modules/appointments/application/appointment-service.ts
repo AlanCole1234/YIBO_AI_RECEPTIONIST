@@ -145,6 +145,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       const cancelled = await this.calendar.cancelEvent({
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
+        employeeId: appointment.employeeId,
         externalEventId: appointment.externalCalendarEventId,
       });
       if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
@@ -202,12 +203,14 @@ export class AppointmentServiceImpl implements AppointmentService {
       const oldCancelled = await this.calendar.cancelEvent({
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
+        employeeId: appointment.employeeId,
         externalEventId: appointment.externalCalendarEventId!,
       });
       if (!oldCancelled.ok) {
         await this.calendar.cancelEvent({
           tenantId: appointment.tenantId,
           locationId: appointment.locationId,
+          employeeId: appointment.employeeId,
           externalEventId: replacement.value.externalEventId,
         });
         return failure<RescheduleAppointmentError>(calendarFailure(oldCancelled.error));

@@ -38,7 +38,7 @@ describe("InMemoryCalendarAdapter", () => {
     const created = await calendar.createEvent(event);
     if (!created.ok) throw new Error("Expected event creation to succeed");
 
-    await expect(calendar.cancelEvent({ tenantId: event.tenantId, locationId: event.locationId, externalEventId: created.value.externalEventId }))
+    await expect(calendar.cancelEvent({ tenantId: event.tenantId, locationId: event.locationId, employeeId: event.employeeId, externalEventId: created.value.externalEventId }))
       .resolves.toEqual({ ok: true, value: undefined });
     await expect(calendar.getBusyIntervals({
       tenantId: event.tenantId, locationId: event.locationId, employeeId: event.employeeId,
@@ -51,7 +51,7 @@ describe("InMemoryCalendarAdapter", () => {
     const created = await calendar.createEvent(event);
     if (!created.ok) throw new Error("Expected event creation to succeed");
 
-    await expect(calendar.cancelEvent({ tenantId: "another-tenant", locationId: event.locationId, externalEventId: created.value.externalEventId }))
+    await expect(calendar.cancelEvent({ tenantId: "another-tenant", locationId: event.locationId, employeeId: event.employeeId, externalEventId: created.value.externalEventId }))
       .resolves.toEqual({ ok: false, error: { code: "EVENT_NOT_FOUND" } });
   });
 
