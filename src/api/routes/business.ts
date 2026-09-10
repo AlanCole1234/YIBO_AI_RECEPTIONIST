@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
+import { parseIfMatch } from "../optimistic-version.js";
 
 export async function registerBusinessRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
   server.get(
@@ -97,14 +98,6 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
     },
   );
 }
-
-const parseIfMatch = (header: string | string[] | undefined): number | null => {
-  if (Array.isArray(header) || header === undefined) return null;
-  const match = /^(?:W\/)?"?(\d+)"?$/.exec(header.trim());
-  if (!match) return null;
-  const version = Number(match[1]);
-  return Number.isSafeInteger(version) && version >= 1 ? version : null;
-};
 
 type CurrentBusinessProfile = Extract<
   Awaited<ReturnType<YiboApplication["business"]["getBusinessProfile"]>>,

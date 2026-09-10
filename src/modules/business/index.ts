@@ -1,4 +1,10 @@
 export { BusinessDirectoryService } from "./application/business-directory-service.js";
+export { BusinessCatalogService } from "./application/business-catalog-service.js";
+export type {
+  BusinessCatalogError,
+  ServiceCatalogMutation,
+  ServiceCatalogSnapshot,
+} from "./application/business-catalog-service.js";
 export type {
   BusinessDirectory,
   BusinessLookupError,

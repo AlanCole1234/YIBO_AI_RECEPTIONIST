@@ -140,6 +140,9 @@ La configuración multi-sucursal completa se lee y reemplaza mediante
 `/api/admin/business-configuration`; `PUT` exige `If-Match`, incrementa la
 versión atómicamente y responde `409 CONFIGURATION_VERSION_CONFLICT` si otro
 editor ganó la carrera.
+El catálogo tenant-wide de servicios cuenta además con endpoints CRUD en
+`/api/admin/services`; cada mutación usa la misma versión del documento,
+auditoría y protección contra borrar o desactivar referencias asignadas.
 
 ## Superficie y brechas activas
 

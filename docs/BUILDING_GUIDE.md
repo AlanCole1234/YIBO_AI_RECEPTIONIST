@@ -28,8 +28,8 @@ Un checkpoint exige además `pnpm test` y `pnpm build`.
   puertos y no define contratos de negocio.
 - La IA nunca es frontera de autorización. Toda tool recibe datos no confiables
   y se combina con contexto de servidor.
-- Toda consulta y mutación tenant-owned incluye tenant; el roadmap añadirá
-  location con la misma disciplina.
+- Toda consulta y mutación tenant-owned incluye tenant y, cuando corresponde,
+  location como contexto confiable del servidor.
 - Scheduling sólo consulta/valida. Appointments es dueño de mutaciones y vuelve
   a validar bajo control de concurrencia.
 - Fechas internas en UTC; fechas humanas se interpretan en la zona IANA del
@@ -67,7 +67,7 @@ pnpm build
 Para una prueba específica:
 
 ```sh
-pnpm vitest run tests/ruta/al-archivo.test.ts
+pnpm test -- tests/ruta/al-archivo.test.ts
 ```
 
 ## Definition of Done

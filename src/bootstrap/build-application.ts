@@ -21,6 +21,7 @@ import {
 } from "../modules/appointments/index.js";
 import {
   BusinessDirectoryService,
+  BusinessCatalogService,
   InMemoryBusinessRepository,
   upgradeBusinessProfile,
   type BusinessDirectory,
@@ -90,6 +91,7 @@ export interface YiboApplication {
   tenantId: string;
   config: ApplicationConfiguration;
   business: BusinessDirectory;
+  businessCatalog: BusinessCatalogService;
   customers: CustomerService;
   scheduling: SchedulingService;
   appointments: AppointmentService;
@@ -172,6 +174,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("audit"),
   );
   const business = new BusinessDirectoryService(businessRepository);
+  const businessCatalog = new BusinessCatalogService(business);
   const customerRepository = new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
     customerRepository,
@@ -300,6 +303,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     tenantId,
     config,
     business,
+    businessCatalog,
     customers,
     scheduling,
     appointments,
