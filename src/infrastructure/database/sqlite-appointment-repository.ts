@@ -5,6 +5,7 @@ import type { AppointmentId, IdempotencyKey, RegionId, TenantId } from "../../sh
 
 type AppointmentRow = {
   id: string; tenant_id: string; location_id: string; customer_id: string; service_id: string; employee_id: string;
+  service_name_snapshot: string; price_amount_minor: number; price_currency: string;
   start_at: string; end_at: string; status: Appointment["status"]; idempotency_key: string;
   source: Appointment["source"]; source_call_id: string | null; external_calendar_event_id: string | null;
 };
@@ -34,16 +35,20 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
   async save(value: Appointment): Promise<void> {
     this.database.prepare(`
       INSERT INTO appointments(
-        region_id, tenant_id, location_id, id, customer_id, service_id, employee_id, start_at, end_at,
-        status, idempotency_key, source, source_call_id, external_calendar_event_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        region_id, tenant_id, location_id, id, customer_id, service_id, service_name_snapshot,
+        price_amount_minor, price_currency, employee_id, start_at, end_at, status, idempotency_key,
+        source, source_call_id, external_calendar_event_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(region_id, tenant_id, id) DO UPDATE SET
         location_id = excluded.location_id, customer_id = excluded.customer_id, service_id = excluded.service_id,
-        employee_id = excluded.employee_id, start_at = excluded.start_at, end_at = excluded.end_at,
+        service_name_snapshot = excluded.service_name_snapshot, price_amount_minor = excluded.price_amount_minor,
+        price_currency = excluded.price_currency, employee_id = excluded.employee_id,
+        start_at = excluded.start_at, end_at = excluded.end_at,
         status = excluded.status, idempotency_key = excluded.idempotency_key, source = excluded.source,
         source_call_id = excluded.source_call_id, external_calendar_event_id = excluded.external_calendar_event_id
     `).run(
-      this.region, value.tenantId, value.locationId, value.id, value.customerId, value.serviceId, value.employeeId,
+      this.region, value.tenantId, value.locationId, value.id, value.customerId, value.serviceId,
+      value.serviceNameSnapshot, value.priceAmountMinor, value.priceCurrency, value.employeeId,
       value.startAt, value.endAt, value.status, value.idempotencyKey, value.source,
       value.sourceCallId ?? null, value.externalCalendarEventId ?? null,
     );
@@ -67,6 +72,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
     return {
       id: value.id, tenantId: value.tenant_id, locationId: value.location_id, customerId: value.customer_id,
       serviceId: value.service_id, employeeId: value.employee_id, startAt: value.start_at,
+      serviceNameSnapshot: value.service_name_snapshot, priceAmountMinor: value.price_amount_minor,
+      priceCurrency: value.price_currency,
       endAt: value.end_at, status: value.status, idempotencyKey: value.idempotency_key,
       source: value.source,
       ...(value.source_call_id ? { sourceCallId: value.source_call_id } : {}),
@@ -76,7 +83,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
 }
 
 const SELECT_APPOINTMENT = `
-  SELECT id, tenant_id, location_id, customer_id, service_id, employee_id, start_at, end_at, status,
+  SELECT id, tenant_id, location_id, customer_id, service_id, service_name_snapshot,
+    price_amount_minor, price_currency, employee_id, start_at, end_at, status,
     idempotency_key, source, source_call_id, external_calendar_event_id
   FROM appointments WHERE region_id = ? AND tenant_id = ?
 `;

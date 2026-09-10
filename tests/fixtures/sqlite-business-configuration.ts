@@ -15,6 +15,7 @@ try {
   await appointments.save({
     id: "appointment-1", tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default",
     customerId: "customer-1", serviceId: "consultation", employeeId: "employee-1",
+    serviceNameSnapshot: "Consulta", priceAmountMinor: 0, priceCurrency: "MXN",
     startAt: "2026-09-11T15:00:00.000Z", endAt: "2026-09-11T15:30:00.000Z",
     status: "CONFIRMED", idempotencyKey: "professional-usage", source: "API",
   });
@@ -36,7 +37,8 @@ try {
       tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "other", professionalId: "employee-1",
     }),
   };
-  console.log(JSON.stringify({ initialVersion: initial.version, saved, stale, final, professionalUsage }));
+  const storedAppointment = await appointments.findById(DEVELOPMENT_BUSINESS.tenantId, "appointment-1");
+  console.log(JSON.stringify({ initialVersion: initial.version, saved, stale, final, professionalUsage, storedAppointment }));
 } finally {
   database.close();
 }

@@ -22,6 +22,9 @@ export interface Appointment {
   locationId: LocationId;
   customerId: CustomerId;
   serviceId: ServiceId;
+  serviceNameSnapshot: string;
+  priceAmountMinor: number;
+  priceCurrency: string;
   employeeId: EmployeeId;
   startAt: ISODateTime;
   endAt: ISODateTime;

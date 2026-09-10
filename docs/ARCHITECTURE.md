@@ -100,7 +100,8 @@ Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el
 reemplazo antes de cancelar el evento anterior y compensa si falla el segundo
 paso. La cancelación y reprogramación verifican propiedad del cliente en la
-frontera de tools.
+frontera de tools. Al crear, la cita congela el nombre y `Money` de la oferta;
+reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 
 ## Persistencia e integraciones
 
@@ -111,7 +112,8 @@ frontera de tools.
   persistidas antes de permitir una eliminación.
 - Las migraciones viven en `src/infrastructure/database/migrations/`; la v7
   agrega `location_id` a números, llamadas y citas y la v8 agrega la versión
-  optimista del documento de negocio. Ambas conservan los registros previos.
+  optimista del documento de negocio. La v9 rellena nombre/precio histórico en
+  citas existentes. Todas conservan los registros previos.
 - Google OAuth guarda tokens cifrados por tenant.
 - Google Calendar usa hoy un `calendarId` global del entorno y resuelve la zona
   desde el perfil del tenant.

@@ -12,6 +12,9 @@ describe("SQLite business configuration", () => {
       stale: { saved: false, currentVersion: 2 },
       final: { version: 2, profile: { name: "SQLite updated" } },
       professionalUsage: { anyLocation: true, defaultLocation: true, otherLocation: false },
+      storedAppointment: {
+        serviceNameSnapshot: "Consulta", priceAmountMinor: 0, priceCurrency: "MXN",
+      },
     });
   });
 });

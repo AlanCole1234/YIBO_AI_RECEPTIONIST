@@ -48,8 +48,8 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
     const configuration = await this.businesses.getLocation(command.tenantId, command.locationId);
     if (!configuration.ok) return failure<CreateAppointmentError>({ code: "VALIDATION_ERROR", message: "Business is unavailable" });
-    const offered = configuration.value.location.services.some((service) => service.serviceId === command.serviceId && service.active);
-    if (!offered || !configuration.value.business.services.some((service) => service.id === command.serviceId && service.active)) {
+    const offer = configuration.value.location.services.find((service) => service.serviceId === command.serviceId && service.active);
+    if (!offer || !configuration.value.business.services.some((service) => service.id === command.serviceId && service.active)) {
       return failure<CreateAppointmentError>({ code: "SERVICE_NOT_FOUND" });
     }
     const assigned = configuration.value.location.professionals.some((professional) =>
@@ -81,6 +81,9 @@ export class AppointmentServiceImpl implements AppointmentService {
       const pending: Appointment = {
         id: this.createId(),
         ...command,
+        serviceNameSnapshot: service.name,
+        priceAmountMinor: offer.price.amountMinor,
+        priceCurrency: offer.price.currency,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
         status: "PENDING_CONFIRMATION",
@@ -169,18 +172,14 @@ export class AppointmentServiceImpl implements AppointmentService {
         );
       }
 
-      const configuration = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
-      const service = configuration.ok
-        ? configuration.value.business.services.find((candidate) => candidate.id === appointment.serviceId)
-        : undefined;
       const customer = await this.customers.get(appointment.tenantId, appointment.customerId);
       const replacement = await this.calendar.createEvent({
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
         appointmentId: appointment.id,
         employeeId: appointment.employeeId,
-        title: `${service?.name ?? "Appointment"} appointment`,
-        serviceName: service?.name ?? "Appointment",
+        title: `${appointment.serviceNameSnapshot} appointment`,
+        serviceName: appointment.serviceNameSnapshot,
         ...(customer ? { patient: customer } : {}),
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,

@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 3 — Catálogos, precios y políticas de agenda**.
-- Tarea activa: **PRICE-002 — snapshot histórico de precio en citas**.
+- Tarea activa: **SCHED-001 — intersección de horarios por sucursal/profesional**.
 - Último checkpoint cerrado: Checkpoint 2; `pnpm typecheck`, 175 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -66,8 +66,8 @@ con `pnpm test` y `pnpm build`.
 | CAT-001 | DONE | CRUD admin versionado, validación, auditoría y protección de referencias |
 | CAT-002 | DONE | CRUD de profesionales/asignaciones, horario y bloqueo de referencias usadas |
 | PRICE-001 | DONE | Money en unidades menores, moneda ISO 4217 y upgrade v2 transitorio |
-| PRICE-002 | IN_PROGRESS | Snapshot de nombre y precio en la cita |
-| SCHED-001 | TODO | Horario de sucursal intersectado con horario profesional |
+| PRICE-002 | DONE | Citas congelan nombre/precio; migración v9 rellena registros existentes |
+| SCHED-001 | IN_PROGRESS | Horario de sucursal intersectado con horario profesional |
 | SCHED-002 | TODO | Cierres administrativos privados |
 | SCHED-003 | TODO | Políticas estructuradas de agenda |
 | SCHED-004 | TODO | Políticas aplicadas a consulta y revalidación |

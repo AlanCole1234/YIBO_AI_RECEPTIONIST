@@ -3,7 +3,9 @@ import { failure, success } from "../../src/shared/domain/result.js";
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessProfile,
+  type VersionedBusinessProfile,
 } from "../../src/modules/business/index.js";
 import type { SchedulingService } from "../../src/modules/scheduling/index.js";
 import {
@@ -63,20 +65,21 @@ const command = {
   sourceCallId: "call-1",
 };
 
-function fixture(options: { scheduling?: SchedulingService } = {}) {
+function fixture(options: { scheduling?: SchedulingService; business?: VersionedBusinessProfile } = {}) {
   const repository = new InMemoryAppointmentRepository();
   const calendar = new InMemoryAppointmentCalendar();
+  const businessRepository = new InMemoryBusinessRepository([options.business ?? business]);
   let nextId = 1;
   const service = new AppointmentServiceImpl(
     repository,
     customers,
-    new BusinessDirectoryService(new InMemoryBusinessRepository([business])),
+    new BusinessDirectoryService(businessRepository),
     options.scheduling ?? scheduling(),
     calendar,
     new InMemoryAppointmentConcurrencyGuard(),
     () => `appointment-${nextId++}`,
   );
-  return { calendar, repository, service };
+  return { businessRepository, calendar, repository, service };
 }
 
 describe("AppointmentServiceImpl", () => {
@@ -88,6 +91,9 @@ describe("AppointmentServiceImpl", () => {
     expect(result).toEqual({ ok: true, value: {
       id: "appointment-1",
       ...command,
+      serviceNameSnapshot: "Consultation",
+      priceAmountMinor: 0,
+      priceCurrency: "MXN",
       startAt: "2026-08-10T15:00:00.000Z",
       endAt: "2026-08-10T15:30:00.000Z",
       status: "CONFIRMED",
@@ -135,6 +141,28 @@ describe("AppointmentServiceImpl", () => {
       locationId: "default",
       appointmentId: "appointment-1",
     })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
+  });
+
+  it("freezes service name and price independently from later catalog changes", async () => {
+    const priced = upgradeBusinessProfile(business);
+    priced.locations[0]!.services[0]!.price = { amountMinor: 85000, currency: "MXN" };
+    const { businessRepository, service } = fixture({ business: priced });
+
+    const created = await service.createAppointment(command);
+    expect(created).toMatchObject({
+      ok: true,
+      value: { serviceNameSnapshot: "Consultation", priceAmountMinor: 85000, priceCurrency: "MXN" },
+    });
+
+    priced.services[0]!.name = "Renamed later";
+    priced.locations[0]!.services[0]!.price = { amountMinor: 99000, currency: "MXN" };
+    await businessRepository.save(priced);
+    await expect(service.getAppointment({
+      tenantId: command.tenantId, locationId: command.locationId, appointmentId: "appointment-1",
+    })).resolves.toMatchObject({
+      ok: true,
+      value: { serviceNameSnapshot: "Consultation", priceAmountMinor: 85000, priceCurrency: "MXN" },
+    });
   });
 
   it("never returns an appointment through another location", async () => {

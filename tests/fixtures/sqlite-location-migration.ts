@@ -63,7 +63,8 @@ try {
     versions: database.prepare("SELECT version FROM schema_migrations ORDER BY version").all(),
     calledNumber: database.prepare("SELECT phone, location_id FROM called_numbers").get(),
     call: database.prepare("SELECT call_id, location_id FROM calls").get(),
-    appointment: database.prepare("SELECT id, location_id FROM appointments").get(),
+    appointment: database.prepare(`SELECT id, location_id, service_name_snapshot,
+      price_amount_minor, price_currency FROM appointments`).get(),
     counts: {
       calledNumbers: (database.prepare("SELECT COUNT(*) count FROM called_numbers").get() as { count: number }).count,
       calls: (database.prepare("SELECT COUNT(*) count FROM calls").get() as { count: number }).count,
