@@ -9,6 +9,7 @@ import { SqliteCallRepository } from "../infrastructure/database/sqlite-call-rep
 import { SqliteConversationUsageRepository } from "../infrastructure/database/sqlite-conversation-usage-repository.js";
 import { SqliteGoogleTokenStore } from "../infrastructure/database/sqlite-google-token-store.js";
 import { SqliteBusinessRepository } from "../infrastructure/database/sqlite-business-repository.js";
+import { SqliteAdminIdentityRepository } from "../infrastructure/database/sqlite-admin-identity-repository.js";
 import { AgentConfigurationService, DEFAULT_REALTIME_MODEL } from "../modules/agents/index.js";
 import {
   GoogleCalendarAdapter,
@@ -91,6 +92,11 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     agentConfigurationRepository: configurationRepository,
     usageRecorder,
     callRepository,
+    adminIdentityRepository: options.adminIdentityRepository
+      ?? new SqliteAdminIdentityRepository(database, tenant.region),
+    ...(environment.YIBO_ADMIN_SESSION_KEY?.trim()
+      ? { adminSessionSecret: environment.YIBO_ADMIN_SESSION_KEY.trim() }
+      : {}),
     ...(google ? { googleOAuth: google.oauth, calendar: google.calendar } : {}),
   });
 }

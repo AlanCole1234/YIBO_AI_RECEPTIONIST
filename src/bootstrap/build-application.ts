@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   AgentDefinitionService,
   AgentConfigurationService,
@@ -72,6 +72,14 @@ import { loadConfiguration, type ApplicationConfiguration } from "./configuratio
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
 import type { OrganizationCostReader } from "../modules/billing/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
+import {
+  AdminCredentialService,
+  InMemoryAdminIdentityRepository,
+  ScryptPasswordHasher,
+  SignedAdminSession,
+  type AdminIdentityRepository,
+  type AdminSessionPort,
+} from "../modules/auth/index.js";
 type ApplicationCalendar = CalendarPort & AppointmentCalendarPort;
 
 export interface YiboApplication {
@@ -95,6 +103,10 @@ export interface YiboApplication {
   billing?: OrganizationCostReader;
   googleOAuth?: GoogleOAuthService;
   developerTestModeAuthorized?: boolean;
+  adminAuth: {
+    credentials: AdminCredentialService;
+    sessions: AdminSessionPort;
+  };
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -114,6 +126,9 @@ export interface BuildApplicationOptions {
   billing?: OrganizationCostReader;
   calendar?: ApplicationCalendar;
   googleOAuth?: GoogleOAuthService;
+  adminIdentityRepository?: AdminIdentityRepository;
+  adminSession?: AdminSessionPort;
+  adminSessionSecret?: string;
   /** Only the local development voice harness may set this true. */
   developerTestModeAuthorized?: boolean;
 }
@@ -133,6 +148,17 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     ? new OpenAIOrganizationCostsAdapter(config.openAiAdminKey)
     : undefined);
   const businessRepository = options.businessRepository ?? new InMemoryBusinessRepository(profiles);
+  const adminIdentityRepository = options.adminIdentityRepository ?? new InMemoryAdminIdentityRepository();
+  const adminAuth = {
+    credentials: new AdminCredentialService(
+      adminIdentityRepository,
+      new ScryptPasswordHasher(),
+      () => `admin-${randomUUID()}`,
+    ),
+    sessions: options.adminSession ?? new SignedAdminSession(
+      options.adminSessionSecret ?? randomBytes(32).toString("base64url"),
+    ),
+  };
   const business = new BusinessDirectoryService(businessRepository);
   const customerRepository = new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
@@ -271,6 +297,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     calendar,
     telephony,
     ids,
+    adminAuth,
     ...(billing ? { billing } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
     registerCallMedia: (callId, transport) => voice.register(callId, transport),

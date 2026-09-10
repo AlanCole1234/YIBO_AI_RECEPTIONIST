@@ -14,3 +14,5 @@ export type {
   PasswordHasher,
 } from "./ports/admin-identity-repository.js";
 export { ScryptPasswordHasher } from "./infrastructure/scrypt-password-hasher.js";
+export { SignedAdminSession } from "./infrastructure/signed-admin-session.js";
+export { InMemoryAdminIdentityRepository } from "./infrastructure/in-memory-admin-identity-repository.js";
