@@ -103,6 +103,9 @@ asignación, no mediante un significado ambiguo de lista vacía.
 Los cierres se configuran como rangos de reloj local y Scheduling los convierte
 con la zona IANA de la sucursal tanto al listar como al revalidar. El motivo
 administrativo no forma parte de `AvailableSlot` ni de los errores para caller.
+La política completa de cada sucursal tiene una API administrativa versionada
+en `/api/admin/locations/:locationId/scheduling-policy`; sólo admite el esquema
+soportado y un servicio predeterminado activo de esa sucursal.
 
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el

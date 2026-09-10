@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 3 — Catálogos, precios y políticas de agenda**.
-- Tarea activa: **SCHED-003 — políticas estructuradas de agenda**.
+- Tarea activa: **SCHED-004 — aplicar políticas en cálculo y revalidación**.
 - Último checkpoint cerrado: Checkpoint 2; `pnpm typecheck`, 175 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -69,8 +69,8 @@ con `pnpm test` y `pnpm build`.
 | PRICE-002 | DONE | Citas congelan nombre/precio; migración v9 rellena registros existentes |
 | SCHED-001 | DONE | Intersección por intervalos; horario vacío del profesional hereda sucursal |
 | SCHED-002 | DONE | Cierres locales bloquean slots; el motivo queda sólo en administración |
-| SCHED-003 | IN_PROGRESS | Políticas estructuradas de agenda |
-| SCHED-004 | TODO | Políticas aplicadas a consulta y revalidación |
+| SCHED-003 | DONE | API versionada y validación completa de política por sucursal |
+| SCHED-004 | IN_PROGRESS | Políticas aplicadas a consulta y revalidación |
 | SCHED-005 | TODO | Capacidad y concurrencia por profesional/sucursal |
 | CAL-001 | TODO | Resolver de calendario por tenant/location/employee |
 | CAL-002 | TODO | Fallback de sucursal y override profesional |

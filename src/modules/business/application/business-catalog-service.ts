@@ -2,6 +2,7 @@ import { failure, success } from "../../../shared/domain/result.js";
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type {
   LocationProfessionalAssignment,
+  LocationSchedulingPolicy,
   ProfessionalDefinition,
   TenantServiceDefinition,
 } from "../domain/multi-location-business.js";
@@ -38,6 +39,12 @@ export interface ProfessionalCatalogSnapshot {
   version: number;
   professionals: ProfessionalDefinition[];
   assignments: Array<{ locationId: string; professionals: LocationProfessionalAssignment[] }>;
+}
+
+export interface LocationPolicySnapshot {
+  version: number;
+  locationId: string;
+  policy: LocationSchedulingPolicy;
 }
 
 export class BusinessCatalogService {
@@ -247,6 +254,41 @@ export class BusinessCatalogService {
     }, expectedVersion);
     return updated.ok
       ? success({ version: updated.value.version, locationId, deletedProfessionalId: professionalId })
+      : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async getLocationPolicy(tenantId: TenantId, locationId: string) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    return location
+      ? success<LocationPolicySnapshot>({
+          version: current.value.version,
+          locationId,
+          policy: structuredClone(location.policies),
+        })
+      : failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+  }
+
+  async updateLocationPolicy(
+    tenantId: TenantId,
+    locationId: string,
+    policy: LocationSchedulingPolicy,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (!current.value.configuration.locations.some(({ id }) => id === locationId)) {
+      return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((location) => location.id === locationId
+        ? { ...location, policies: structuredClone(policy) }
+        : location),
+    }, expectedVersion);
+    return updated.ok
+      ? success<LocationPolicySnapshot>({ version: updated.value.version, locationId, policy: structuredClone(policy) })
       : failure<BusinessCatalogError>(updated.error);
   }
 }

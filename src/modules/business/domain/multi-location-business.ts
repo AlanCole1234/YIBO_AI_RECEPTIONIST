@@ -185,7 +185,8 @@ export const validateMultiLocationBusiness = (
     for (const field of ["minimumLeadTimeMinutes", "maximumBookingHorizonDays", "maximumResults",
       "minimumCancellationNoticeMinutes", "minimumRescheduleNoticeMinutes", "concurrentCapacity"] as const) {
       const value = location.policies[field];
-      if (!Number.isInteger(value) || value < (field === "concurrentCapacity" || field === "maximumResults" ? 1 : 0)) {
+      const minimum = ["concurrentCapacity", "maximumResults", "maximumBookingHorizonDays"].includes(field) ? 1 : 0;
+      if (!Number.isSafeInteger(value) || value < minimum) {
         errors.push({ path: `${path}.policies.${field}`, message: "Invalid non-negative policy value." });
       }
     }

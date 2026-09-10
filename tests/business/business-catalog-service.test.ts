@@ -107,4 +107,24 @@ describe("BusinessCatalogService", () => {
     await expect(catalog.deleteProfessional(DEVELOPMENT_BUSINESS.tenantId, "employee-2", 2))
       .resolves.toEqual({ ok: false, error: { code: "PROFESSIONAL_IN_USE" } });
   });
+
+  it("updates a complete location scheduling policy under the shared version", async () => {
+    const catalog = createCatalog();
+    const current = await catalog.getLocationPolicy(DEVELOPMENT_BUSINESS.tenantId, "default");
+    expect(current).toMatchObject({ ok: true, value: { version: 1, policy: { slotIncrementMinutes: 15 } } });
+    if (!current.ok) throw new Error("Expected policy");
+    await expect(catalog.updateLocationPolicy(DEVELOPMENT_BUSINESS.tenantId, "default", {
+      ...current.value.policy,
+      slotIncrementMinutes: 10,
+      minimumLeadTimeMinutes: 120,
+      maximumBookingHorizonDays: 60,
+      maximumResults: 8,
+      minimumCancellationNoticeMinutes: 240,
+      minimumRescheduleNoticeMinutes: 360,
+      concurrentCapacity: 2,
+    }, 1)).resolves.toMatchObject({
+      ok: true,
+      value: { version: 2, policy: { slotIncrementMinutes: 10, concurrentCapacity: 2 } },
+    });
+  });
 });
