@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type { GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
+import type { GoogleCalendarConnectionError, GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
 
 export interface GoogleOAuthConfig {
   clientId?: string;
@@ -10,6 +10,9 @@ export interface GoogleOAuthConfig {
 }
 
 type AuthorizationState = { tenantId: string; returnTo: string; expiresAt: number; nonce: string };
+type AccessTokenResult =
+  | { ok: true; token: string }
+  | { ok: false; errorCode: Extract<GoogleCalendarConnectionError, "CALENDAR_NOT_CONNECTED" | "AUTHORIZATION_REQUIRED" | "CALENDAR_API_UNAVAILABLE"> };
 
 export class GoogleOAuthService {
   constructor(
@@ -47,11 +50,19 @@ export class GoogleOAuthService {
         redirect_uri: this.config.redirectUri!, grant_type: "authorization_code",
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      oauthLog("google.oauth.token_exchange.failed", { tenantId: pending.tenantId, httpStatus: response.status });
+      return null;
+    }
     const payload = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
-    if (!payload.access_token || !payload.refresh_token) return null;
+    const previous = await this.tokens.get(pending.tenantId);
+    const refreshToken = payload.refresh_token ?? previous?.refreshToken;
+    if (!payload.access_token || !refreshToken) {
+      oauthLog("google.oauth.token_exchange.failed", { tenantId: pending.tenantId, reason: "refresh_token_missing" });
+      return null;
+    }
     await this.tokens.save(pending.tenantId, {
-      accessToken: payload.access_token, refreshToken: payload.refresh_token,
+      accessToken: payload.access_token, refreshToken,
       expiresAt: new Date(Date.now() + (payload.expires_in ?? 3600) * 1000).toISOString(),
     });
     return { tenantId: pending.tenantId, returnTo: pending.returnTo };
@@ -62,27 +73,45 @@ export class GoogleOAuthService {
   }
 
   async accessToken(tenantId: string): Promise<string | null> {
-    const current = await this.tokens.get(tenantId);
-    if (!current) return null;
-    if (new Date(current.expiresAt).valueOf() > Date.now() + 60_000) return current.accessToken;
-    if (!current.refreshToken || !this.isConfigured()) return null;
+    const result = await this.accessTokenResult(tenantId);
+    return result.ok ? result.token : null;
+  }
 
-    const response = await this.fetcher("https://oauth2.googleapis.com/token", {
-      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
-        refresh_token: current.refreshToken, grant_type: "refresh_token",
-      }),
-    });
-    if (!response.ok) return null;
-    const payload = await response.json() as { access_token?: string; expires_in?: number };
-    if (!payload.access_token) return null;
-    const refreshed: GoogleToken = {
-      accessToken: payload.access_token, refreshToken: current.refreshToken,
-      expiresAt: new Date(Date.now() + (payload.expires_in ?? 3600) * 1000).toISOString(),
-    };
-    await this.tokens.save(tenantId, refreshed);
-    return refreshed.accessToken;
+  async accessTokenResult(tenantId: string): Promise<AccessTokenResult> {
+    const current = await this.tokens.get(tenantId);
+    if (!current) return { ok: false, errorCode: "CALENDAR_NOT_CONNECTED" };
+    if (new Date(current.expiresAt).valueOf() > Date.now() + 60_000) return { ok: true, token: current.accessToken };
+    if (!current.refreshToken || !this.isConfigured()) return { ok: false, errorCode: "AUTHORIZATION_REQUIRED" };
+
+    try {
+      const response = await this.fetcher("https://oauth2.googleapis.com/token", {
+        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
+          refresh_token: current.refreshToken, grant_type: "refresh_token",
+        }),
+      });
+      if (!response.ok) {
+        const errorCode = response.status === 400 || response.status === 401 ? "AUTHORIZATION_REQUIRED" : "CALENDAR_API_UNAVAILABLE";
+        oauthLog("google.oauth.refresh.failed", { tenantId, httpStatus: response.status, errorCode });
+        return { ok: false, errorCode };
+      }
+      const payload = await response.json() as { access_token?: string; expires_in?: number };
+      if (!payload.access_token) {
+        oauthLog("google.oauth.refresh.failed", { tenantId, reason: "access_token_missing", errorCode: "AUTHORIZATION_REQUIRED" });
+        return { ok: false, errorCode: "AUTHORIZATION_REQUIRED" };
+      }
+      const refreshed: GoogleToken = {
+        accessToken: payload.access_token, refreshToken: current.refreshToken,
+        expiresAt: new Date(Date.now() + (payload.expires_in ?? 3600) * 1000).toISOString(),
+      };
+      await this.tokens.save(tenantId, refreshed);
+      oauthLog("google.oauth.refresh.completed", { tenantId });
+      return { ok: true, token: refreshed.accessToken };
+    } catch {
+      oauthLog("google.oauth.refresh.failed", { tenantId, errorCode: "CALENDAR_API_UNAVAILABLE" });
+      return { ok: false, errorCode: "CALENDAR_API_UNAVAILABLE" };
+    }
   }
 
   private isConfigured(): boolean {
@@ -109,6 +138,8 @@ export class GoogleOAuthService {
     return createHmac("sha256", this.config.stateSigningKey!).update(payload).digest("base64url");
   }
 }
+
+const oauthLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
 
 const isLocalDashboardUrl = (value: string): boolean => {
   try {

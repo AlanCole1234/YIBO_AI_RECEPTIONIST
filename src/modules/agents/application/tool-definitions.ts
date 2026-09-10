@@ -67,14 +67,4 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description: "Transfer this call to the business's configured human destination.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
-  {
-    name: "enable_developer_test_mode",
-    description: "Enable local Developer Test Mode. This is only available to a server-authorized local developer session; never claim it is enabled unless this tool succeeds.",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
-  },
-  {
-    name: "delete_test_appointments",
-    description: "Delete only test appointments created during this authorized Developer Test Mode session. Never use this for normal patient appointments.",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
-  },
 ];

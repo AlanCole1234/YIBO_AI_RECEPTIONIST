@@ -32,9 +32,7 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
       ].join(" "),
       locale,
       voice: "marin",
-        enabledTools: AGENT_TOOL_DEFINITIONS
-          .filter((tool) => tool.name !== "enable_developer_test_mode" && tool.name !== "delete_test_appointments")
-          .map((tool) => tool.name),
+      enabledTools: AGENT_TOOL_DEFINITIONS.map((tool) => tool.name),
       conversation: {
         model,
         maxOutputTokens: 512,

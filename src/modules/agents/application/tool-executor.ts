@@ -11,16 +11,13 @@ import type {
   ToolExecutor,
 } from "./contracts.js";
 import { resolveNaturalDateRange } from "../domain/natural-date-range.js";
-import { dateTimeInTimezone, normalizeDateTimeForTimezone } from "../../scheduling/domain/time.js";
+import { dateTimeInTimezone, displayTimeInTimezone, normalizeDateTimeForTimezone } from "../../scheduling/domain/time.js";
 
 type Input = Record<string, unknown>;
 type ConfirmableAvailability = { requestedStartAt?: string; availableStartAts: string[] };
 
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly confirmableAvailabilityByCall = new Map<string, ConfirmableAvailability>();
-  private readonly testCustomersByCall = new Map<string, string>();
-  private readonly testAppointmentsByCall = new Map<string, string[]>();
-  private readonly enabledTestCalls = new Set<string>();
 
   constructor(
     private readonly scheduling: SchedulingService,
@@ -29,7 +26,6 @@ export class ToolExecutorImpl implements ToolExecutor {
     private readonly businesses?: BusinessDirectory,
     private readonly clock: Clock = { now: () => new Date() },
     private readonly customers?: CustomerService,
-    private readonly developerTest?: { scheduling: SchedulingService; appointments: AppointmentService },
   ) {}
 
   async execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult> {
@@ -44,8 +40,6 @@ export class ToolExecutorImpl implements ToolExecutor {
       case "cancel_appointment": return this.cancelAppointment(context, call);
       case "reschedule_appointment": return this.rescheduleAppointment(context, call);
       case "transfer_to_human": return this.transferToHuman(context, call);
-      case "enable_developer_test_mode": return this.enableDeveloperTestMode(context, call);
-      case "delete_test_appointments": return this.deleteTestAppointments(context, call);
     }
   }
 
@@ -70,11 +64,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     const serviceId = await this.resolveServiceId(context.tenantId, input.service);
     if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const scheduling = testMode ? this.developerTest?.scheduling ?? this.scheduling : this.scheduling;
-    const employeeId = input.employeeId as string | undefined ?? (testMode
-      ? await this.defaultTestEmployeeId(context.tenantId, serviceId)
-      : undefined);
+    const employeeId = input.employeeId as string | undefined;
     const absoluteRange = dateTime(input.rangeStart) && dateTime(input.rangeEnd)
       ? await this.normalizeRange(context.tenantId, input.rangeStart, input.rangeEnd)
       : undefined;
@@ -91,7 +81,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       rangeStart: await this.traceDateTime(context.tenantId, range.rangeStart),
       rangeEnd: await this.traceDateTime(context.tenantId, range.rangeEnd),
     });
-    const result = await scheduling.findAvailableSlots({
+    const result = await this.scheduling.findAvailableSlots({
       tenantId: context.tenantId,
       serviceId,
       ...(employeeId ? { employeeId } : {}),
@@ -126,7 +116,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       : undefined;
     if (text(input.requestedStartAt) && !requestedStartAt) return invalid(call, "requestedStartAt must be a valid clinic-local or offset-aware datetime");
     const requested = requestedStartAt
-      ? await scheduling.validateSlot({ tenantId: context.tenantId, serviceId, employeeId: employeeId ?? result.value[0]?.employeeId ?? "", startAt: requestedStartAt.instant })
+      ? await this.scheduling.validateSlot({ tenantId: context.tenantId, serviceId, employeeId: employeeId ?? result.value[0]?.employeeId ?? "", startAt: requestedStartAt.instant })
       : undefined;
     if (requestedStartAt) {
       calendarLog("calendar.requested_time.parsed", {
@@ -141,19 +131,41 @@ export class ToolExecutorImpl implements ToolExecutor {
       ...(requested?.ok ? { requestedStartAt: requestedStartAt?.instant } : {}),
       availableStartAts: result.value.map((slot) => slot.startAt),
     });
+    const clinicTimezone = business?.ok ? business.value.timezone : undefined;
+    const clinicLocale = business?.ok ? business.value.locale : "en-US";
+    const callerSlots = clinicTimezone
+      ? result.value.map((slot) => callerSlot(slot, clinicTimezone, clinicLocale))
+      : [];
+    const earliestCallerSlot = callerSlots[0];
+    const data = {
+      success: true,
+      requestedPeriod: { startAt: range.rangeStart, endAt: range.rangeEnd, ...(naturalRange ? { label: naturalRange.label } : {}) },
+      availableSlots: result.value,
+      // Kept temporarily for existing clients while Realtime uses the clearer names above.
+      slots: result.value,
+      earliestSlot: result.value[0] ?? null,
+      // Canonical instants are for tool-to-tool booking only. Realtime must use
+      // earliestSlotDisplay when talking to a caller, never read UTC clock text.
+      clinicTimezone,
+      callerAvailableSlots: callerSlots,
+      earliestSlotUtc: result.value[0]?.startAt ?? null,
+      earliestSlotLocal: earliestCallerSlot?.localStartAt ?? null,
+      earliestSlotDisplay: earliestCallerSlot?.displayTime ?? null,
+      ...(naturalRange ? { resolvedDate: naturalRange.label } : {}),
+      ...(requestedStartAt ? { requestedStartAt: requestedStartAt.instant, requestedTimeAvailable: requested?.ok ?? false } : {}),
+    };
+    calendarLog("calendar.trace.availability.tool_result", {
+      tenantId: context.tenantId,
+      requestedDate: naturalRange?.label ?? range.rangeStart,
+      timezone: clinicTimezone,
+      earliestAvailable: result.value[0] ? await this.traceDateTime(context.tenantId, result.value[0].startAt) : null,
+      displayTime: earliestCallerSlot?.displayTime,
+      slotCount: result.value.length,
+    });
     return {
       toolCallId: call.toolCallId,
       ok: true as const,
-      data: {
-        success: true,
-        requestedPeriod: { startAt: range.rangeStart, endAt: range.rangeEnd, ...(naturalRange ? { label: naturalRange.label } : {}) },
-        availableSlots: result.value,
-        // Kept temporarily for existing clients while Realtime uses the clearer names above.
-        slots: result.value,
-        earliestSlot: result.value[0] ?? null,
-        ...(naturalRange ? { resolvedDate: naturalRange.label } : {}),
-        ...(requestedStartAt ? { requestedStartAt: requestedStartAt.instant, requestedTimeAvailable: requested?.ok ?? false } : {}),
-      },
+      data,
     };
   }
 
@@ -204,17 +216,8 @@ export class ToolExecutorImpl implements ToolExecutor {
     return business.value.services[0]?.id;
   }
 
-  private async defaultTestEmployeeId(tenantId: string, serviceId: string): Promise<string | undefined> {
-    const business = await this.businesses?.getBusinessProfile(tenantId);
-    if (!business?.ok) return undefined;
-    const service = business.value.services.find((candidate) => candidate.id === serviceId);
-    return business.value.employees.find((employee) => employee.active && service?.eligibleEmployeeIds.includes(employee.id))?.id;
-  }
-
   private async createAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
-    if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before creating an appointment.", false);
+    if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before creating an appointment.", false);
     const input = call.arguments as Input;
     if (!exactKeys(input, ["service", "employeeId", "startAt"], ["employeeId", "startAt"]) ||
         (input.service !== undefined && !text(input.service)) || !text(input.employeeId) || !dateTime(input.startAt)) {
@@ -244,15 +247,14 @@ export class ToolExecutorImpl implements ToolExecutor {
       normalizedLocalDateTime: normalizedStartAt.dateTime,
       bookingStartAtUsed: confirmedStartAt,
     });
-    const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
-    const result = await appointments.createAppointment({
+    const result = await this.appointments.createAppointment({
       tenantId: context.tenantId,
-      customerId,
+      customerId: context.customerId,
       serviceId,
       employeeId: input.employeeId,
       startAt: confirmedStartAt,
       idempotencyKey: `${context.callId}:${call.toolCallId}`,
-      source: testMode ? "DEVELOPER_TEST" : "AI_CALL",
+      source: "AI_CALL",
       sourceCallId: context.callId,
     });
     if (!result.ok) {
@@ -265,51 +267,23 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (result.value.status !== "CONFIRMED") {
       return toolError(call, "APPOINTMENT_NOT_CONFIRMED", "The appointment is not confirmed. Do not present it as booked.", false);
     }
-    if (testMode) this.testAppointmentsByCall.set(context.callId, [...(this.testAppointmentsByCall.get(context.callId) ?? []), result.value.id]);
     return { toolCallId: call.toolCallId, ok: true as const, data: { appointment: result.value } };
   }
 
-  private async enableDeveloperTestMode(context: ToolExecutionContext, call: AgentToolCall) {
-    if (!context.developerTestModeAuthorized) return toolError(call, "TEST_MODE_NOT_AUTHORIZED", "Developer Test Mode is not available in this session.", false);
-    if (!this.customers) return toolError(call, "TEST_MODE_UNAVAILABLE", "Developer Test Mode is unavailable.", false);
-    const customer = await this.customers.findOrCreateByPhone({ tenantId: context.tenantId, phone: "+15550000000", name: "YIBO Test Patient" });
-    if (!customer.ok) return toolError(call, "TEST_MODE_UNAVAILABLE", "Developer Test Mode could not be initialized.", false);
-    this.testCustomersByCall.set(context.callId, customer.value.id);
-    this.enabledTestCalls.add(context.callId);
-    calendarLog("developer.test_mode.enabled", { tenantId: context.tenantId, callId: context.callId });
-    return { toolCallId: call.toolCallId, ok: true as const, data: { enabled: true, message: "Test mode enabled." } };
-  }
-
-  private async deleteTestAppointments(context: ToolExecutionContext, call: AgentToolCall) {
-    if (!context.developerTestModeAuthorized || !this.enabledTestCalls.has(context.callId)) return toolError(call, "TEST_MODE_NOT_AUTHORIZED", "Developer Test Mode is not enabled in this session.", false);
-    const appointments = this.testAppointmentsByCall.get(context.callId) ?? [];
-    const appointmentService = this.developerTest?.appointments ?? this.appointments;
-    let deleted = 0;
-    for (const appointmentId of appointments) {
-      const result = await appointmentService.cancelAppointment({ tenantId: context.tenantId, appointmentId });
-      if (result.ok) deleted += 1;
-    }
-    this.testAppointmentsByCall.delete(context.callId);
-    return { toolCallId: call.toolCallId, ok: true as const, data: { deleted } };
-  }
-
   private async cancelAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
-    if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before cancelling an appointment.", false);
-    const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
+    if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before cancelling an appointment.", false);
     const input = call.arguments as Input;
     if (!exactKeys(input, ["appointmentId"], ["appointmentId"]) || !text(input.appointmentId)) {
       return invalid(call, "appointmentId is required");
     }
-    const lookup = await appointments.getAppointment({
+    const lookup = await this.appointments.getAppointment({
       tenantId: context.tenantId,
       appointmentId: input.appointmentId,
     });
-    if (!lookup.ok || lookup.value.customerId !== customerId) {
+    if (!lookup.ok || lookup.value.customerId !== context.customerId) {
       return toolError(call, "APPOINTMENT_NOT_FOUND", "No cancellable appointment was found for this verified caller.", false);
     }
-    const result = await appointments.cancelAppointment({
+    const result = await this.appointments.cancelAppointment({
       tenantId: context.tenantId,
       appointmentId: input.appointmentId,
     });
@@ -321,17 +295,14 @@ export class ToolExecutorImpl implements ToolExecutor {
   }
 
   private async rescheduleAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
-    if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before rescheduling an appointment.", false);
-    const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
+    if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before rescheduling an appointment.", false);
     const input = call.arguments as Input;
     if (!exactKeys(input, ["appointmentId", "startAt"], ["appointmentId", "startAt"])
       || !text(input.appointmentId) || !dateTime(input.startAt)) {
       return invalid(call, "appointmentId and a valid startAt are required");
     }
-    const lookup = await appointments.getAppointment({ tenantId: context.tenantId, appointmentId: input.appointmentId });
-    if (!lookup.ok || lookup.value.customerId !== customerId) {
+    const lookup = await this.appointments.getAppointment({ tenantId: context.tenantId, appointmentId: input.appointmentId });
+    if (!lookup.ok || lookup.value.customerId !== context.customerId) {
       return toolError(call, "APPOINTMENT_NOT_FOUND", "No reschedulable appointment was found for this verified caller.", false);
     }
     const normalizedStartAt = await this.normalizeDateTime(context.tenantId, input.startAt);
@@ -343,7 +314,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       clinicTimezone: normalizedStartAt.timeZone,
       normalizedLocalDateTime: normalizedStartAt.dateTime,
     });
-    const result = await appointments.rescheduleAppointment({
+    const result = await this.appointments.rescheduleAppointment({
       tenantId: context.tenantId,
       appointmentId: input.appointmentId,
       startAt: normalizedStartAt.instant,
@@ -372,6 +343,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       ? { toolCallId: call.toolCallId, ok: true as const, data: { transferred: true } }
       : toolError(call, result.error.code, "The transfer could not be completed. Continue assisting the caller.", result.error.retryable);
   }
+
 }
 
 const isObject = (value: unknown): value is Input => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -396,3 +368,20 @@ const availabilityMessage = (code: string): string => {
 
 const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
 const hasFirstAndLastName = (value: string): boolean => value.trim().split(/\s+/).length >= 2;
+
+const callerSlot = (
+  slot: { employeeId: string; startAt: string; endAt: string },
+  clinicTimezone: string,
+  locale: string,
+) => {
+  const start = new Date(slot.startAt);
+  const end = new Date(slot.endAt);
+  return {
+    employeeId: slot.employeeId,
+    canonicalStartAt: slot.startAt,
+    canonicalEndAt: slot.endAt,
+    localStartAt: dateTimeInTimezone(start, clinicTimezone).dateTime,
+    localEndAt: dateTimeInTimezone(end, clinicTimezone).dateTime,
+    displayTime: displayTimeInTimezone(start, clinicTimezone, locale),
+  };
+};

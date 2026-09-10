@@ -4,6 +4,7 @@ import type { YiboApplication } from "../../bootstrap/index.js";
 export async function registerGoogleCalendarRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
   server.get("/api/integrations/google/status", async () => {
     if (!app.googleOAuth) return { configured: false, connected: false };
+    if (app.calendar.checkConnection) return app.calendar.checkConnection(app.tenantId);
     return app.googleOAuth.status(app.tenantId);
   });
 

@@ -101,14 +101,11 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
           "Keep responses concise, but always finish the current sentence naturally.",
           "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
           input.agent.tools.some((tool) => tool.name === "check_availability")
-            ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details."
+            ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. The tool supplies canonical UTC fields for booking and clinic-local caller fields for speech: always say earliestSlotDisplay exactly as returned (or callerAvailableSlots[].displayTime), never read or calculate a clock time from earliestSlotUtc, earliestSlot.startAt, or any ISO value ending in Z. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlotDisplay. Never reveal why a time is busy or any other patient's details."
             : "Do not claim calendar access when a calendar tool is not provided.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
+          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlotDisplay first, in one short sentence. If accepted, copy earliestSlotUtc unchanged into create_appointment.startAt; never rebuild it from the spoken display time. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
           input.agent.tools.some((tool) => tool.name === "update_customer")
             ? "After the caller accepts a verified time, ask exactly one question at a time: first 'What's your first and last name?', then 'What's the best phone number to reach you?', then 'Is this for a cleaning or a consultation?'. After name and phone are collected, call update_customer. Use the caller's Cleaning or Consultation answer as the service argument for create_appointment; never expose IDs. Do not ask for symptoms or medical details."
-            : "",
-          input.agent.tools.some((tool) => tool.name === "enable_developer_test_mode")
-            ? "This is an authorized local Developer Test Mode session. When the developer says 'test mode', call enable_developer_test_mode and say it is enabled only after success. In Test Mode, use the normal check_availability and create_appointment tools, but skip patient questions. For an available slot, create it as the supplied test customer and state the exact time only after success. Use delete_test_appointments only when asked to remove this session's test bookings."
             : "",
         ].filter(Boolean).join("\n"),
         ...(this.mode === "audio" ? {
@@ -230,14 +227,16 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   async sendToolResult(result: ToolResultEnvelope): Promise<void> {
     this.assertOpen();
+    const output = result.ok
+      ? { ok: true, data: result.data }
+      : { ok: false, error: result.error };
+    this.logger.info?.("OpenAI Realtime tool result sent", toolResultLogDetails(result));
     this.connection.send({
       type: "conversation.item.create",
       item: {
         type: "function_call_output",
         call_id: result.toolCallId,
-        output: JSON.stringify(result.ok
-          ? { ok: true, data: result.data }
-          : { ok: false, error: result.error }),
+        output: JSON.stringify(output),
       },
     });
     if (this.callerIsSpeaking) {
@@ -410,7 +409,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human" | "enable_developer_test_mode" | "delete_test_appointments",
+      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human",
       arguments: argumentsValue,
     });
   }
@@ -539,6 +538,19 @@ const sdkConnectionFactory: RealtimeConnectionFactory = {
 const consoleLogger: RealtimeErrorLogger = {
   info: (message, details) => console.log(message, details ?? {}),
   error: (message, details) => console.error(message, details ?? {}),
+};
+
+const toolResultLogDetails = (result: ToolResultEnvelope): Record<string, unknown> => {
+  if (!result.ok || !isRecord(result.data)) return { toolCallId: result.toolCallId, ok: result.ok };
+  const data = result.data;
+  return {
+    toolCallId: result.toolCallId,
+    ok: true,
+    ...(typeof data.clinicTimezone === "string" ? { clinicTimezone: data.clinicTimezone } : {}),
+    ...(typeof data.earliestSlotUtc === "string" ? { earliestSlotUtc: data.earliestSlotUtc } : {}),
+    ...(typeof data.earliestSlotLocal === "string" ? { earliestSlotLocal: data.earliestSlotLocal } : {}),
+    ...(typeof data.earliestSlotDisplay === "string" ? { earliestSlotDisplay: data.earliestSlotDisplay } : {}),
+  };
 };
 
 function connectionErrorDetails(error: unknown): { code: string; error: string } {

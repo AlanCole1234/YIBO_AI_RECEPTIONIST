@@ -58,12 +58,54 @@ export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): 
       VALUES (?, ?, ?, ?)
       ON CONFLICT(region_id, tenant_id) DO NOTHING
     `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
+    upgradeLegacyDemoSchedule(database, profile);
     const insertNumber = database.prepare(
       "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
     );
     for (const phone of profile.calledNumbers) insertNumber.run(profile.region, profile.tenantId, phone);
   });
 }
+
+/**
+ * The original local demo fixtures opened at 09:00 and did not persist a slot
+ * cadence. `seedBusiness` deliberately does not overwrite an existing clinic,
+ * so those old local rows continued to drive voice scheduling after the demo
+ * fixtures changed to a 07:00 opening and 30-minute slots. Upgrade only that
+ * exact legacy demo shape; manually configured clinics remain untouched.
+ */
+function upgradeLegacyDemoSchedule(database: DatabaseSync, profile: BusinessProfile): void {
+  if (!isDevelopmentDemo(profile)) return;
+  const row = database.prepare(
+    "SELECT profile_json FROM businesses WHERE region_id = ? AND tenant_id = ?",
+  ).get(profile.region, profile.tenantId) as { profile_json: string } | undefined;
+  if (!row) return;
+
+  const stored = JSON.parse(row.profile_json) as BusinessProfile;
+  if (!isLegacyDemoSchedule(stored)) return;
+
+  const upgraded: BusinessProfile = {
+    ...stored,
+    openingHours: profile.openingHours,
+    slotIntervalMinutes: profile.slotIntervalMinutes,
+  };
+  database.prepare(
+    "UPDATE businesses SET profile_json = ? WHERE region_id = ? AND tenant_id = ?",
+  ).run(JSON.stringify(upgraded), profile.region, profile.tenantId);
+  console.log(JSON.stringify({
+    event: "database.demo_schedule_upgraded",
+    tenantId: profile.tenantId,
+    openingTime: profile.openingHours[0]?.startTime,
+    slotIntervalMinutes: profile.slotIntervalMinutes,
+  }));
+}
+
+const isDevelopmentDemo = (profile: BusinessProfile): boolean =>
+  profile.businessId === "business-yibo-demo" || profile.businessId === "business-yibo-demo-us";
+
+const isLegacyDemoSchedule = (profile: BusinessProfile): boolean =>
+  profile.slotIntervalMinutes === undefined
+  && profile.openingHours.length === 5
+  && profile.openingHours.every((rule) => rule.startTime === "09:00" && rule.endTime === "18:00");
 
 const SQLITE_BUSY_RETRIES = 3;
 

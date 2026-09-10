@@ -89,6 +89,15 @@ export const dateTimeInTimezone = (value: Date, timezone: string): { dateTime: s
   };
 };
 
+/** A caller-facing clock time derived from an instant in the clinic's IANA timezone. */
+export const displayTimeInTimezone = (value: Date, timezone: string, locale = "en-US"): string =>
+  new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(value);
+
 export const minuteOfDay = (time: string): number => {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 };

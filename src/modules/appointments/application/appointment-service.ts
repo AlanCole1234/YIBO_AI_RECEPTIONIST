@@ -95,7 +95,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         tenantId: pending.tenantId,
         appointmentId: pending.id,
         employeeId: pending.employeeId,
-        title: command.source === "DEVELOPER_TEST" ? "[YIBO TEST] Test Appointment" : `${service.name} appointment`,
+        title: `${service.name} appointment`,
         serviceName: service.name,
         ...(customer ? { patient: customer } : {}),
         startAt: pending.startAt,

@@ -25,7 +25,6 @@ export class CallOrchestratorService implements CallOrchestrator {
     private readonly voice: VoiceMediaGateway,
     private readonly conversations: ConversationServiceContract,
     private readonly calls: CallRepository,
-    private readonly developerTestModeAuthorized = false,
   ) {}
 
   async handleTelephonyEvent(event: TelephonyEvent): Promise<void> {
@@ -71,7 +70,6 @@ export class CallOrchestratorService implements CallOrchestrator {
       callId: record.callId,
       tenantId: record.tenantId,
       customerId: customer.value.id,
-      ...(this.developerTestModeAuthorized ? { developerTestModeAuthorized: true as const } : {}),
     });
     if (!agent.ok) return this.fail(record.callId, event.occurredAt);
 
@@ -86,7 +84,14 @@ export class CallOrchestratorService implements CallOrchestrator {
         transport: media.value,
         ...(media.value.observeEvent ? { observeEvent: media.value.observeEvent } : {}),
       });
-    } catch {
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "call.realtime.start_failed",
+        callId: record.callId,
+        tenantId: record.tenantId,
+        layer: "realtime_ai_session",
+        error: safeErrorMessage(error),
+      }));
       await media.value.close();
       return this.fail(record.callId, event.occurredAt);
     }
@@ -116,3 +121,10 @@ export class CallOrchestratorService implements CallOrchestrator {
     await this.calls.updateState(callId, state, occurredAt);
   }
 }
+
+const safeErrorMessage = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : "Unexpected realtime startup error";
+  return message
+    .replace(/\b(sk-[A-Za-z0-9_-]+|Bearer\s+\S+|Authorization:\s*\S+)/gi, "[redacted]")
+    .slice(0, 500);
+};

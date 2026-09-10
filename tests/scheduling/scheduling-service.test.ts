@@ -67,4 +67,78 @@ describe("SchedulingService", () => {
       tenantId: business.tenantId, serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T15:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BUSINESS_HOURS" } });
   });
+
+  it("uses a clinic's configured 30-minute interval and never starts a future-day search at the current time", async () => {
+    const configuredBusiness = {
+      ...business,
+      openingHours: [{ dayOfWeek: 1 as const, startTime: "07:00", endTime: "10:00" }],
+      slotIntervalMinutes: 30,
+    };
+    const configuredHours: EmployeeWorkingHoursProvider = {
+      getWorkingHours: async () => configuredBusiness.openingHours,
+    };
+    const service = new SchedulingServiceImpl(
+      new BusinessDirectoryService(new InMemoryBusinessRepository([configuredBusiness])),
+      configuredHours,
+      noAppointments,
+      noCalendarConflicts,
+      { now: () => new Date("2026-08-10T23:00:00.000Z") },
+    );
+    const result = await service.findAvailableSlots({
+      tenantId: configuredBusiness.tenantId,
+      serviceId: "cleaning",
+      rangeStart: "2026-08-17T06:00:00.000Z",
+      rangeEnd: "2026-08-18T06:00:00.000Z",
+    });
+
+    expect(result).toEqual({ ok: true, value: [
+      { employeeId: "dr-lee", startAt: "2026-08-17T13:00:00.000Z", endAt: "2026-08-17T13:30:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-17T13:30:00.000Z", endAt: "2026-08-17T14:00:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-17T14:00:00.000Z", endAt: "2026-08-17T14:30:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-17T14:30:00.000Z", endAt: "2026-08-17T15:00:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-17T15:00:00.000Z", endAt: "2026-08-17T15:30:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-17T15:30:00.000Z", endAt: "2026-08-17T16:00:00.000Z" },
+    ] });
+  });
+
+  it("keeps the normal earliest slot at opening time, then advances by the configured cadence when early slots are busy", async () => {
+    const configuredBusiness = {
+      ...business,
+      openingHours: [{ dayOfWeek: 1 as const, startTime: "07:00", endTime: "10:00" }],
+      slotIntervalMinutes: 30,
+    };
+    const busy: Array<{ startAt: string; endAt: string }> = [];
+    const calendar: CalendarPort = { getBusyIntervals: async () => success(busy) };
+    const service = new SchedulingServiceImpl(
+      new BusinessDirectoryService(new InMemoryBusinessRepository([configuredBusiness])),
+      { getWorkingHours: async () => configuredBusiness.openingHours },
+      noAppointments,
+      calendar,
+      clock,
+    );
+    const query = {
+      tenantId: configuredBusiness.tenantId,
+      serviceId: "cleaning",
+      rangeStart: "2026-08-17T06:00:00.000Z",
+      rangeEnd: "2026-08-18T06:00:00.000Z",
+    };
+
+    const first = await service.findAvailableSlots(query);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("Expected availability");
+    expect(first.value[0]?.startAt).toBe("2026-08-17T13:00:00.000Z");
+
+    busy.push({ startAt: "2026-08-17T13:00:00.000Z", endAt: "2026-08-17T13:30:00.000Z" });
+    const second = await service.findAvailableSlots(query);
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error("Expected availability");
+    expect(second.value[0]?.startAt).toBe("2026-08-17T13:30:00.000Z");
+
+    busy.push({ startAt: "2026-08-17T13:30:00.000Z", endAt: "2026-08-17T14:00:00.000Z" });
+    busy.push({ startAt: "2026-08-17T21:00:00.000Z", endAt: "2026-08-17T21:30:00.000Z" });
+    const third = await service.findAvailableSlots(query);
+    expect(third.ok).toBe(true);
+    if (!third.ok) throw new Error("Expected availability");
+    expect(third.value[0]?.startAt).toBe("2026-08-17T14:00:00.000Z");
+  });
 });

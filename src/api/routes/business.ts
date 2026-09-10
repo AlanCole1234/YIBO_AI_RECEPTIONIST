@@ -9,8 +9,8 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
-    const { region, name, timezone, locale, services, employees, openingHours } = result.value;
-    return { region, name, timezone, locale, services, employees, openingHours };
+    const { region, name, timezone, locale, services, employees, openingHours, slotIntervalMinutes } = result.value;
+    return { region, name, timezone, locale, services, employees, openingHours, slotIntervalMinutes };
   });
 
   server.put<{ Body: { timezone?: unknown } }>("/api/business/timezone", async (request, reply) => {
@@ -22,7 +22,7 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
-    const { region, name, timezone, locale, services, employees, openingHours } = result.value;
-    return { region, name, timezone, locale, services, employees, openingHours };
+    const { region, name, timezone, locale, services, employees, openingHours, slotIntervalMinutes } = result.value;
+    return { region, name, timezone, locale, services, employees, openingHours, slotIntervalMinutes };
   });
 }

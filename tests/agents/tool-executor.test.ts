@@ -74,41 +74,6 @@ const business: BusinessProfile = {
 };
 
 describe("ToolExecutorImpl", () => {
-  it("allows Developer Test Mode only from server-authorized local contexts", async () => {
-    const { executor } = fixture();
-    const denied = await executor.execute(context, { toolCallId: "test-denied", name: "enable_developer_test_mode", arguments: {} });
-    const allowed = await executor.execute({ ...context, callId: "developer-call", developerTestModeAuthorized: true }, { toolCallId: "test-enabled", name: "enable_developer_test_mode", arguments: {} });
-
-    expect(denied).toMatchObject({ ok: false, error: { code: "TEST_MODE_NOT_AUTHORIZED" } });
-    expect(allowed).toMatchObject({ ok: true, data: { enabled: true } });
-  });
-
-  it("creates and deletes only appointments created during the authorized test session", async () => {
-    const { executor, createAppointment, cancelAppointment } = fixture();
-    const developerContext = { ...context, callId: "developer-call", developerTestModeAuthorized: true as const };
-
-    await executor.execute(developerContext, { toolCallId: "enable-test", name: "enable_developer_test_mode", arguments: {} });
-    await executor.execute(developerContext, {
-      toolCallId: "create-test", name: "create_appointment",
-      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
-    });
-    const deleted = await executor.execute(developerContext, { toolCallId: "delete-test", name: "delete_test_appointments", arguments: {} });
-
-    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({
-      customerId: "test-customer", source: "DEVELOPER_TEST", sourceCallId: "developer-call",
-    }));
-    expect(deleted).toEqual({ toolCallId: "delete-test", ok: true, data: { deleted: 1 } });
-    expect(cancelAppointment).toHaveBeenCalledWith({ tenantId: "tenant-a", appointmentId: "appointment-1" });
-  });
-
-  it("cannot delete normal appointments through a public session", async () => {
-    const { executor, cancelAppointment } = fixture();
-    const result = await executor.execute(context, { toolCallId: "delete-public", name: "delete_test_appointments", arguments: {} });
-
-    expect(result).toMatchObject({ ok: false, error: { code: "TEST_MODE_NOT_AUTHORIZED" } });
-    expect(cancelAppointment).not.toHaveBeenCalled();
-  });
-
   it("uses the trusted tenant when checking availability", async () => {
     const { executor, findAvailableSlots } = fixture();
     const result = await executor.execute(context, {
@@ -144,7 +109,39 @@ describe("ToolExecutorImpl", () => {
       serviceId: "service-1",
       rangeStart: "2026-08-31T06:00:00.000Z", rangeEnd: "2026-09-07T06:00:00.000Z",
     }));
-    expect(result).toMatchObject({ ok: true, data: { earliestSlot: { startAt: "2026-08-10T15:00:00.000Z" }, resolvedDate: "this week" } });
+    expect(result).toMatchObject({ ok: true, data: {
+      earliestSlot: { startAt: "2026-08-10T15:00:00.000Z" },
+      earliestSlotUtc: "2026-08-10T15:00:00.000Z",
+      earliestSlotLocal: "2026-08-10T09:00:00-06:00",
+      earliestSlotDisplay: "9:00 AM",
+      clinicTimezone: "America/Denver",
+      resolvedDate: "this week",
+    } });
+  });
+
+  it.each([
+    ["DST 7 AM", "2026-09-14T13:00:00.000Z", "7:00 AM"],
+    ["DST 7:30 AM", "2026-09-14T13:30:00.000Z", "7:30 AM"],
+    ["DST noon", "2026-09-14T18:00:00.000Z", "12:00 PM"],
+    ["DST 1 PM", "2026-09-14T19:00:00.000Z", "1:00 PM"],
+    ["DST 3 PM", "2026-09-14T21:00:00.000Z", "3:00 PM"],
+    ["standard-time 7 AM", "2026-01-14T14:00:00.000Z", "7:00 AM"],
+  ])("sends caller-facing clinic time for %s instead of reading the UTC hour", async (_label, startAt, displayTime) => {
+    const { executor, findAvailableSlots } = fixture();
+    findAvailableSlots.mockResolvedValueOnce(success([{
+      employeeId: "employee-1", startAt, endAt: new Date(new Date(startAt).valueOf() + 30 * 60_000).toISOString(),
+    }]));
+
+    const result = await executor.execute(context, {
+      toolCallId: "tool-caller-time", name: "check_availability",
+      arguments: { service: "Consultation", rangeStart: "2026-01-01T00:00", rangeEnd: "2026-12-31T00:00" },
+    });
+
+    expect(result).toMatchObject({ ok: true, data: {
+      earliestSlotUtc: startAt,
+      earliestSlotDisplay: displayTime,
+      callerAvailableSlots: [expect.objectContaining({ canonicalStartAt: startAt, displayTime })],
+    } });
   });
 
   it("rejects model attempts to override trusted context", async () => {

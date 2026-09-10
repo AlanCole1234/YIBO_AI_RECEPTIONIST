@@ -55,14 +55,16 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
       configurationService.recommended(tenant.locale, tenant.name, model),
     );
   } else if (existingConfiguration.enabledTools.includes("create_appointment")
-    && (!existingConfiguration.enabledTools.includes("update_customer")
+    && (!existingConfiguration.enabledTools.includes("check_availability")
+      || !existingConfiguration.enabledTools.includes("update_customer")
       || !existingConfiguration.enabledTools.includes("reschedule_appointment"))) {
-    // Existing booking agents gain the minimum contact and rescheduling tools so
-    // the dashboard and the live agent agree without replacing configuration.
+    // Booking agents must retain the availability tool; otherwise the realtime
+    // prompt cannot safely consult Google Calendar before offering a time.
     await configurationService.update(tenantId, {
       ...existingConfiguration,
       enabledTools: [
         ...existingConfiguration.enabledTools,
+        ...(existingConfiguration.enabledTools.includes("check_availability") ? [] : ["check_availability" as const]),
         ...(existingConfiguration.enabledTools.includes("update_customer") ? [] : ["update_customer" as const]),
         ...(existingConfiguration.enabledTools.includes("reschedule_appointment") ? [] : ["reschedule_appointment" as const]),
       ],

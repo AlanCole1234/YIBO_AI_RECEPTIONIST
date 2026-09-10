@@ -35,6 +35,8 @@ export interface BusinessProfile {
   services: ServiceDefinition[];
   employees: EmployeeDefinition[];
   openingHours: OpeningHoursRule[];
+  /** Appointment start cadence for this clinic. Existing profiles retain the legacy 15-minute default. */
+  slotIntervalMinutes?: number;
 }
 
 export interface ServiceDefinition {

@@ -4,6 +4,7 @@ import type { EmployeeDefinition, OpeningHoursRule, ServiceDefinition } from "..
 import type { BusinessDirectory } from "../../business/index.js";
 import {
   intersects,
+  dateTimeInTimezone,
   localParts,
   minuteOfDay,
   rulesForDay,
@@ -22,7 +23,7 @@ import type { CalendarPort } from "../ports/calendar-port.js";
 import type { ConfirmedAppointmentReader } from "../ports/confirmed-appointment-reader.js";
 import type { EmployeeWorkingHoursProvider } from "../ports/employee-working-hours-provider.js";
 
-const SLOT_INCREMENT_MINUTES = 15;
+const DEFAULT_SLOT_INCREMENT_MINUTES = 15;
 
 export class SchedulingServiceImpl implements SchedulingService {
   constructor(
@@ -49,6 +50,7 @@ export class SchedulingServiceImpl implements SchedulingService {
         service,
         timezone: business.timezone,
         businessHours: business.openingHours,
+        slotIntervalMinutes: business.slotIntervalMinutes ?? DEFAULT_SLOT_INCREMENT_MINUTES,
         rangeStart: range.start,
         rangeEnd: range.end,
       });
@@ -111,6 +113,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     service: ServiceDefinition;
     timezone: string;
     businessHours: OpeningHoursRule[];
+    slotIntervalMinutes: number;
     rangeStart: Date;
     rangeEnd: Date;
   }) {
@@ -122,7 +125,21 @@ export class SchedulingServiceImpl implements SchedulingService {
 
     const conflict = await this.conflictIntervals(input.tenantId, input.employee.id, input.rangeStart, input.rangeEnd);
     if (!conflict.ok) return conflict;
+    schedulingTrace("calendar.trace.scheduling.context", {
+      tenantId: input.tenantId,
+      employeeId: input.employee.id,
+      clinicTimezone: input.timezone,
+      clinicOpeningTime: input.businessHours.map((rule) => rule.startTime).sort()[0],
+      slotIntervalMinutes: input.slotIntervalMinutes,
+      calendarQueryStart: traceDateTime(input.rangeStart, input.timezone),
+      calendarQueryEnd: traceDateTime(input.rangeEnd, input.timezone),
+      busyIntervals: conflict.value.map((interval) => ({
+        startAt: traceDateTime(new Date(interval.startAt), input.timezone),
+        endAt: traceDateTime(new Date(interval.endAt), input.timezone),
+      })),
+    });
     const result: AvailableSlot[] = [];
+    const candidates: Array<{ startAt: string; localTime: string; status: "FREE" | "BUSY" }> = [];
     const firstDay = localParts(input.rangeStart, input.timezone);
     const lastDay = localParts(input.rangeEnd, input.timezone);
     let cursor = new Date(Date.UTC(firstDay.year, firstDay.month - 1, firstDay.day));
@@ -137,16 +154,30 @@ export class SchedulingServiceImpl implements SchedulingService {
         for (const employeeRule of rulesForDay(employeeHours, weekday)) {
           const startMinute = Math.max(minuteOfDay(businessRule.startTime), minuteOfDay(employeeRule.startTime));
           const endMinute = Math.min(minuteOfDay(businessRule.endTime), minuteOfDay(employeeRule.endTime));
-          for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += SLOT_INCREMENT_MINUTES) {
+          for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += input.slotIntervalMinutes) {
             const start = toUtc({ ...day, hour: Math.floor(minute / 60), minute: minute % 60 }, input.timezone);
             const end = new Date(start.valueOf() + (input.service.durationMinutes + input.service.bufferMinutes) * 60_000);
-            if (start < input.rangeStart || end > input.rangeEnd || intersects(start, end, conflict.value)) continue;
+            if (start < input.rangeStart || end > input.rangeEnd
+              || isEarlierToday(start, this.clock.now(), input.timezone)) continue;
+            const busy = intersects(start, end, conflict.value);
+            candidates.push({
+              startAt: start.toISOString(),
+              localTime: dateTimeInTimezone(start, input.timezone).dateTime,
+              status: busy ? "BUSY" : "FREE",
+            });
+            if (busy) continue;
             result.push({ employeeId: input.employee.id, startAt: start.toISOString(), endAt: end.toISOString() });
           }
         }
       }
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
+    schedulingTrace("calendar.trace.scheduling.candidates", {
+      tenantId: input.tenantId,
+      employeeId: input.employee.id,
+      candidates,
+      firstFreeSlot: result[0] ? traceDateTime(new Date(result[0].startAt), input.timezone) : null,
+    });
     return success(result);
   }
 
@@ -189,8 +220,26 @@ export class SchedulingServiceImpl implements SchedulingService {
   }
 }
 
+const schedulingTrace = (event: string, details: Record<string, unknown>): void => {
+  if (process.env.YIBO_SCHEDULING_TRACE === "1") console.log(JSON.stringify({ event, ...details }));
+};
+
+const traceDateTime = (value: Date, timezone: string) => ({
+  iso: value.toISOString(),
+  ...dateTimeInTimezone(value, timezone),
+});
+
 const parseRange = (rangeStart: string, rangeEnd: string): { start: Date; end: Date } | null => {
   const start = new Date(rangeStart);
   const end = new Date(rangeEnd);
   return Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf()) || start >= end ? null : { start, end };
+};
+
+const isEarlierToday = (candidate: Date, now: Date, timezone: string): boolean => {
+  const localCandidate = localParts(candidate, timezone);
+  const localNow = localParts(now, timezone);
+  return localCandidate.year === localNow.year
+    && localCandidate.month === localNow.month
+    && localCandidate.day === localNow.day
+    && candidate <= now;
 };

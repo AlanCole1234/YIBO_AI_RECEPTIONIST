@@ -46,6 +46,20 @@ const navItems = computed(() => [
 ] as Array<[Section, string]>);
 const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
 const t = (key: MessageKey): string => copy.value[key];
+const calendarLastChecked = computed(() => googleCalendar.value.lastCheckedAt
+  ? new Intl.DateTimeFormat(locale.value, { dateStyle: "medium", timeStyle: "short" }).format(new Date(googleCalendar.value.lastCheckedAt))
+  : "not yet");
+const calendarConnectionHelp = computed(() => {
+  switch (googleCalendar.value.errorCode) {
+    case "AUTHORIZATION_REQUIRED": return "Google authorization expired or was revoked. Reconnect Google Calendar to continue scheduling.";
+    case "CALENDAR_PERMISSION_DENIED": return "YIBO cannot access the configured calendar. Confirm its ID and Google Calendar permissions, then reconnect.";
+    case "CALENDAR_API_UNAVAILABLE": return "Google Calendar could not be reached right now. YIBO will retry automatically; reconnect only if this continues.";
+    default: return t("calendarSetupHelp");
+  }
+});
+const calendarActionLabel = computed(() => googleCalendar.value.errorCode === "CALENDAR_NOT_CONNECTED" && !calendarNeedsReconnect.value
+  ? "Connect Google Calendar"
+  : "Reconnect Google Calendar");
 
 onMounted(async () => {
   try {
@@ -218,8 +232,8 @@ function statusLabel(status: string): string {
           </section>
           <article class="home-calendar">
             <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
-            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }} <strong>{{ googleCalendar.calendarId }}</strong>.</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
-            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
+            <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? 'Connection needs attention' : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">Appointments Calendar: <strong>{{ googleCalendar.calendarId }}</strong>. Last checked: {{ calendarLastChecked }}.</p><p v-else-if="googleCalendar.configured">{{ calendarConnectionHelp }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
+            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarActionLabel }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
           </article>
         </div>
         <div class="two-column home-details">

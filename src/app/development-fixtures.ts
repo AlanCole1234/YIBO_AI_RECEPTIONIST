@@ -4,7 +4,7 @@ export const DEMO_TENANT_ID = "tenant-yibo-demo";
 
 export const DEVELOPMENT_OPENING_HOURS: OpeningHoursRule[] = [1, 2, 3, 4, 5].map((dayOfWeek) => ({
   dayOfWeek: dayOfWeek as 1 | 2 | 3 | 4 | 5,
-  startTime: "09:00",
+  startTime: "07:00",
   endTime: "18:00",
 }));
 
@@ -38,6 +38,7 @@ export const DEVELOPMENT_BUSINESS: BusinessProfile = {
     },
   ],
   openingHours: DEVELOPMENT_OPENING_HOURS,
+  slotIntervalMinutes: 30,
 };
 
 export const DEVELOPMENT_US_BUSINESS: BusinessProfile = {

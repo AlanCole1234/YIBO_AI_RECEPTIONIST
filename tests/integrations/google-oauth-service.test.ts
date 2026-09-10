@@ -48,4 +48,14 @@ describe("GoogleOAuthService", () => {
     await expect(service.accessToken("tenant-1")).resolves.toBe("fresh");
     expect(tokens.value).toMatchObject({ accessToken: "fresh", refreshToken: "refresh" });
   });
+
+  it("reports an invalid refresh grant as authorization requiring reconnection", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "expired", refreshToken: "refresh", expiresAt: "2020-01-01T00:00:00.000Z" };
+    const fetcher: typeof fetch = async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+    const service = new GoogleOAuthService(config, tokens, fetcher);
+
+    await expect(service.accessTokenResult("tenant-1")).resolves.toEqual({ ok: false, errorCode: "AUTHORIZATION_REQUIRED" });
+    expect(tokens.value?.refreshToken).toBe("refresh");
+  });
 });

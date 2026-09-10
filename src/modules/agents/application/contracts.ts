@@ -12,9 +12,7 @@ export type AgentToolName =
   | "update_customer"
   | "cancel_appointment"
   | "reschedule_appointment"
-  | "transfer_to_human"
-  | "enable_developer_test_mode"
-  | "delete_test_appointments";
+  | "transfer_to_human";
 
 export interface AgentToolDefinition {
   name: AgentToolName;
@@ -40,8 +38,6 @@ export interface ToolExecutionContext {
   tenantId: TenantId;
   callId: CallId;
   customerId?: CustomerId;
-  /** Server-trusted and available only from the local development harness. */
-  developerTestModeAuthorized?: true;
 }
 
 export interface ToolExecutor {

@@ -2,6 +2,7 @@ import { failure, success } from "../../../shared/domain/result.js";
 import type { AppointmentCalendarPort } from "../../appointments/index.js";
 import type { BusyInterval, CalendarPort } from "../../scheduling/index.js";
 import { dateTimeInTimezone } from "../../scheduling/domain/time.js";
+import type { GoogleIntegrationStatus } from "./contracts.js";
 import type { GoogleOAuthService } from "./google-oauth-service.js";
 
 export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarPort {
@@ -12,6 +13,59 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
+  /**
+   * Verifies the configured calendar with the same authenticated FreeBusy API
+   * path that scheduling uses. A saved token alone is never treated as healthy.
+   */
+  async checkConnection(tenantId: string): Promise<GoogleIntegrationStatus> {
+    const checkedAt = new Date().toISOString();
+    const configured = await this.oauth.status(tenantId);
+    if (!configured.configured) return { ...configured, connected: false, lastCheckedAt: checkedAt };
+
+    const token = await this.tokenFor(tenantId);
+    if (!token.ok) {
+      const errorCode = token.error.code === "CALENDAR_NOT_CONNECTED"
+        ? "CALENDAR_NOT_CONNECTED"
+        : token.error.code === "AUTHORIZATION_REQUIRED"
+          ? "AUTHORIZATION_REQUIRED"
+          : "CALENDAR_API_UNAVAILABLE";
+      googleLog("calendar.connection.failed", { tenantId, errorCode });
+      return { configured: true, connected: false, calendarId: this.calendarId, lastCheckedAt: checkedAt, errorCode };
+    }
+
+    try {
+      const now = new Date();
+      const response = await this.fetcher(new URL("https://www.googleapis.com/calendar/v3/freeBusy"), {
+        method: "POST",
+        headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          timeMin: now.toISOString(),
+          timeMax: new Date(now.valueOf() + 60_000).toISOString(),
+          items: [{ id: this.calendarId }],
+        }),
+      });
+      if (!response.ok) {
+        const errorCode = response.status === 401
+          ? "AUTHORIZATION_REQUIRED"
+          : response.status === 403 || response.status === 404
+            ? "CALENDAR_PERMISSION_DENIED"
+            : "CALENDAR_API_UNAVAILABLE";
+        googleLog("calendar.connection.failed", { tenantId, httpStatus: response.status, errorCode });
+        return { configured: true, connected: false, calendarId: this.calendarId, lastCheckedAt: checkedAt, errorCode };
+      }
+      const body = await response.json() as { calendars?: Record<string, { errors?: unknown[] }> };
+      if (body.calendars?.[this.calendarId]?.errors?.length) {
+        googleLog("calendar.connection.failed", { tenantId, errorCode: "CALENDAR_PERMISSION_DENIED" });
+        return { configured: true, connected: false, calendarId: this.calendarId, lastCheckedAt: checkedAt, errorCode: "CALENDAR_PERMISSION_DENIED" };
+      }
+      googleLog("calendar.connection.completed", { tenantId });
+      return { configured: true, connected: true, calendarId: this.calendarId, lastCheckedAt: checkedAt };
+    } catch {
+      googleLog("calendar.connection.failed", { tenantId, errorCode: "CALENDAR_API_UNAVAILABLE" });
+      return { configured: true, connected: false, calendarId: this.calendarId, lastCheckedAt: checkedAt, errorCode: "CALENDAR_API_UNAVAILABLE" };
+    }
+  }
+
   async getBusyIntervals(query: { tenantId: string; employeeId: string; rangeStart: string; rangeEnd: string }) {
     const token = await this.tokenFor(query.tenantId);
     if (!token.ok) return token;
@@ -20,6 +74,7 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
       googleLog("calendar.trace.google.availability.request", {
         tenantId: query.tenantId,
         clinicTimezone: timeZone,
+        ...(process.env.YIBO_SCHEDULING_TRACE === "1" ? { calendarId: this.calendarId } : {}),
         rangeStart: traceDateTime(query.rangeStart, timeZone),
         rangeEnd: traceDateTime(query.rangeEnd, timeZone),
       });
@@ -27,9 +82,16 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
         method: "POST", headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json" },
         body: JSON.stringify({ timeMin: query.rangeStart, timeMax: query.rangeEnd, timeZone, items: [{ id: this.calendarId }] }),
       });
-      if (!response.ok) return failure(providerError(response.status));
+      if (!response.ok) {
+        const error = providerError(response.status);
+        googleLog("calendar.availability.failed", { tenantId: query.tenantId, httpStatus: response.status, errorCode: error.code });
+        return failure(error);
+      }
       const body = await response.json() as { calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: unknown[] }> };
-      if (body.calendars?.[this.calendarId]?.errors?.length) return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: false });
+      if (body.calendars?.[this.calendarId]?.errors?.length) {
+        googleLog("calendar.availability.failed", { tenantId: query.tenantId, errorCode: "CALENDAR_PERMISSION_DENIED" });
+        return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: false });
+      }
       const busy = body.calendars?.[this.calendarId]?.busy ?? [];
       googleLog("calendar.trace.google.availability.response", {
         tenantId: query.tenantId,
@@ -38,7 +100,10 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
         })),
       });
       return success(busy.map(({ start, end }) => ({ startAt: start, endAt: end })) as BusyInterval[]);
-    } catch { return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true }); }
+    } catch (error) {
+      googleLog("calendar.availability.failed", { tenantId: query.tenantId, errorCode: "CALENDAR_API_UNAVAILABLE", error: safeErrorMessage(error) });
+      return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true });
+    }
   }
 
   async createEvent(command: { tenantId: string; appointmentId: string; employeeId: string; title: string; serviceName: string; patient?: { name?: string; phone: string }; startAt: string; endAt: string; idempotencyKey: string }) {
@@ -70,11 +135,7 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
         method: "POST", headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json", "x-goog-request-id": command.idempotencyKey },
         body: JSON.stringify({
           id: externalEventId,
-          // Test appointments are intentionally recognizable in a connected calendar.
-          // Normal patient appointments retain their existing, patient-friendly title.
-          summary: command.title.startsWith("[YIBO TEST]")
-            ? command.title
-            : command.patient?.name ? `${command.serviceName} — ${command.patient.name}` : command.title,
+          summary: command.patient?.name ? `${command.serviceName} — ${command.patient.name}` : command.title,
           description: calendarDescription(command),
           // The appointment stores an instant in UTC. Supplying the clinic zone makes
           // the intended wall-clock time explicit to Google Calendar as well.
@@ -126,8 +187,12 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
   private async tokenFor(tenantId: string) {
     const status = await this.oauth.status(tenantId);
     if (!status.configured || !status.connected) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
-    const token = await this.oauth.accessToken(tenantId);
-    return token ? success(token) : failure({ code: "AUTHORIZATION_REQUIRED" as const });
+    const token = await this.oauth.accessTokenResult(tenantId);
+    if (token.ok) return success(token.token);
+    if (token.errorCode === "CALENDAR_API_UNAVAILABLE") {
+      return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true });
+    }
+    return failure({ code: token.errorCode === "CALENDAR_NOT_CONNECTED" ? "CALENDAR_NOT_CONNECTED" as const : "AUTHORIZATION_REQUIRED" as const });
   }
 }
 

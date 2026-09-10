@@ -31,6 +31,11 @@ export const validateBusinessProfile = (
     return { message: "All called numbers must be valid international phone numbers." };
   }
 
+  if (profile.slotIntervalMinutes !== undefined
+    && (!Number.isInteger(profile.slotIntervalMinutes) || profile.slotIntervalMinutes < 5 || profile.slotIntervalMinutes > 120)) {
+    return { message: "Appointment slot interval must be a whole number between 5 and 120 minutes." };
+  }
+
   const employeeIds = new Set(profile.employees.map((employee) => employee.id));
   if (employeeIds.size !== profile.employees.length) {
     return { message: "Employee IDs must be unique within a business." };

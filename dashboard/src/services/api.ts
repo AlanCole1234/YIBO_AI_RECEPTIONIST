@@ -32,7 +32,13 @@ export interface Appointment {
   status: string;
   externalCalendarEventId?: string;
 }
-export interface GoogleCalendarStatus { configured: boolean; connected: boolean; calendarId?: string }
+export interface GoogleCalendarStatus {
+  configured: boolean;
+  connected: boolean;
+  calendarId?: string;
+  lastCheckedAt?: string;
+  errorCode?: "CALENDAR_NOT_CONNECTED" | "AUTHORIZATION_REQUIRED" | "CALENDAR_PERMISSION_DENIED" | "CALENDAR_API_UNAVAILABLE";
+}
 
 export type AgentToolName = "check_availability" | "create_appointment" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human";
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
