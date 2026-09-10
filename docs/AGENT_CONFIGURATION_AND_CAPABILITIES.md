@@ -23,6 +23,10 @@ El dashboard configura modelo, voz, locale, esfuerzo de razonamiento, límite de
 salida, VAD, instrucciones y herramientas. La configuración se valida, persiste
 por tenant y aplica a la próxima conversación.
 
+El registro backend de herramientas también es la fuente de los títulos,
+descripciones, iconos, clasificación y ruta segura mostrados por el dashboard.
+Así una herramienta nueva puede mostrarse con fallback sin romper el panel.
+
 El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
 interrupción automáticas, timeout de silencio, tool choice automático y tools
 secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el

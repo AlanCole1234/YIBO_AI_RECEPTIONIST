@@ -4,6 +4,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "check_availability",
     description: "Find real clinic-calendar appointment slots. Use dateExpression for natural caller phrases. service is an optional patient-facing choice such as Cleaning or Consultation; omit it to use the clinic's configured default appointment type. Never ask for or expose an internal service ID. When the caller asks about an exact time, include requestedStartAt as an ISO datetime. Results are verified, privacy-safe, and sorted earliest first.",
+    presentation: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕", kind: "consult" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -21,6 +22,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "create_appointment",
     description: "Create an appointment for the verified customer in this call. Use the patient-facing service name, not an internal service ID.",
+    presentation: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+", kind: "mutate" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -35,6 +37,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "update_customer",
     description: "Save the verified caller's first and last name and best callback phone number. Use only after collecting both values one question at a time.",
+    presentation: { title: "Update customer", help: "Saves the verified caller's name and callback number without returning personal data to the model.", route: "Customers", icon: "✎", kind: "mutate" },
     inputSchema: { type: "object", additionalProperties: false, required: ["name", "phone"], properties: {
       name: { type: "string", minLength: 3 }, phone: { type: "string", minLength: 7 },
     } },
@@ -42,6 +45,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "cancel_appointment",
     description: "Cancel an appointment owned by the verified customer in this call.",
+    presentation: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×", kind: "mutate" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -52,6 +56,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "reschedule_appointment",
     description: "Reschedule an appointment owned by the verified customer in this call. Use a previously confirmed appointment ID and an exact verified available slot. Never reconstruct a local time as UTC.",
+    presentation: { title: "Reschedule appointments", help: "Checks the new time and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺", kind: "mutate" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -65,16 +70,19 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: "transfer_to_human",
     description: "Transfer this call to the business's configured human destination.",
+    presentation: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗", kind: "external" },
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
     name: "enable_developer_test_mode",
     description: "Enable local Developer Test Mode. This is only available to a server-authorized local developer session; never claim it is enabled unless this tool succeeds.",
+    presentation: { title: "Enable test mode", help: "Enables isolated local fixtures for an authorized developer session.", route: "DeveloperTest", icon: "⚙", kind: "mutate" },
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
     name: "delete_test_appointments",
     description: "Delete only test appointments created during this authorized Developer Test Mode session. Never use this for normal patient appointments.",
+    presentation: { title: "Delete test appointments", help: "Removes only appointments created by the current isolated test session.", route: "DeveloperTest", icon: "⌫", kind: "mutate" },
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
 ];

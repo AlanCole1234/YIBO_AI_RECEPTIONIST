@@ -20,6 +20,13 @@ export interface AgentToolDefinition {
   name: AgentToolName;
   description: string;
   inputSchema: object;
+  presentation?: {
+    title: string;
+    help: string;
+    route: string;
+    icon: string;
+    kind: "consult" | "mutate" | "external";
+  };
 }
 
 export interface AgentToolCall {

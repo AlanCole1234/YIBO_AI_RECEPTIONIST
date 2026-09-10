@@ -4,6 +4,7 @@ import {
   api,
   ApiError,
   type AgentConfiguration,
+  type AgentConfigurationPayload,
   type AgentToolName,
   type ReasoningEffort,
 } from "../services/api";
@@ -36,14 +37,6 @@ const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conve
   balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
   patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
 };
-const toolCopy: Record<AgentToolName, { title: string; help: string; route: string; icon: string }> = {
-  check_availability: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕" },
-  create_appointment: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+" },
-  cancel_appointment: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×" },
-  reschedule_appointment: { title: "Reschedule appointments", help: "Checks the new time and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺" },
-  transfer_to_human: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗" },
-};
-
 const loading = ref(true);
 const saving = ref(false);
 const saved = ref(false);
@@ -51,7 +44,7 @@ const error = ref("");
 const apiKeyConfigured = ref(false);
 const configuration = ref<AgentConfiguration>();
 const recommended = ref<AgentConfiguration>();
-const availableTools = ref<Array<{ name: AgentToolName; kind: "consult" | "mutate" | "external" }>>([]);
+const availableTools = ref<AgentConfigurationPayload["availableTools"]>([]);
 const step = ref<Step>("identity");
 const speechPlaying = ref(false);
 
@@ -212,7 +205,7 @@ function errorMessage(caught: unknown): string {
           <section v-else-if="step === 'abilities'" class="step-panel">
             <div class="step-heading"><span>03</span><div><h3>Capabilities and limits</h3><p>The model can request these actions; ToolExecutor still validates and executes them.</p></div></div>
             <div class="permission-flow"><span>Model<small>requests</small></span><b>→</b><span class="gate">ToolExecutor<small>validates</small></span><b>→</b><span>YIBO<small>executes</small></span></div>
-            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ toolCopy[tool.name].icon }}</i><span><small>{{ tool.kind === 'consult' ? 'Read only' : tool.kind === 'mutate' ? 'Changes data' : 'External action' }}</small><strong>{{ toolCopy[tool.name].title }}</strong><p>{{ toolCopy[tool.name].help }}</p><em>Safe route: {{ toolCopy[tool.name].route }}</em></span><b></b></button></div>
+            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ tool.icon || '•' }}</i><span><small>{{ tool.kind === 'consult' ? 'Read only' : tool.kind === 'mutate' ? 'Changes data' : 'External action' }}</small><strong>{{ tool.title || tool.name }}</strong><p>{{ tool.help || tool.description }}</p><em>Safe route: {{ tool.route || 'Backend validation' }}</em></span><b></b></button></div>
             <p class="security-note">The model never receives direct database access. Tenant, call, and customer arrive as trusted system context.</p>
           </section>
 
