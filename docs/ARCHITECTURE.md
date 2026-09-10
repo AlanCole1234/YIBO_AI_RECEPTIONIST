@@ -131,7 +131,10 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
   agrega `location_id` a números, llamadas y citas y la v8 agrega la versión
   optimista del documento de negocio. La v9 rellena nombre/precio histórico en
   citas existentes. Todas conservan los registros previos.
-- Google OAuth guarda tokens cifrados por tenant.
+- Google OAuth guarda tokens cifrados por tenant. Toda asignación nueva o
+  modificada se consulta contra Google antes de activarse; la API administrativa
+  publica estados seguros (`accessible`, desconectado, prohibido, no encontrado
+  o no disponible), nunca credenciales.
 - Google Calendar resuelve `{calendarId, timezone}` desde
   `{tenantId, locationId, employeeId}` confiable. La asignación del profesional
   gana y el default de sucursal actúa como fallback. `GOOGLE_CALENDAR_ID` sólo

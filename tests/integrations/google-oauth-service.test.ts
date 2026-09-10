@@ -48,4 +48,17 @@ describe("GoogleOAuthService", () => {
     await expect(service.accessToken("tenant-1")).resolves.toBe("fresh");
     expect(tokens.value).toMatchObject({ accessToken: "fresh", refreshToken: "refresh" });
   });
+
+  it("checks calendar access with the tenant token and maps safe statuses", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "tenant-access", expiresAt: "2099-01-01T00:00:00.000Z" };
+    const requests: string[] = [];
+    const service = new GoogleOAuthService(config, tokens, async (input, init) => {
+      requests.push(`${String(input)}:${String(new Headers(init?.headers).get("authorization"))}`);
+      return new Response(null, { status: String(input).includes("missing") ? 404 : 200 });
+    });
+    await expect(service.verifyCalendarAccess("tenant-1", "team@example.com")).resolves.toBe("accessible");
+    await expect(service.verifyCalendarAccess("tenant-1", "missing@example.com")).resolves.toBe("not_found");
+    expect(requests[0]).toContain("team%40example.com:Bearer tenant-access");
+  });
 });

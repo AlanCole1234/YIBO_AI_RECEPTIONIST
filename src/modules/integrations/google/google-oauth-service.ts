@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type { GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
+import type { GoogleCalendarAccessStatus, GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
 
 export interface GoogleOAuthConfig {
   clientId?: string;
@@ -82,6 +82,25 @@ export class GoogleOAuthService {
     };
     await this.tokens.save(tenantId, refreshed);
     return refreshed.accessToken;
+  }
+
+  async verifyCalendarAccess(tenantId: string, calendarId: string): Promise<GoogleCalendarAccessStatus> {
+    if (!this.isConfigured()) return "integration_not_configured";
+    const token = await this.accessToken(tenantId);
+    if (!token) return "disconnected";
+    try {
+      const response = await this.fetcher(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      if (response.ok) return "accessible";
+      if (response.status === 403) return "forbidden";
+      if (response.status === 404) return "not_found";
+      if (response.status === 401) return "disconnected";
+      return "unavailable";
+    } catch {
+      return "unavailable";
+    }
   }
 
   private isConfigured(): boolean {

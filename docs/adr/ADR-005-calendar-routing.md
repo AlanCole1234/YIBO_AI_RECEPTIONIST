@@ -26,5 +26,7 @@ una credencial compartida por el tenant y no debe duplicarse por calendario.
 - Consultar, crear y cancelar deben usar el resolver y fallar cerrados si no
   existe una asignación.
 - Cambiar una asignación no cambia las credenciales OAuth del tenant.
-- La administración y verificación de cada asignación se construirán sobre el
-  documento de negocio versionado.
+- La administración y verificación de cada asignación usa el documento de
+  negocio versionado. Un mapeo nuevo o cambiado sólo se guarda después de que
+  Google confirme acceso con la credencial del tenant; las lecturas exponen un
+  estado seguro por mapeo, nunca tokens.

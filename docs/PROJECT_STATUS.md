@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 4 — Calendarios y transferencia**.
-- Tarea activa: **CAL-003 — validación y estado de asignaciones Google**.
+- Tarea activa: **CAL-004 — operaciones Google mediante calendario resuelto**.
 - Último checkpoint cerrado: Checkpoint 3; `pnpm typecheck`, 198 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -74,8 +74,8 @@ con `pnpm test` y `pnpm build`.
 | SCHED-005 | DONE | Capacidad profesional 1, límite de sucursal y guard location-wide |
 | CAL-001 | DONE | Resolver confiable reemplaza calendarId global en todas las operaciones Google |
 | CAL-002 | DONE | API versionada: default de sucursal, override profesional y fallback explícito |
-| CAL-003 | IN_PROGRESS | Validación y estado de asignaciones Google |
-| CAL-004 | TODO | Operaciones Google mediante calendario resuelto |
+| CAL-003 | DONE | OAuth cifrado por tenant valida acceso antes de activar y publica estado seguro |
+| CAL-004 | IN_PROGRESS | Operaciones Google mediante calendario resuelto |
 | TRANSFER-001 | TODO | Destino validado por sucursal |
 | TRANSFER-002 | TODO | Transferencia real y estados de llamada |
 | AGENT-001 | TODO | Esquema versionado y migración de configuración |

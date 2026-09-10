@@ -3,6 +3,7 @@ import type { YiboApplication } from "../../bootstrap/index.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 import { parseIfMatch } from "../optimistic-version.js";
+import { calendarMappings, verifyCalendarAccess } from "../calendar-verification.js";
 
 export async function registerBusinessRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
   server.get(
@@ -33,6 +34,19 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
         return reply.code(400).send({ error: { code: "INVALID_BUSINESS_CONFIGURATION" } });
       }
       const before = await app.business.getBusinessConfiguration(app.tenantId);
+      if (before.ok) {
+        const previousMappings = calendarMappings(before.value.configuration);
+        const nextMappings = calendarMappings(request.body.configuration);
+        const verified = new Map<string, Awaited<ReturnType<typeof verifyCalendarAccess>>>();
+        for (const [key, calendarId] of nextMappings) {
+          if (previousMappings.get(key) === calendarId) continue;
+          const status = verified.get(calendarId) ?? await verifyCalendarAccess(app, calendarId);
+          verified.set(calendarId, status);
+          if (status !== "accessible") {
+            return reply.code(409).send({ error: { code: "CALENDAR_ACCESS_NOT_VERIFIED", status } });
+          }
+        }
+      }
       const result = await app.business.updateBusinessConfiguration(
         app.tenantId,
         request.body.configuration as Parameters<YiboApplication["business"]["updateBusinessConfiguration"]>[1],

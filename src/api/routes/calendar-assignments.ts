@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import { isValidCalendarId } from "../../modules/business/index.js";
+import type { GoogleCalendarAccessStatus } from "../../modules/integrations/index.js";
+import { verifyCalendarAccess } from "../calendar-verification.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { requireVersion, sendCatalogError } from "./business-services.js";
 
@@ -10,9 +12,8 @@ export async function registerCalendarAssignmentRoutes(server: FastifyInstance, 
     { preHandler: createAdminGuard(app, "tenant_admin") },
     async (request, reply) => {
       const result = await app.businessCatalog.getLocationCalendars(app.tenantId, request.params.locationId);
-      return result.ok
-        ? reply.header("etag", `"${result.value.version}"`).send(result.value)
-        : sendCatalogError(reply, result.error);
+      if (!result.ok) return sendCatalogError(reply, result.error);
+      return reply.header("etag", `"${result.value.version}"`).send(await withVerification(app, result.value));
     },
   );
 
@@ -25,6 +26,11 @@ export async function registerCalendarAssignmentRoutes(server: FastifyInstance, 
       const calendarId = parseCalendarId(request.body);
       if (calendarId === INVALID) return reply.code(400).send({ error: { code: "INVALID_CALENDAR_ID" } });
       const before = await app.businessCatalog.getLocationCalendars(app.tenantId, request.params.locationId);
+      if (!before.ok) return sendCatalogError(reply, before.error);
+      if (calendarId) {
+        const status = await verifyCalendarAccess(app, calendarId);
+        if (status !== "accessible") return calendarVerificationFailure(reply, status);
+      }
       const result = await app.businessCatalog.updateLocationDefaultCalendar(
         app.tenantId, request.params.locationId, calendarId ?? undefined, version,
       );
@@ -48,6 +54,14 @@ export async function registerCalendarAssignmentRoutes(server: FastifyInstance, 
       const calendarId = parseCalendarId(request.body);
       if (calendarId === INVALID) return reply.code(400).send({ error: { code: "INVALID_CALENDAR_ID" } });
       const before = await app.businessCatalog.getLocationCalendars(app.tenantId, request.params.locationId);
+      if (!before.ok) return sendCatalogError(reply, before.error);
+      if (!before.value.professionals.some(({ professionalId }) => professionalId === request.params.professionalId)) {
+        return reply.code(404).send({ error: { code: "PROFESSIONAL_NOT_FOUND" } });
+      }
+      if (calendarId) {
+        const status = await verifyCalendarAccess(app, calendarId);
+        if (status !== "accessible") return calendarVerificationFailure(reply, status);
+      }
       const result = await app.businessCatalog.updateProfessionalCalendar(
         app.tenantId, request.params.locationId, request.params.professionalId, calendarId ?? undefined, version,
       );
@@ -78,3 +92,33 @@ const parseCalendarId = (value: unknown): string | null | typeof INVALID => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+type CalendarSnapshot = Extract<
+  Awaited<ReturnType<YiboApplication["businessCatalog"]["getLocationCalendars"]>>,
+  { ok: true }
+>["value"];
+
+const withVerification = async (app: YiboApplication, snapshot: CalendarSnapshot) => {
+  const ids = new Set<string>();
+  if (snapshot.defaultCalendarId) ids.add(snapshot.defaultCalendarId);
+  for (const professional of snapshot.professionals) {
+    if (professional.effectiveCalendarId) ids.add(professional.effectiveCalendarId);
+  }
+  const statuses = new Map(await Promise.all([...ids].map(async (calendarId) =>
+    [calendarId, await verifyCalendarAccess(app, calendarId)] as const)));
+  return {
+    ...snapshot,
+    ...(snapshot.defaultCalendarId
+      ? { defaultCalendarStatus: statuses.get(snapshot.defaultCalendarId) }
+      : { defaultCalendarStatus: "unconfigured" as const }),
+    professionals: snapshot.professionals.map((professional) => ({
+      ...professional,
+      effectiveCalendarStatus: professional.effectiveCalendarId
+        ? statuses.get(professional.effectiveCalendarId)
+        : "unconfigured",
+    })),
+  };
+};
+
+const calendarVerificationFailure = (reply: Parameters<typeof sendCatalogError>[0], status: GoogleCalendarAccessStatus) =>
+  reply.code(409).send({ error: { code: "CALENDAR_ACCESS_NOT_VERIFIED", status } });

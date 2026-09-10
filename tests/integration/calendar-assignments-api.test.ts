@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
 import { buildApplication } from "../../src/bootstrap/index.js";
 import { BusinessCalendarAssignmentResolver } from "../../src/modules/integrations/calendar/business-calendar-assignment-resolver.js";
+import type { GoogleOAuthService } from "../../src/modules/integrations/index.js";
 import { createAdminTestSession } from "../helpers/admin-session.js";
 
 let server: FastifyInstance | undefined;
@@ -10,7 +11,7 @@ afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("calendar assignments API", () => {
   it("uses the location default, lets a professional override it, and restores fallback", async () => {
-    const app = buildApplication();
+    const app = buildApplication({ googleOAuth: accessibleGoogleOAuth() });
     server = await createApiServer(app);
     const admin = await createAdminTestSession(app, server);
     const resolver = new BusinessCalendarAssignmentResolver(app.business);
@@ -56,7 +57,7 @@ describe("calendar assignments API", () => {
   });
 
   it("requires tenant_admin, valid IDs, existing assignments and fresh versions", async () => {
-    const app = buildApplication();
+    const app = buildApplication({ googleOAuth: accessibleGoogleOAuth() });
     server = await createApiServer(app);
     const admin = await createAdminTestSession(app, server);
 
@@ -82,4 +83,63 @@ describe("calendar assignments API", () => {
     });
     expect(stale.statusCode).toBe(409);
   });
+
+  it("does not activate inaccessible calendars and reports status for configured assignments", async () => {
+    const googleOAuth = {
+      verifyCalendarAccess: async (_tenantId: string, calendarId: string) =>
+        calendarId.startsWith("denied") ? "forbidden" as const : "accessible" as const,
+    } as unknown as GoogleOAuthService;
+    const app = buildApplication({ googleOAuth });
+    server = await createApiServer(app);
+    const admin = await createAdminTestSession(app, server);
+
+    const denied = await server.inject({
+      method: "PUT", url: "/api/admin/locations/default/calendar",
+      headers: { ...admin.mutationHeaders, "if-match": '"1"' }, payload: { calendarId: "denied@example.com" },
+    });
+    expect(denied.statusCode).toBe(409);
+    expect(denied.json()).toEqual({ error: { code: "CALENDAR_ACCESS_NOT_VERIFIED", status: "forbidden" } });
+
+    const accepted = await server.inject({
+      method: "PUT", url: "/api/admin/locations/default/calendar",
+      headers: { ...admin.mutationHeaders, "if-match": '"1"' }, payload: { calendarId: "branch@example.com" },
+    });
+    expect(accepted.statusCode).toBe(200);
+    const status = await server.inject({
+      method: "GET", url: "/api/admin/locations/default/calendars", headers: admin.readHeaders,
+    });
+    expect(status.json()).toMatchObject({
+      defaultCalendarId: "branch@example.com", defaultCalendarStatus: "accessible",
+      professionals: expect.arrayContaining([
+        expect.objectContaining({ professionalId: "employee-1", effectiveCalendarStatus: "accessible" }),
+      ]),
+    });
+  });
+
+  it("also blocks unverified calendar changes through the full configuration facade", async () => {
+    const app = buildApplication({ googleOAuth: {
+      verifyCalendarAccess: async () => "not_found" as const,
+    } as unknown as GoogleOAuthService });
+    server = await createApiServer(app);
+    const admin = await createAdminTestSession(app, server);
+    const current = await server.inject({
+      method: "GET", url: "/api/admin/business-configuration", headers: admin.readHeaders,
+    });
+    const configuration = current.json<{ configuration: { locations: Array<{ defaultCalendarId?: string }> } }>().configuration;
+    configuration.locations[0]!.defaultCalendarId = "unknown@example.com";
+    const changed = await server.inject({
+      method: "PUT", url: "/api/admin/business-configuration",
+      headers: { ...admin.mutationHeaders, "if-match": '"1"' }, payload: { configuration },
+    });
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json()).toEqual({
+      error: { code: "CALENDAR_ACCESS_NOT_VERIFIED", status: "not_found" },
+    });
+    const stored = await app.business.getBusinessConfiguration(app.tenantId);
+    expect(stored.ok && stored.value.configuration.locations[0]!.defaultCalendarId).toBeUndefined();
+  });
 });
+
+const accessibleGoogleOAuth = () => ({
+  verifyCalendarAccess: async () => "accessible" as const,
+}) as unknown as GoogleOAuthService;
