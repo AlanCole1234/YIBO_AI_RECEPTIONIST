@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 2 — Dominio multi-sucursal y migración**.
-- Tarea activa: **LOC-002 — perfil versionado y upgrader**.
+- Tarea activa: **LOC-003 — migración SQLite con location_id**.
 - Último checkpoint cerrado: Checkpoint 1; `pnpm typecheck`, 159 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -58,8 +58,8 @@ con `pnpm test` y `pnpm build`.
 | AUTH-005 | DONE | Configuración y administración sólo para tenant_admin; operación para operator |
 | AUD-001 | DONE | Sujeto, entidad, versión y diff redactado persistidos por tenant |
 | LOC-001 | DONE | ADR-003, LocationId, catálogos, sucursales, asignaciones y validación |
-| LOC-002 | IN_PROGRESS | Perfil versionado y upgrader a sucursal default |
-| LOC-003 | TODO | Migración SQLite con `location_id` |
+| LOC-002 | DONE | Entrada v1 explícita y upgrader puro/idempotente a sucursal default v2 |
+| LOC-003 | IN_PROGRESS | Migración SQLite con `location_id` |
 | LOC-004 | TODO | Contexto confiable tenant/location por número marcado |
 | LOC-005 | TODO | Fixtures y adaptadores en memoria migrados |
 | LOC-006 | TODO | API administrativa versionada con edición optimista |

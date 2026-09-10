@@ -3,6 +3,7 @@ export type {
   BusinessDirectory,
   BusinessLookupError,
   BusinessProfile,
+  LegacyBusinessProfileV1,
   EmployeeDefinition,
   OpeningHoursRule,
   ServiceDefinition,
@@ -14,6 +15,11 @@ export {
   SLOT_INCREMENT_MINUTES,
   validateMultiLocationBusiness,
 } from "./domain/multi-location-business.js";
+export {
+  isBusinessConfigurationV2,
+  upgradeBusinessProfile,
+} from "./domain/upgrade-business-profile.js";
+export type { VersionedBusinessProfile } from "./domain/upgrade-business-profile.js";
 export type {
   BusinessConfigurationV2,
   LocationAddress,

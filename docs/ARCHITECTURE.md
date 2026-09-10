@@ -64,8 +64,11 @@ dueño de la sesión; Voice sólo transporta PCM mono de 24 kHz.
 Business ya define el contrato validado de siguiente generación: catálogos de
 servicios y profesionales compartidos y sucursales con `LocationId`, dirección,
 zona, locale, números, horarios, cierres, políticas, precios y asignaciones de
-calendario. Los consumidores ejecutables aún leen el perfil histórico; el
-checkpoint activo incorpora el upgrader único antes de migrar persistencia.
+calendario. El formato histórico se reconoce como v1 y un upgrader puro,
+idempotente y validado produce la única forma v2, incluyendo la sucursal
+`default` y defaults conservadores. Los consumidores ejecutables aún leen el
+perfil histórico hasta que la migración persistente y el contexto de sucursal
+queden incorporados.
 
 ## Configuración del agente
 

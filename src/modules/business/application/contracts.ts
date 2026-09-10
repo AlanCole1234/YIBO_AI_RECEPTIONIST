@@ -24,6 +24,8 @@ export interface BusinessDirectory {
 }
 
 export interface BusinessProfile {
+  /** Historical v1 shape. Absence of this field also means v1. */
+  schemaVersion?: 1;
   region: RegionId;
   tenantId: TenantId;
   businessId: BusinessId;
@@ -36,6 +38,8 @@ export interface BusinessProfile {
   employees: EmployeeDefinition[];
   openingHours: OpeningHoursRule[];
 }
+
+export type LegacyBusinessProfileV1 = BusinessProfile;
 
 export interface ServiceDefinition {
   id: ServiceId;
