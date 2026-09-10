@@ -219,11 +219,19 @@ describe("OpenAIRealtimeAdapter", () => {
     const adapter = new OpenAIRealtimeAdapter({
       apiKey: "test-key",
       mode: "audio",
-      turnDetection: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500 },
       connectionFactory: { connect: async () => connection },
     });
 
-    await open({ ...fixture(), adapter, connection });
+    await adapter.openSession({
+      conversationId: "conversation-1",
+      agent: {
+        ...agent,
+        conversation: {
+          ...agent.conversation,
+          turnDetection: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500 },
+        },
+      },
+    });
 
     expect(connection.sent[0]).toMatchObject({
       session: { audio: { input: { turn_detection: {

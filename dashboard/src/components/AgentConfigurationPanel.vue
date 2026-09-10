@@ -32,7 +32,7 @@ const locales = [
   ["en-GB", "English · United Kingdom"], ["pt-BR", "Português · Brasil"],
 ];
 const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conversation"]["turnDetection"]> = {
-  auto: {},
+  auto: { silenceDurationMs: 800 },
   fast: { threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
   balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
   patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },

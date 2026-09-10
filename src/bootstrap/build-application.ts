@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   AgentDefinitionService,
   AgentConfigurationService,
-  AGENT_TOOL_DEFINITIONS,
+  createDefaultAgentConfiguration,
   InMemoryAgentConfigurationSource,
   ToolExecutorImpl,
   type HumanTransferPort,
@@ -216,28 +216,22 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   });
   const configurationRepository = options.agentConfigurationRepository ?? new InMemoryAgentConfigurationSource(profiles.map((profile) => ({
       tenantId: profile.tenantId,
-      configuration: {
-        instructions: [
-          `You are the phone receptionist for ${profile.name}.`,
-          "Speak warmly and naturally, using complete sentences and a conversational rhythm.",
-        "Be concise, but never cut off a sentence or end abruptly.",
-        "Do not sound like a script and do not recite unnecessary lists.",
-        "For booking, first use check_availability. Once the caller selects an available time, use create_appointment and only confirm the booking after the tool confirms it.",
-        ].join(" "),
+      configuration: createDefaultAgentConfiguration({
         locale: profile.locale,
+        businessName: profile.name,
+        model: config.openAiRealtimeModel,
         voice: config.conversationVoice,
-        enabledTools: AGENT_TOOL_DEFINITIONS.map((tool) => tool.name),
-        conversation: {
-          model: config.openAiRealtimeModel,
-          maxOutputTokens: config.maxOutputTokens,
-          reasoningEffort: "minimal",
-          turnDetection: {
-            ...(config.vadThreshold === undefined ? {} : { threshold: config.vadThreshold }),
-            ...(config.vadPrefixPaddingMs === undefined ? {} : { prefixPaddingMs: config.vadPrefixPaddingMs }),
-            ...(config.vadSilenceDurationMs === undefined ? {} : { silenceDurationMs: config.vadSilenceDurationMs }),
-          },
-        },
-      },
+        maxOutputTokens: config.maxOutputTokens,
+        ...(config.vadThreshold !== undefined
+          || config.vadPrefixPaddingMs !== undefined
+          || config.vadSilenceDurationMs !== undefined
+          ? { turnDetection: {
+              ...(config.vadThreshold === undefined ? {} : { threshold: config.vadThreshold }),
+              ...(config.vadPrefixPaddingMs === undefined ? {} : { prefixPaddingMs: config.vadPrefixPaddingMs }),
+              ...(config.vadSilenceDurationMs === undefined ? {} : { silenceDurationMs: config.vadSilenceDurationMs }),
+            } }
+          : {}),
+      }),
     })));
   const agentConfiguration = new AgentConfigurationService(configurationRepository);
   const agentDefinitions = new AgentDefinitionService(configurationRepository, tools);
@@ -313,12 +307,5 @@ function selectRuntime(
   }
   return new OpenAIRealtimeAdapter({
     apiKey: config.openAiApiKey,
-    model: config.openAiRealtimeModel,
-    maxOutputTokens: config.maxOutputTokens,
-    turnDetection: {
-      ...(config.vadThreshold === undefined ? {} : { threshold: config.vadThreshold }),
-      ...(config.vadPrefixPaddingMs === undefined ? {} : { prefixPaddingMs: config.vadPrefixPaddingMs }),
-      ...(config.vadSilenceDurationMs === undefined ? {} : { silenceDurationMs: config.vadSilenceDurationMs }),
-    },
   });
 }

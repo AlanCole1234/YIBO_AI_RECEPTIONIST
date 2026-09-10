@@ -11,15 +11,17 @@ import type {
 } from "../ports/conversation-runtime-port.js";
 import type { AudioFrame } from "../ports/conversation-runtime-port.js";
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 512;
 const DEFAULT_VAD_SILENCE_DURATION_MS = 800;
 const DEFAULT_IDLE_TIMEOUT_MS = 6_000;
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
+  /** @deprecated Session model comes from AgentConfiguration. */
   model?: string;
+  /** @deprecated Session output limit comes from AgentConfiguration. */
   maxOutputTokens?: number;
   mode?: "text" | "audio";
+  /** @deprecated Session VAD comes from AgentConfiguration. */
   turnDetection?: ServerTurnDetectionOptions;
   logger?: RealtimeErrorLogger;
   connectionFactory?: RealtimeConnectionFactory;
@@ -50,33 +52,28 @@ export interface RealtimeConnection {
 }
 
 export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
-  private readonly model: string;
-  private readonly maxOutputTokens: number;
   private readonly mode: "text" | "audio";
-  private readonly turnDetection: ServerTurnDetectionOptions;
   private readonly logger: RealtimeErrorLogger;
   private readonly connectionFactory: RealtimeConnectionFactory;
 
   constructor(private readonly options: OpenAIRealtimeAdapterOptions) {
     if (!options.apiKey.trim()) throw new Error("OpenAIRealtimeAdapter requires an API key");
-    this.model = options.model?.trim() || "gpt-realtime-2.1";
-    this.maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     this.mode = options.mode ?? "audio";
-    this.turnDetection = validateTurnDetection(options.turnDetection ?? {});
-    if (!Number.isInteger(this.maxOutputTokens) || this.maxOutputTokens < 1 || this.maxOutputTokens > 4096) {
-      throw new Error("maxOutputTokens must be an integer between 1 and 4096");
-    }
     this.logger = options.logger ?? consoleLogger;
     this.connectionFactory = options.connectionFactory ?? sdkConnectionFactory;
   }
 
   async openSession(input: OpenConversationInput): Promise<ConversationRuntimeSession> {
-    const model = input.agent.conversation.model || this.model;
-    const maxOutputTokens = input.agent.conversation.maxOutputTokens || this.maxOutputTokens;
+    const model = input.agent.conversation.model;
+    const maxOutputTokens = input.agent.conversation.maxOutputTokens;
+    if (!model.trim()) throw new Error("Realtime conversation model is required");
+    if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4096) {
+      throw new Error("Realtime maxOutputTokens must be an integer between 1 and 4096");
+    }
     const turnDetection = validateTurnDetection(input.agent.conversation.turnDetection);
-    const threshold = turnDetection.threshold ?? this.turnDetection.threshold;
-    const prefixPaddingMs = turnDetection.prefixPaddingMs ?? this.turnDetection.prefixPaddingMs;
-    const silenceDurationMs = turnDetection.silenceDurationMs ?? this.turnDetection.silenceDurationMs ?? DEFAULT_VAD_SILENCE_DURATION_MS;
+    const threshold = turnDetection.threshold;
+    const prefixPaddingMs = turnDetection.prefixPaddingMs;
+    const silenceDurationMs = turnDetection.silenceDurationMs ?? DEFAULT_VAD_SILENCE_DURATION_MS;
     let connection: RealtimeConnection;
     this.logger.info?.("OpenAI Realtime connection starting", { model, mode: this.mode });
     try {
@@ -117,7 +114,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
               format: { type: "audio/pcm", rate: 24_000 },
               noise_reduction: { type: "near_field" },
               turn_detection: {
-                type: this.turnDetection.type ?? "server_vad",
+                type: turnDetection.type ?? "server_vad",
                 create_response: true,
                 interrupt_response: true,
                 idle_timeout_ms: DEFAULT_IDLE_TIMEOUT_MS,
@@ -150,7 +147,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
       mode: this.mode,
       outputAudioFormat: this.mode === "audio" ? "pcm_s16le/24000/mono" : undefined,
       turnDetection: this.mode === "audio" ? {
-        type: this.turnDetection.type ?? "server_vad",
+        type: turnDetection.type ?? "server_vad",
         createResponse: true,
         interruptResponse: true,
         idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,

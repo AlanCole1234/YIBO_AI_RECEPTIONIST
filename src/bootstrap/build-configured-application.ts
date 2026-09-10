@@ -9,7 +9,7 @@ import { SqliteCallRepository } from "../infrastructure/database/sqlite-call-rep
 import { SqliteConversationUsageRepository } from "../infrastructure/database/sqlite-conversation-usage-repository.js";
 import { SqliteGoogleTokenStore } from "../infrastructure/database/sqlite-google-token-store.js";
 import { SqliteBusinessRepository } from "../infrastructure/database/sqlite-business-repository.js";
-import { AgentConfigurationService } from "../modules/agents/index.js";
+import { AgentConfigurationService, DEFAULT_REALTIME_MODEL } from "../modules/agents/index.js";
 import {
   GoogleCalendarAdapter,
   GoogleOAuthService,
@@ -49,10 +49,22 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     const applicationConfig = options.config;
     const model = applicationConfig?.openAiRealtimeModel
       ?? environment.OPENAI_REALTIME_MODEL?.trim()
-      ?? "gpt-realtime-2.1";
+      ?? DEFAULT_REALTIME_MODEL;
     await configurationService.update(
       tenantId,
-      configurationService.recommended(tenant.locale, tenant.name, model),
+      configurationService.recommended(tenant.locale, tenant.name, model, {
+        ...(applicationConfig?.conversationVoice ? { voice: applicationConfig.conversationVoice } : {}),
+        ...(applicationConfig?.maxOutputTokens ? { maxOutputTokens: applicationConfig.maxOutputTokens } : {}),
+        ...(applicationConfig?.vadThreshold !== undefined
+          || applicationConfig?.vadPrefixPaddingMs !== undefined
+          || applicationConfig?.vadSilenceDurationMs !== undefined
+          ? { turnDetection: {
+              ...(applicationConfig.vadThreshold === undefined ? {} : { threshold: applicationConfig.vadThreshold }),
+              ...(applicationConfig.vadPrefixPaddingMs === undefined ? {} : { prefixPaddingMs: applicationConfig.vadPrefixPaddingMs }),
+              ...(applicationConfig.vadSilenceDurationMs === undefined ? {} : { silenceDurationMs: applicationConfig.vadSilenceDurationMs }),
+            } }
+          : {}),
+      }),
     );
   } else if (existingConfiguration.enabledTools.includes("create_appointment")
     && (!existingConfiguration.enabledTools.includes("update_customer")

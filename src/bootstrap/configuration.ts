@@ -25,14 +25,14 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     throw new ConfigurationError("YIBO_RUNTIME must be openai-realtime or in-memory");
   }
 
-  const openAiRealtimeModel = environment.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1";
-  const conversationVoice = environment.YIBO_VOICE?.trim() || "marin";
+  const openAiRealtimeModel = environment.OPENAI_REALTIME_MODEL?.trim() || DEFAULT_REALTIME_MODEL;
+  const conversationVoice = environment.YIBO_VOICE?.trim() || DEFAULT_CONVERSATION_VOICE;
   const maxOutputTokens = optionalIntegerInRange(
     environment.YIBO_MAX_OUTPUT_TOKENS,
     "YIBO_MAX_OUTPUT_TOKENS",
     1,
     4096,
-  ) ?? 512;
+  ) ?? DEFAULT_MAX_OUTPUT_TOKENS;
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
   const openAiAdminKey = environment.OPENAI_ADMIN_KEY?.trim();
   const vadThreshold = optionalNumber(environment.YIBO_VAD_THRESHOLD, "YIBO_VAD_THRESHOLD", 0, 1);
@@ -82,3 +82,8 @@ function optionalIntegerInRange(
   }
   return value;
 }
+import {
+  DEFAULT_CONVERSATION_VOICE,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_REALTIME_MODEL,
+} from "../modules/agents/index.js";

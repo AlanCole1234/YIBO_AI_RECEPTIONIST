@@ -9,8 +9,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 0 — Verdad documental y consistencia**.
-- Tarea activa: **FIX-003 — fábrica única de defaults del agente**.
+- Checkpoint activo: **Checkpoint 1 — Autenticación, autorización y auditoría**.
+- Tarea activa: **AUTH-001 — contratos de identidad administrativa**.
 
 ## Capacidades existentes
 
@@ -48,8 +48,8 @@ con `pnpm test` y `pnpm build`.
 | DOC-002 | DONE | Arquitectura, capacidades y guía alineadas con el código actual |
 | FIX-001 | DONE | Descriptores completos de tools y dashboard tolerante a extensiones |
 | FIX-002 | DONE | API prueba nombres y metadata que consume dinámicamente el dashboard |
-| FIX-003 | IN_PROGRESS | Fábrica única y versionada de defaults del agente |
-| AUTH-001 | TODO | Contratos de principal, sesión y roles administrativos |
+| FIX-003 | DONE | Fábrica única versionada; bootstrap y runtime consumen configuración resuelta |
+| AUTH-001 | IN_PROGRESS | Contratos de principal, sesión y roles administrativos |
 | AUTH-002 | TODO | Usuarios SQLite, scrypt y comando `admin:create` |
 | AUTH-003 | TODO | Login, logout, sesión firmada y `auth/me` |
 | AUTH-004 | TODO | Middleware, Origin y rechazo de tenant no confiable |

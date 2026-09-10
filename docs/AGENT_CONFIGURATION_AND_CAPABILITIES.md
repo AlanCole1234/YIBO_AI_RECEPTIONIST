@@ -27,6 +27,10 @@ El registro backend de herramientas también es la fuente de los títulos,
 descripciones, iconos, clasificación y ruta segura mostrados por el dashboard.
 Así una herramienta nueva puede mostrarse con fallback sin romper el panel.
 
+Los valores recomendados se construyen en una única fábrica versionada del
+módulo Agents. Bootstrap y el panel consumen esa fábrica; el adaptador Realtime
+usa siempre la definición ya resuelta y no sustituye modelo, voz o tokens.
+
 El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
 interrupción automáticas, timeout de silencio, tool choice automático y tools
 secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el

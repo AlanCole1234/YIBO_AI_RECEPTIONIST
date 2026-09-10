@@ -13,6 +13,15 @@ describe("AgentConfigurationService", () => {
     expect(recommended.enabledTools).toEqual([
       "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
+    expect(recommended).toMatchObject({
+      voice: "marin",
+      conversation: {
+        model: "gpt-realtime-2.1",
+        maxOutputTokens: 512,
+        reasoningEffort: "minimal",
+        turnDetection: { silenceDurationMs: 800 },
+      },
+    });
     recommended.enabledTools = ["check_availability"];
     const saved = await service.update("tenant-1", recommended);
 

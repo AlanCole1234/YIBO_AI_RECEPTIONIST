@@ -1,11 +1,20 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentConfiguration, AgentConfigurationRepository } from "../ports/agent-dependencies.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import {
+  createDefaultAgentConfiguration,
+  type DefaultAgentConfigurationInput,
+} from "./agent-configuration-defaults.js";
 
 export interface AgentConfigurationServiceContract {
   get(tenantId: TenantId): Promise<AgentConfiguration | null>;
   update(tenantId: TenantId, configuration: AgentConfiguration): Promise<AgentConfiguration>;
-  recommended(locale: string, businessName: string, model: string): AgentConfiguration;
+  recommended(
+    locale: string,
+    businessName: string,
+    model: string,
+    overrides?: Omit<DefaultAgentConfigurationInput, "locale" | "businessName" | "model">,
+  ): AgentConfiguration;
 }
 
 export class AgentConfigurationService implements AgentConfigurationServiceContract {
@@ -21,27 +30,13 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
     return structuredClone(validated);
   }
 
-  recommended(locale: string, businessName: string, model: string): AgentConfiguration {
-    return {
-      instructions: [
-        `You are the phone receptionist for ${businessName}.`,
-        "Speak warmly and naturally, using complete sentences and a conversational rhythm.",
-        "Be concise, but never cut off a sentence or end abruptly.",
-        "Confirm important details before making changes and never invent availability.",
-        "For a new booking, ask only: 'What day would you like to come in?' Wait for the answer before asking anything else. Resolve supported day phrases with check_availability, offer only the earliest available time first, and keep each reply to one or two short sentences. After the caller accepts an available time, collect the required contact details one question at a time, then create the appointment and confirm it only when the booking succeeds.",
-      ].join(" "),
-      locale,
-      voice: "marin",
-        enabledTools: AGENT_TOOL_DEFINITIONS
-          .filter((tool) => tool.name !== "enable_developer_test_mode" && tool.name !== "delete_test_appointments")
-          .map((tool) => tool.name),
-      conversation: {
-        model,
-        maxOutputTokens: 512,
-        reasoningEffort: "minimal",
-        turnDetection: {},
-      },
-    };
+  recommended(
+    locale: string,
+    businessName: string,
+    model: string,
+    overrides: Omit<DefaultAgentConfigurationInput, "locale" | "businessName" | "model"> = {},
+  ): AgentConfiguration {
+    return createDefaultAgentConfiguration({ locale, businessName, model, ...overrides });
   }
 }
 
