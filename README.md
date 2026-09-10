@@ -17,6 +17,7 @@ Fastify y un dashboard Vue.
 ```sh
 pnpm install
 pnpm db:init
+pnpm admin:create --tenant tenant-yibo-demo --region MX --email admin@example.com
 pnpm dev
 ```
 

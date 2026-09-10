@@ -10,6 +10,7 @@ const migrations = [
   { version: 2, path: fileURLToPath(new URL("./migrations/002_agent_configuration_and_usage.sql", import.meta.url)) },
   { version: 3, path: fileURLToPath(new URL("./migrations/003_call_history.sql", import.meta.url)) },
   { version: 4, path: fileURLToPath(new URL("./migrations/004_google_calendar_tokens.sql", import.meta.url)) },
+  { version: 5, path: fileURLToPath(new URL("./migrations/005_admin_users.sql", import.meta.url)) },
 ];
 
 export const defaultDatabasePath = (region: RegionId): string =>

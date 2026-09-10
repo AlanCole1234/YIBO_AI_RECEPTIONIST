@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 1 — Autenticación, autorización y auditoría**.
-- Tarea activa: **AUTH-002 — usuarios administrativos y scrypt**.
+- Tarea activa: **AUTH-003 — sesión firmada y endpoints de autenticación**.
 
 ## Capacidades existentes
 
@@ -50,8 +50,8 @@ con `pnpm test` y `pnpm build`.
 | FIX-002 | DONE | API prueba nombres y metadata que consume dinámicamente el dashboard |
 | FIX-003 | DONE | Fábrica única versionada; bootstrap y runtime consumen configuración resuelta |
 | AUTH-001 | DONE | ADR-002 y contratos neutrales de principal, sesión y roles |
-| AUTH-002 | IN_PROGRESS | Usuarios SQLite, scrypt y comando `admin:create` |
-| AUTH-003 | TODO | Login, logout, sesión firmada y `auth/me` |
+| AUTH-002 | DONE | Usuarios SQLite, scrypt y comando interactivo `admin:create` |
+| AUTH-003 | IN_PROGRESS | Login, logout, sesión firmada y `auth/me` |
 | AUTH-004 | TODO | Middleware, Origin y rechazo de tenant no confiable |
 | AUTH-005 | TODO | Matriz de permisos tenant_admin/operator |
 | AUD-001 | TODO | Auditoría administrativa redactada |
