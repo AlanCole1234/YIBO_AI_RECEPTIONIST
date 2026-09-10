@@ -200,7 +200,9 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     getWorkingHours: async ({ tenantId: candidateTenantId, locationId, employeeId }) => {
       const profile = await business.getLocation(candidateTenantId, locationId);
       if (!profile.ok || !profile.value.business.professionals.some((employee) => employee.id === employeeId && employee.active)) return [];
-      return profile.value.location.openingHours.map((rule) => ({ ...rule }));
+      const assignment = profile.value.location.professionals.find((candidate) =>
+        candidate.professionalId === employeeId && candidate.active);
+      return assignment?.openingHours.map((rule) => ({ ...rule })) ?? [];
     },
   };
   const confirmedAppointments: ConfirmedAppointmentReader = appointmentRepository;
@@ -238,9 +240,10 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const developerTestWorkingHours: EmployeeWorkingHoursProvider = {
     getWorkingHours: async ({ tenantId: candidateTenantId, locationId, employeeId }) => {
       const profile = await developerTestBusiness.getLocation(candidateTenantId, locationId);
-      return profile.ok && profile.value.business.professionals.some((employee) => employee.id === employeeId && employee.active)
-        ? profile.value.location.openingHours.map((rule) => ({ ...rule }))
-        : [];
+      if (!profile.ok || !profile.value.business.professionals.some((employee) => employee.id === employeeId && employee.active)) return [];
+      const assignment = profile.value.location.professionals.find((candidate) =>
+        candidate.professionalId === employeeId && candidate.active);
+      return assignment?.openingHours.map((rule) => ({ ...rule })) ?? [];
     },
   };
   const developerTestScheduling = new SchedulingServiceImpl(

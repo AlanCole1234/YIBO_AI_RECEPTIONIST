@@ -2,6 +2,7 @@ import type { EmployeeId, LocationId, TenantId } from "../../../shared/types/ide
 import type { OpeningHoursRule } from "../../business/index.js";
 
 export interface EmployeeWorkingHoursProvider {
+  /** Empty means the professional inherits the location opening hours. */
   getWorkingHours(query: EmployeeWorkingHoursQuery): Promise<OpeningHoursRule[]>;
 }
 

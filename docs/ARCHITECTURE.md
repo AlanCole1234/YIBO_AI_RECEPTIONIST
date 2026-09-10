@@ -96,6 +96,11 @@ Scheduling genera slots cada 15 minutos y cruza:
 4. citas confirmadas locales disponibles para el adaptador;
 5. ocupación externa mediante Google FreeBusy.
 
+El horario particular del profesional se intersecta por día e intervalo con el
+de la sucursal. Una lista particular vacía significa herencia explícita del
+horario de sucursal; la indisponibilidad se representa desactivando la
+asignación, no mediante un significado ambiguo de lista vacía.
+
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el
 reemplazo antes de cancelar el evento anterior y compensa si falla el segundo

@@ -123,7 +123,7 @@ export class SchedulingServiceImpl implements SchedulingService {
       locationId: input.locationId,
       employeeId: input.employee.id,
     });
-    if (employeeHours.length === 0) return success<AvailableSlot[]>([]);
+    const effectiveEmployeeHours = employeeHours.length > 0 ? employeeHours : input.businessHours;
 
     const conflict = await this.conflictIntervals(input.tenantId, input.locationId, input.employee.id, input.rangeStart, input.rangeEnd);
     if (!conflict.ok) return conflict;
@@ -139,7 +139,7 @@ export class SchedulingServiceImpl implements SchedulingService {
       };
       const weekday = cursor.getUTCDay();
       for (const businessRule of rulesForDay(input.businessHours, weekday)) {
-        for (const employeeRule of rulesForDay(employeeHours, weekday)) {
+        for (const employeeRule of rulesForDay(effectiveEmployeeHours, weekday)) {
           const startMinute = Math.max(minuteOfDay(businessRule.startTime), minuteOfDay(employeeRule.startTime));
           const endMinute = Math.min(minuteOfDay(businessRule.endTime), minuteOfDay(employeeRule.endTime));
           for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += SLOT_INCREMENT_MINUTES) {
@@ -159,6 +159,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     tenantId: string, locationId: string, employeeId: string, timezone: string, businessHours: OpeningHoursRule[], start: Date, end: Date,
   ): Promise<boolean> {
     const employeeHours = await this.workingHours.getWorkingHours({ tenantId, locationId, employeeId });
+    const effectiveEmployeeHours = employeeHours.length > 0 ? employeeHours : businessHours;
     const localStart = localParts(start, timezone);
     const localEnd = localParts(end, timezone);
     if (localStart.year !== localEnd.year || localStart.month !== localEnd.month || localStart.day !== localEnd.day) return false;
@@ -166,7 +167,8 @@ export class SchedulingServiceImpl implements SchedulingService {
     const startMinute = localStart.hour * 60 + localStart.minute;
     const endMinute = localEnd.hour * 60 + localEnd.minute;
     const inRule = (rule: OpeningHoursRule) => minuteOfDay(rule.startTime) <= startMinute && endMinute <= minuteOfDay(rule.endTime);
-    return rulesForDay(businessHours, weekday).some(inRule) && rulesForDay(employeeHours, weekday).some(inRule);
+    return rulesForDay(businessHours, weekday).some(inRule)
+      && rulesForDay(effectiveEmployeeHours, weekday).some(inRule);
   }
 
   private async hasConflict(tenantId: string, locationId: string, employeeId: string, start: Date, end: Date) {

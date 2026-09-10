@@ -24,8 +24,12 @@ const noAppointments: ConfirmedAppointmentReader = { findConfirmedIntervals: asy
 const noCalendarConflicts: CalendarPort = { getBusyIntervals: async () => success([]) };
 const clock = { now: () => new Date("2026-08-01T00:00:00.000Z") };
 
-const createService = (appointments = noAppointments, calendar = noCalendarConflicts) => new SchedulingServiceImpl(
-  new BusinessDirectoryService(new InMemoryBusinessRepository([business])), workingHours, appointments, calendar, clock,
+const createService = (
+  appointments = noAppointments,
+  calendar = noCalendarConflicts,
+  hours = workingHours,
+) => new SchedulingServiceImpl(
+  new BusinessDirectoryService(new InMemoryBusinessRepository([business])), hours, appointments, calendar, clock,
 );
 
 describe("SchedulingService", () => {
@@ -66,5 +70,33 @@ describe("SchedulingService", () => {
     await expect(createService().validateSlot({
       tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T15:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BUSINESS_HOURS" } });
+  });
+
+  it("inherits location hours when no professional override is configured", async () => {
+    const inheritedHours: EmployeeWorkingHoursProvider = { getWorkingHours: async () => [] };
+    const result = await createService(noAppointments, noCalendarConflicts, inheritedHours).findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    });
+    expect(result.ok && result.value[0]?.startAt).toBe("2026-08-10T15:00:00.000Z");
+    expect(result.ok && result.value.at(-1)?.endAt).toBe("2026-08-10T18:00:00.000Z");
+  });
+
+  it("intersects each location and professional interval without spanning gaps", async () => {
+    const splitHours: EmployeeWorkingHoursProvider = {
+      getWorkingHours: async () => [
+        { dayOfWeek: 1, startTime: "08:00", endTime: "10:00" },
+        { dayOfWeek: 1, startTime: "11:00", endTime: "13:00" },
+      ],
+    };
+    const result = await createService(noAppointments, noCalendarConflicts, splitHours).findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    });
+    if (!result.ok) throw new Error("Expected slots");
+    expect(result.value.map(({ startAt }) => startAt)).toEqual([
+      "2026-08-10T15:00:00.000Z", "2026-08-10T15:15:00.000Z", "2026-08-10T15:30:00.000Z",
+      "2026-08-10T17:00:00.000Z", "2026-08-10T17:15:00.000Z", "2026-08-10T17:30:00.000Z",
+    ]);
   });
 });
