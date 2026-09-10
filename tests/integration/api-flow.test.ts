@@ -32,7 +32,7 @@ describe("local API flow", () => {
   });
 
   it("supports health, customer, availability, booking, refresh, conflict, and lookup", async () => {
-    const app = buildApplication();
+    const app = buildApplication({ clock: { now: () => new Date("2026-08-01T00:00:00.000Z") } });
     server = await createApiServer(app);
     const session = await createAdminTestSession(app, server, ["operator"]);
 

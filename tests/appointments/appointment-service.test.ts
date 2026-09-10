@@ -78,6 +78,7 @@ function fixture(options: { scheduling?: SchedulingService; business?: Versioned
     calendar,
     new InMemoryAppointmentConcurrencyGuard(),
     () => `appointment-${nextId++}`,
+    { now: () => new Date("2026-08-01T00:00:00.000Z") },
   );
   return { businessRepository, calendar, repository, service };
 }
@@ -239,5 +240,21 @@ describe("AppointmentServiceImpl", () => {
       status: "CONFIRMED",
       externalCalendarEventId: "event-2",
     } });
+  });
+
+  it("enforces location notice before cancellation and rescheduling", async () => {
+    const restricted = upgradeBusinessProfile(business);
+    restricted.locations[0]!.policies.minimumCancellationNoticeMinutes = 14 * 24 * 60;
+    restricted.locations[0]!.policies.minimumRescheduleNoticeMinutes = 14 * 24 * 60;
+    const { service } = fixture({ business: restricted });
+    await service.createAppointment(command);
+
+    await expect(service.cancelAppointment({
+      tenantId: command.tenantId, locationId: command.locationId, appointmentId: "appointment-1",
+    })).resolves.toEqual({ ok: false, error: { code: "CANCELLATION_NOTICE_NOT_MET" } });
+    await expect(service.rescheduleAppointment({
+      tenantId: command.tenantId, locationId: command.locationId,
+      appointmentId: "appointment-1", startAt: "2026-08-10T16:00:00.000Z",
+    })).resolves.toEqual({ ok: false, error: { code: "RESCHEDULE_NOTICE_NOT_MET" } });
   });
 });

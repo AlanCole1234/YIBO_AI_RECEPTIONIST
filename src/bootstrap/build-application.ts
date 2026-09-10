@@ -221,6 +221,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     calendar,
     new InMemoryAppointmentConcurrencyGuard(),
     () => ids.generate("appointment"),
+    clock,
   );
   // Developer Test Mode must be repeatable without touching a connected Google
   // Calendar. It uses the same scheduling and appointment services, with an
@@ -261,6 +262,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     developerTestCalendar,
     new InMemoryAppointmentConcurrencyGuard(),
     () => ids.generate("appointment"),
+    clock,
   );
   const transfer = options.humanTransfer ?? unavailableTransfer;
   const tools = new ToolExecutorImpl(scheduling, appointments, transfer, business, clock, customers, {

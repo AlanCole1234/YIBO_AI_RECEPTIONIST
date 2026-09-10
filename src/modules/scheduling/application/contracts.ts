@@ -42,6 +42,7 @@ export type SchedulingError =
   | { code: "SERVICE_NOT_FOUND" }
   | { code: "EMPLOYEE_NOT_FOUND" }
   | { code: "OUTSIDE_BUSINESS_HOURS" }
+  | { code: "OUTSIDE_BOOKING_WINDOW" }
   | { code: "EMPLOYEE_UNAVAILABLE" }
   | { code: "SLOT_CONFLICT" }
   | { code: "INVALID_TIME_RANGE" }

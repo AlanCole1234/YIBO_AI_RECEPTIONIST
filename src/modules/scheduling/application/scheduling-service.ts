@@ -23,8 +23,6 @@ import type { CalendarPort } from "../ports/calendar-port.js";
 import type { ConfirmedAppointmentReader } from "../ports/confirmed-appointment-reader.js";
 import type { EmployeeWorkingHoursProvider } from "../ports/employee-working-hours-provider.js";
 
-const SLOT_INCREMENT_MINUTES = 15;
-
 export class SchedulingServiceImpl implements SchedulingService {
   constructor(
     private readonly businessDirectory: BusinessDirectory,
@@ -41,6 +39,13 @@ export class SchedulingServiceImpl implements SchedulingService {
     const configuration = await this.configuration(query.tenantId, query.locationId, query.serviceId, query.employeeId);
     if (!configuration.ok) return configuration;
     const { location, service, employees } = configuration.value;
+    const policyRange = bookingRange(this.clock.now(), location.policies.minimumLeadTimeMinutes,
+      location.policies.maximumBookingHorizonDays);
+    const effectiveRange = {
+      start: new Date(Math.max(range.start.valueOf(), policyRange.start.valueOf())),
+      end: new Date(Math.min(range.end.valueOf(), policyRange.end.valueOf())),
+    };
+    if (effectiveRange.start >= effectiveRange.end) return success([]);
 
     const slots: AvailableSlot[] = [];
     for (const employee of employees) {
@@ -52,15 +57,17 @@ export class SchedulingServiceImpl implements SchedulingService {
         timezone: location.timezone,
         businessHours: location.openingHours,
         closures: location.closures,
-        rangeStart: range.start,
-        rangeEnd: range.end,
+        rangeStart: effectiveRange.start,
+        rangeEnd: effectiveRange.end,
+        slotIncrementMinutes: location.policies.slotIncrementMinutes,
       });
       if (!employeeSlots.ok) return employeeSlots;
       slots.push(...employeeSlots.value);
     }
 
     slots.sort((left, right) => left.startAt.localeCompare(right.startAt));
-    return success(slots.slice(0, query.limit ?? 20));
+    const requestedLimit = query.limit === undefined ? location.policies.maximumResults : Math.max(0, query.limit);
+    return success(slots.slice(0, Math.min(requestedLimit, location.policies.maximumResults)));
   }
 
   async validateSlot(query: ValidateSlotQuery) {
@@ -72,9 +79,15 @@ export class SchedulingServiceImpl implements SchedulingService {
     const { location, service, employees } = configuration.value;
     const employee = employees[0]!;
     const end = new Date(start.valueOf() + (service.durationMinutes + service.bufferMinutes) * 60_000);
+    const policyRange = bookingRange(this.clock.now(), location.policies.minimumLeadTimeMinutes,
+      location.policies.maximumBookingHorizonDays);
+    if (start < policyRange.start || end > policyRange.end) {
+      return failure<SchedulingError>({ code: "OUTSIDE_BOOKING_WINDOW" });
+    }
 
     const isWithinHours = await this.isWithinHours(
-      query.tenantId, query.locationId, employee.id, location.timezone, location.openingHours, start, end,
+      query.tenantId, query.locationId, employee.id, location.timezone, location.openingHours,
+      location.policies.slotIncrementMinutes, start, end,
     );
     if (!isWithinHours) return failure<SchedulingError>({ code: "OUTSIDE_BUSINESS_HOURS" });
     if (intersects(start, end, closureIntervals(location.closures, location.timezone))) {
@@ -123,6 +136,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     closures: LocationClosure[];
     rangeStart: Date;
     rangeEnd: Date;
+    slotIncrementMinutes: number;
   }) {
     const employeeHours = await this.workingHours.getWorkingHours({
       tenantId: input.tenantId,
@@ -148,7 +162,7 @@ export class SchedulingServiceImpl implements SchedulingService {
         for (const employeeRule of rulesForDay(effectiveEmployeeHours, weekday)) {
           const startMinute = Math.max(minuteOfDay(businessRule.startTime), minuteOfDay(employeeRule.startTime));
           const endMinute = Math.min(minuteOfDay(businessRule.endTime), minuteOfDay(employeeRule.endTime));
-          for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += SLOT_INCREMENT_MINUTES) {
+          for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += input.slotIncrementMinutes) {
             const start = toUtc({ ...day, hour: Math.floor(minute / 60), minute: minute % 60 }, input.timezone);
             const end = new Date(start.valueOf() + (input.service.durationMinutes + input.service.bufferMinutes) * 60_000);
             if (start < input.rangeStart || end > input.rangeEnd
@@ -164,7 +178,8 @@ export class SchedulingServiceImpl implements SchedulingService {
   }
 
   private async isWithinHours(
-    tenantId: string, locationId: string, employeeId: string, timezone: string, businessHours: OpeningHoursRule[], start: Date, end: Date,
+    tenantId: string, locationId: string, employeeId: string, timezone: string,
+    businessHours: OpeningHoursRule[], slotIncrementMinutes: number, start: Date, end: Date,
   ): Promise<boolean> {
     const employeeHours = await this.workingHours.getWorkingHours({ tenantId, locationId, employeeId });
     const effectiveEmployeeHours = employeeHours.length > 0 ? employeeHours : businessHours;
@@ -174,9 +189,13 @@ export class SchedulingServiceImpl implements SchedulingService {
     const weekday = new Date(Date.UTC(localStart.year, localStart.month - 1, localStart.day)).getUTCDay();
     const startMinute = localStart.hour * 60 + localStart.minute;
     const endMinute = localEnd.hour * 60 + localEnd.minute;
-    const inRule = (rule: OpeningHoursRule) => minuteOfDay(rule.startTime) <= startMinute && endMinute <= minuteOfDay(rule.endTime);
-    return rulesForDay(businessHours, weekday).some(inRule)
-      && rulesForDay(effectiveEmployeeHours, weekday).some(inRule);
+    return rulesForDay(businessHours, weekday).some((businessRule) =>
+      rulesForDay(effectiveEmployeeHours, weekday).some((employeeRule) => {
+        const intersectionStart = Math.max(minuteOfDay(businessRule.startTime), minuteOfDay(employeeRule.startTime));
+        const intersectionEnd = Math.min(minuteOfDay(businessRule.endTime), minuteOfDay(employeeRule.endTime));
+        return intersectionStart <= startMinute && endMinute <= intersectionEnd
+          && (startMinute - intersectionStart) % slotIncrementMinutes === 0;
+      }));
   }
 
   private async hasConflict(tenantId: string, locationId: string, employeeId: string, start: Date, end: Date) {
@@ -209,6 +228,11 @@ const parseRange = (rangeStart: string, rangeEnd: string): { start: Date; end: D
   const end = new Date(rangeEnd);
   return Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf()) || start >= end ? null : { start, end };
 };
+
+const bookingRange = (now: Date, minimumLeadTimeMinutes: number, maximumBookingHorizonDays: number) => ({
+  start: new Date(now.valueOf() + minimumLeadTimeMinutes * 60_000),
+  end: new Date(now.valueOf() + maximumBookingHorizonDays * 24 * 60 * 60_000),
+});
 
 const closureIntervals = (closures: LocationClosure[], timezone: string) => closures.flatMap((closure) => {
   const start = normalizeDateTimeForTimezone(closure.startLocal, timezone);

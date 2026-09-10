@@ -202,8 +202,8 @@ export class ToolExecutorImpl implements ToolExecutor {
         || service.id.trim().toLocaleLowerCase() === normalized),
       )?.id;
     }
-    // Business services are ordered by the clinic. Until clinics expose a separate
-    // default-service setting, the first configured patient-facing service is the default.
+    // The default is explicit location policy; catalog ordering never grants a
+    // service implicit priority.
     return business.value.location.policies.defaultServiceId;
   }
 

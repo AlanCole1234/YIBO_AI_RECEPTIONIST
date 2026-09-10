@@ -1,4 +1,5 @@
 import { failure, success } from "../../../shared/domain/result.js";
+import type { Clock } from "../../../shared/application/system.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import type { SchedulingError, SchedulingService } from "../../scheduling/index.js";
 import type { Appointment } from "../domain/appointment.js";
@@ -30,6 +31,7 @@ export class AppointmentServiceImpl implements AppointmentService {
     private readonly calendar: AppointmentCalendarPort,
     private readonly guard: AppointmentConcurrencyGuard,
     private readonly createId: () => string,
+    private readonly clock: Clock = { now: () => new Date() },
   ) {}
 
   async createAppointment(command: CreateAppointmentCommand) {
@@ -134,6 +136,11 @@ export class AppointmentServiceImpl implements AppointmentService {
     if (appointment.status === "CANCELLED") {
       return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
     }
+    const cancellationPolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
+    if (!cancellationPolicy.ok || minutesUntil(appointment.startAt, this.clock.now())
+      < cancellationPolicy.value.location.policies.minimumCancellationNoticeMinutes) {
+      return failure<CancelAppointmentError>({ code: "CANCELLATION_NOTICE_NOT_MET" });
+    }
     if (appointment.externalCalendarEventId) {
       const cancelled = await this.calendar.cancelEvent({
         tenantId: appointment.tenantId,
@@ -155,6 +162,11 @@ export class AppointmentServiceImpl implements AppointmentService {
     if (!appointment || appointment.locationId !== command.locationId) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
     if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
       return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
+    }
+    const reschedulePolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
+    if (!reschedulePolicy.ok || minutesUntil(appointment.startAt, this.clock.now())
+      < reschedulePolicy.value.location.policies.minimumRescheduleNoticeMinutes) {
+      return failure<RescheduleAppointmentError>({ code: "RESCHEDULE_NOTICE_NOT_MET" });
     }
 
     return this.guard.execute(appointment.tenantId, appointment.locationId, appointment.employeeId, async () => {
@@ -228,6 +240,7 @@ const validateCreate = (command: CreateAppointmentCommand): string | null => {
 };
 
 const validDate = (value: string): boolean => !Number.isNaN(new Date(value).valueOf());
+const minutesUntil = (value: string, now: Date): number => (new Date(value).valueOf() - now.valueOf()) / 60_000;
 
 const sameRequest = (appointment: Appointment, command: CreateAppointmentCommand): boolean =>
   appointment.customerId === command.customerId &&

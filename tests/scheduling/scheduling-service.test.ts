@@ -127,4 +127,42 @@ describe("SchedulingService", () => {
       employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "SLOT_CONFLICT" } });
   });
+
+  it("applies slot increment and maximum results from the location policy", async () => {
+    const configured = upgradeBusinessProfile(business);
+    configured.locations[0]!.policies.slotIncrementMinutes = 10;
+    configured.locations[0]!.policies.maximumResults = 3;
+    const result = await createService(noAppointments, noCalendarConflicts, workingHours, configured).findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z", limit: 100,
+    });
+    expect(result).toEqual({ ok: true, value: [
+      { employeeId: "dr-lee", startAt: "2026-08-10T15:30:00.000Z", endAt: "2026-08-10T16:00:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-10T15:40:00.000Z", endAt: "2026-08-10T16:10:00.000Z" },
+      { employeeId: "dr-lee", startAt: "2026-08-10T15:50:00.000Z", endAt: "2026-08-10T16:20:00.000Z" },
+    ] });
+  });
+
+  it("applies lead time and booking horizon to listing and revalidation", async () => {
+    const configured = upgradeBusinessProfile(business);
+    configured.locations[0]!.policies.minimumLeadTimeMinutes = 10 * 24 * 60;
+    configured.locations[0]!.policies.maximumBookingHorizonDays = 20;
+    const service = createService(noAppointments, noCalendarConflicts, workingHours, configured);
+    await expect(service.findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    })).resolves.toEqual({ ok: true, value: [] });
+    await expect(service.validateSlot({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
+    })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BOOKING_WINDOW" } });
+
+    configured.locations[0]!.policies.minimumLeadTimeMinutes = 0;
+    configured.locations[0]!.policies.maximumBookingHorizonDays = 5;
+    const horizonService = createService(noAppointments, noCalendarConflicts, workingHours, configured);
+    await expect(horizonService.validateSlot({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
+    })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BOOKING_WINDOW" } });
+  });
 });

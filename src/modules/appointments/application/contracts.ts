@@ -55,11 +55,13 @@ export type CreateAppointmentError =
 export type CancelAppointmentError =
   | { code: "APPOINTMENT_NOT_FOUND" }
   | { code: "APPOINTMENT_ALREADY_CANCELLED" }
+  | { code: "CANCELLATION_NOTICE_NOT_MET" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean };
 
 export type RescheduleAppointmentError =
   | { code: "APPOINTMENT_NOT_FOUND" }
   | { code: "APPOINTMENT_NOT_CONFIRMED" }
+  | { code: "RESCHEDULE_NOTICE_NOT_MET" }
   | { code: "SLOT_NO_LONGER_AVAILABLE" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
   | { code: "VALIDATION_ERROR"; message: string };
