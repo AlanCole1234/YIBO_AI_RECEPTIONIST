@@ -1,11 +1,12 @@
 import { failure, success } from "../../../shared/domain/result.js";
 import type { Clock } from "../../../shared/application/system.js";
-import type { OpeningHoursRule, ProfessionalDefinition, TenantServiceDefinition } from "../../business/index.js";
+import type { LocationClosure, OpeningHoursRule, ProfessionalDefinition, TenantServiceDefinition } from "../../business/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import {
   intersects,
   localParts,
   minuteOfDay,
+  normalizeDateTimeForTimezone,
   rulesForDay,
   toUtc,
   type LocalDateTimeParts,
@@ -50,6 +51,7 @@ export class SchedulingServiceImpl implements SchedulingService {
         service,
         timezone: location.timezone,
         businessHours: location.openingHours,
+        closures: location.closures,
         rangeStart: range.start,
         rangeEnd: range.end,
       });
@@ -75,6 +77,9 @@ export class SchedulingServiceImpl implements SchedulingService {
       query.tenantId, query.locationId, employee.id, location.timezone, location.openingHours, start, end,
     );
     if (!isWithinHours) return failure<SchedulingError>({ code: "OUTSIDE_BUSINESS_HOURS" });
+    if (intersects(start, end, closureIntervals(location.closures, location.timezone))) {
+      return failure<SchedulingError>({ code: "SLOT_CONFLICT" });
+    }
 
     const conflict = await this.hasConflict(query.tenantId, query.locationId, employee.id, start, end);
     if (!conflict.ok) return conflict;
@@ -115,6 +120,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     service: TenantServiceDefinition;
     timezone: string;
     businessHours: OpeningHoursRule[];
+    closures: LocationClosure[];
     rangeStart: Date;
     rangeEnd: Date;
   }) {
@@ -145,7 +151,9 @@ export class SchedulingServiceImpl implements SchedulingService {
           for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += SLOT_INCREMENT_MINUTES) {
             const start = toUtc({ ...day, hour: Math.floor(minute / 60), minute: minute % 60 }, input.timezone);
             const end = new Date(start.valueOf() + (input.service.durationMinutes + input.service.bufferMinutes) * 60_000);
-            if (start < input.rangeStart || end > input.rangeEnd || intersects(start, end, conflict.value)) continue;
+            if (start < input.rangeStart || end > input.rangeEnd
+              || intersects(start, end, closureIntervals(input.closures, input.timezone))
+              || intersects(start, end, conflict.value)) continue;
             result.push({ employeeId: input.employee.id, startAt: start.toISOString(), endAt: end.toISOString() });
           }
         }
@@ -201,3 +209,9 @@ const parseRange = (rangeStart: string, rangeEnd: string): { start: Date; end: D
   const end = new Date(rangeEnd);
   return Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf()) || start >= end ? null : { start, end };
 };
+
+const closureIntervals = (closures: LocationClosure[], timezone: string) => closures.flatMap((closure) => {
+  const start = normalizeDateTimeForTimezone(closure.startLocal, timezone);
+  const end = normalizeDateTimeForTimezone(closure.endLocal, timezone);
+  return start && end && start < end ? [{ startAt: start.toISOString(), endAt: end.toISOString() }] : [];
+});

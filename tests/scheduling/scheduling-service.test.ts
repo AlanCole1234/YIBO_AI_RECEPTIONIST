@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessProfile,
+  type VersionedBusinessProfile,
 } from "../../src/modules/business/index.js";
 import { success } from "../../src/shared/domain/result.js";
 import { SchedulingServiceImpl, type CalendarPort, type ConfirmedAppointmentReader, type EmployeeWorkingHoursProvider } from "../../src/modules/scheduling/index.js";
@@ -28,8 +30,9 @@ const createService = (
   appointments = noAppointments,
   calendar = noCalendarConflicts,
   hours = workingHours,
+  profile: VersionedBusinessProfile = business,
 ) => new SchedulingServiceImpl(
-  new BusinessDirectoryService(new InMemoryBusinessRepository([business])), hours, appointments, calendar, clock,
+  new BusinessDirectoryService(new InMemoryBusinessRepository([profile])), hours, appointments, calendar, clock,
 );
 
 describe("SchedulingService", () => {
@@ -98,5 +101,30 @@ describe("SchedulingService", () => {
       "2026-08-10T15:00:00.000Z", "2026-08-10T15:15:00.000Z", "2026-08-10T15:30:00.000Z",
       "2026-08-10T17:00:00.000Z", "2026-08-10T17:15:00.000Z", "2026-08-10T17:30:00.000Z",
     ]);
+  });
+
+  it("excludes local closure ranges without exposing their administrative reason", async () => {
+    const closedBusiness = upgradeBusinessProfile(business);
+    closedBusiness.locations[0]!.closures = [{
+      id: "closure-training",
+      startLocal: "2026-08-10T10:00",
+      endLocal: "2026-08-10T11:00",
+      administrativeReason: "Private staff matter",
+    }];
+    const service = createService(noAppointments, noCalendarConflicts, workingHours, closedBusiness);
+    const result = await service.findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    });
+    if (!result.ok) throw new Error("Expected availability result");
+    expect(result.value).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ startAt: "2026-08-10T16:00:00.000Z" }),
+    ]));
+    expect(JSON.stringify(result)).not.toContain("Private staff matter");
+
+    await expect(service.validateSlot({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
+    })).resolves.toEqual({ ok: false, error: { code: "SLOT_CONFLICT" } });
   });
 });

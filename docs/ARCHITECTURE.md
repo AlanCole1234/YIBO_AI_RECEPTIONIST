@@ -100,6 +100,9 @@ El horario particular del profesional se intersecta por día e intervalo con el
 de la sucursal. Una lista particular vacía significa herencia explícita del
 horario de sucursal; la indisponibilidad se representa desactivando la
 asignación, no mediante un significado ambiguo de lista vacía.
+Los cierres se configuran como rangos de reloj local y Scheduling los convierte
+con la zona IANA de la sucursal tanto al listar como al revalidar. El motivo
+administrativo no forma parte de `AvailableSlot` ni de los errores para caller.
 
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el
