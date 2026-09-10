@@ -6,8 +6,10 @@ Fastify y un dashboard Vue.
 
 ## Documentación
 
+- [Estado y roadmap](docs/PROJECT_STATUS.md)
 - [Arquitectura actual](docs/ARCHITECTURE.md)
 - [Guía para seguir construyendo](docs/BUILDING_GUIDE.md)
+- [Decisiones arquitectónicas](docs/adr/README.md)
 - [Contrato de arquitectura completo](YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md)
 
 ## Run locally
