@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
+import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AppointmentBody {
@@ -10,7 +11,10 @@ interface AppointmentBody {
 }
 
 export async function registerAppointmentRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
-  server.post<{ Body: AppointmentBody }>("/api/appointments", async (request, reply) => {
+  server.post<{ Body: AppointmentBody }>(
+    "/api/appointments",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
     const { customerId, serviceId, employeeId, startAt } = request.body ?? {};
     if (![customerId, serviceId, employeeId, startAt].every((value) => typeof value === "string" && value.length > 0)) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
@@ -33,9 +37,13 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
     return reply.code(201).send(result.value);
-  });
+    },
+  );
 
-  server.get<{ Params: { appointmentId: string } }>("/api/appointments/:appointmentId", async (request, reply) => {
+  server.get<{ Params: { appointmentId: string } }>(
+    "/api/appointments/:appointmentId",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
     const result = await app.appointments.getAppointment({
       tenantId: app.tenantId,
       appointmentId: request.params.appointmentId,
@@ -45,5 +53,6 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
     return result.value;
-  });
+    },
+  );
 }

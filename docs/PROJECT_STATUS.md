@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 1 — Autenticación, autorización y auditoría**.
-- Tarea activa: **AUTH-005 — matriz de permisos por ruta**.
+- Tarea activa: **AUD-001 — auditoría administrativa redactada**.
 
 ## Capacidades existentes
 
@@ -25,7 +25,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
 - El dashboard no reconoce `update_customer`, aunque el backend lo publica.
 - Arquitectura y guía de construcción describen una versión anterior del repo.
-- Las mutaciones administrativas no tienen autenticación ni auditoría.
+- La autenticación y los roles ya cubren la API; falta persistir auditoría redactada.
 - El negocio sólo puede editar la zona horaria desde el dashboard.
 - No existe todavía el modelo multi-sucursal ni el calendario por profesional.
 - Parte importante de la política conversacional está codificada en el adaptador.
@@ -53,8 +53,8 @@ con `pnpm test` y `pnpm build`.
 | AUTH-002 | DONE | Usuarios SQLite, scrypt y comando interactivo `admin:create` |
 | AUTH-003 | DONE | Login/logout/me y sesión HMAC HttpOnly de ocho horas |
 | AUTH-004 | DONE | Guard central, Origin explícito y rechazo recursivo de tenant/region |
-| AUTH-005 | IN_PROGRESS | Matriz de permisos tenant_admin/operator |
-| AUD-001 | TODO | Auditoría administrativa redactada |
+| AUTH-005 | DONE | Configuración y administración sólo para tenant_admin; operación para operator |
+| AUD-001 | IN_PROGRESS | Auditoría administrativa redactada |
 | LOC-001 | TODO | Tipos y validación multi-sucursal |
 | LOC-002 | TODO | Perfil versionado y upgrader a sucursal default |
 | LOC-003 | TODO | Migración SQLite con `location_id` |

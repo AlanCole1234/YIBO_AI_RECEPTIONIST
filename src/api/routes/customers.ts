@@ -1,11 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
+import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface CustomerBody { phone?: unknown; name?: unknown; email?: unknown }
 
 export async function registerCustomerRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
-  server.post<{ Body: CustomerBody }>("/api/customers", async (request, reply) => {
+  server.post<{ Body: CustomerBody }>(
+    "/api/customers",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
     const { phone, name, email } = request.body ?? {};
     if (typeof phone !== "string" || (name !== undefined && typeof name !== "string") ||
         (email !== undefined && typeof email !== "string")) {
@@ -22,5 +26,6 @@ export async function registerCustomerRoutes(server: FastifyInstance, app: YiboA
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
     return reply.code(200).send(result.value);
-  });
+    },
+  );
 }

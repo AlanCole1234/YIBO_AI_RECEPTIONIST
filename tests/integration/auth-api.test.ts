@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApiServer } from "../../src/api/index.js";
 import { buildApplication } from "../../src/bootstrap/index.js";
+import { createAdminTestSession } from "../helpers/admin-session.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
@@ -109,5 +110,33 @@ describe("admin authentication API", () => {
     });
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ error: { code: "TENANT_ACCESS_DENIED" } });
+  });
+
+  it("enforces tenant-admin configuration and operator workflow permissions", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const operator = await createAdminTestSession(app, server, ["operator"]);
+
+    const operationalRead = await server.inject({
+      method: "GET", url: "/api/business", headers: operator.readHeaders,
+    });
+    expect(operationalRead.statusCode).toBe(200);
+
+    const configuration = await server.inject({
+      method: "GET", url: "/api/configuration", headers: operator.readHeaders,
+    });
+    expect(configuration.statusCode).toBe(403);
+    expect(configuration.json()).toEqual({ error: { code: "ROLE_REQUIRED" } });
+
+    const businessMutation = await server.inject({
+      method: "PUT",
+      url: "/api/business/timezone",
+      headers: operator.mutationHeaders,
+      payload: { timezone: "America/Mexico_City" },
+    });
+    expect(businessMutation.statusCode).toBe(403);
+
+    const unauthenticated = await server.inject({ method: "GET", url: "/api/business" });
+    expect(unauthenticated.statusCode).toBe(401);
   });
 });

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
+import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AvailabilityQuery {
@@ -10,7 +11,10 @@ interface AvailabilityQuery {
 }
 
 export async function registerAvailabilityRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
-  server.get<{ Querystring: AvailabilityQuery }>("/api/availability", async (request, reply) => {
+  server.get<{ Querystring: AvailabilityQuery }>(
+    "/api/availability",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
     const { serviceId, employeeId, rangeStart, rangeEnd } = request.query;
     if (!serviceId || !rangeStart || !rangeEnd) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
@@ -28,5 +32,6 @@ export async function registerAvailabilityRoutes(server: FastifyInstance, app: Y
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
     return { slots: result.value };
-  });
+    },
+  );
 }

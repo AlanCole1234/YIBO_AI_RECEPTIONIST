@@ -111,6 +111,15 @@ frontera de tools.
 - No se persisten audio ni transcripciones.
 - Las herramientas de desarrollo no se registran en sesiones normales.
 
+## Seguridad administrativa
+
+Los endpoints administrativos usan sesiones firmadas en cookie HttpOnly. El
+rol `tenant_admin` administra agente, negocio y calendarios; `operator` puede
+consultar el negocio y operar clientes, disponibilidad y citas. Las mutaciones
+exigen el `Origin` configurado y ningún endpoint acepta tenant o región desde
+datos no confiables. La auditoría redactada sigue pendiente en el checkpoint
+activo.
+
 ## Superficie y brechas activas
 
 El dashboard permite probar voz, configurar agente/tools, conectar Google,

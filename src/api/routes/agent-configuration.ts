@@ -1,13 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import { AGENT_TOOL_DEFINITIONS, type AgentToolName } from "../../modules/agents/index.js";
+import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 export async function registerAgentConfigurationRoutes(
   server: FastifyInstance,
   app: YiboApplication,
 ): Promise<void> {
-  server.get("/api/configuration", async (_request, reply) => {
+  server.get("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (_request, reply) => {
     const business = await app.business.getBusinessProfile(app.tenantId);
     if (!business.ok) {
       const mapped = toHttpError(business.error);
@@ -30,7 +31,7 @@ export async function registerAgentConfigurationRoutes(
     };
   });
 
-  server.put("/api/configuration", async (request, reply) => {
+  server.put("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (request, reply) => {
     try {
       const configuration = await app.agentConfiguration.update(app.tenantId, request.body as never);
       return { configuration, appliesTo: "next-conversation" as const };

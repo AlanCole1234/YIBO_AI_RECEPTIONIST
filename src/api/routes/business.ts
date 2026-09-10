@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
+import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 export async function registerBusinessRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
-  server.get("/api/business", async (_request, reply) => {
+  server.get("/api/business", { preHandler: createAdminGuard(app, "operator") }, async (_request, reply) => {
     const result = await app.business.getBusinessProfile(app.tenantId);
     if (!result.ok) {
       const mapped = toHttpError(result.error);
@@ -13,7 +14,10 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
     return { region, name, timezone, locale, services, employees, openingHours };
   });
 
-  server.put<{ Body: { timezone?: unknown } }>("/api/business/timezone", async (request, reply) => {
+  server.put<{ Body: { timezone?: unknown } }>(
+    "/api/business/timezone",
+    { preHandler: createAdminGuard(app, "tenant_admin") },
+    async (request, reply) => {
     if (typeof request.body?.timezone !== "string") {
       return reply.code(400).send({ error: { code: "INVALID_TIMEZONE" } });
     }
@@ -24,5 +28,6 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
     }
     const { region, name, timezone, locale, services, employees, openingHours } = result.value;
     return { region, name, timezone, locale, services, employees, openingHours };
-  });
+    },
+  );
 }

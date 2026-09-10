@@ -3,15 +3,18 @@ import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
 import { buildApplication } from "../../src/bootstrap/index.js";
 import { AGENT_TOOL_DEFINITIONS } from "../../src/modules/agents/index.js";
+import { createAdminTestSession } from "../helpers/admin-session.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("agent configuration API", () => {
   it("publishes every non-developer tool with complete dashboard metadata", async () => {
-    server = await createApiServer(buildApplication());
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
 
-    const response = await server.inject({ method: "GET", url: "/api/configuration" });
+    const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
     const body = response.json<{ availableTools: Array<Record<string, unknown>> }>();
     const expected = AGENT_TOOL_DEFINITIONS
       .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
@@ -35,8 +38,9 @@ describe("agent configuration API", () => {
   it("reads the tenant configuration and applies updates to the shared agent service", async () => {
     const app = buildApplication();
     server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
 
-    const response = await server.inject({ method: "GET", url: "/api/configuration" });
+    const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       current: { locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
@@ -49,6 +53,7 @@ describe("agent configuration API", () => {
     const update = await server.inject({
       method: "PUT",
       url: "/api/configuration",
+      headers: session.mutationHeaders,
       payload: { ...current, voice: "cedar" },
     });
 
@@ -63,11 +68,13 @@ describe("agent configuration API", () => {
   it("rejects invalid configuration without changing the current value", async () => {
     const app = buildApplication();
     server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
     const before = await app.agentConfiguration.get(app.tenantId);
 
     const response = await server.inject({
       method: "PUT",
       url: "/api/configuration",
+      headers: session.mutationHeaders,
       payload: { ...before, instructions: "" },
     });
 
