@@ -30,6 +30,8 @@ export {
   SLOT_INCREMENT_MINUTES,
   validateMultiLocationBusiness,
 } from "./domain/multi-location-business.js";
+export { validateMoney } from "./domain/money.js";
+export type { Money } from "./domain/money.js";
 export {
   isBusinessConfigurationV2,
   upgradeBusinessProfile,

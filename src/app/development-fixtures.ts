@@ -85,8 +85,7 @@ const developmentBusiness = (input: {
       services: ["consultation", "cleaning"].map((serviceId) => ({
         serviceId,
         active: true,
-        priceAmountMinor: 0,
-        priceCurrency: input.region === "MX" ? "MXN" : "USD",
+        price: { amountMinor: 0, currency: input.region === "MX" ? "MXN" : "USD" },
       })),
       professionals: tenantProfessionals.map((professional, index) => ({
         professionalId: professional.id,

@@ -89,4 +89,15 @@ describe("upgradeBusinessProfile", () => {
       locations: [{ id: "default" }],
     });
   });
+
+  it("normalizes the transitional v2 price fields without losing the amount", () => {
+    const transitional = structuredClone(DEVELOPMENT_BUSINESS) as unknown as Record<string, unknown>;
+    const locations = transitional.locations as Array<{ services: Array<Record<string, unknown>> }>;
+    locations[0]!.services[0] = {
+      serviceId: "consultation", active: true, priceAmountMinor: 125000, priceCurrency: "MXN",
+    };
+    const upgraded = upgradeBusinessProfile(transitional as never);
+    expect(upgraded.locations[0]!.services[0]!.price).toEqual({ amountMinor: 125000, currency: "MXN" });
+    expect(upgraded.locations[0]!.services[0]).not.toHaveProperty("priceAmountMinor");
+  });
 });

@@ -15,7 +15,7 @@ export const upgradeBusinessProfile = (
   input: VersionedBusinessProfile,
 ): BusinessConfigurationV2 => {
   if (isBusinessConfigurationV2(input)) {
-    const cloned = structuredClone(input);
+    const cloned = normalizeLegacyV2Prices(structuredClone(input));
     assertValid(cloned);
     return cloned;
   }
@@ -82,8 +82,10 @@ export const upgradeBusinessProfile = (
       services: input.services.map((service) => ({
         serviceId: service.id,
         active: true,
-        priceAmountMinor: 0,
-        priceCurrency: input.region === "MX" ? "MXN" : "USD",
+        price: {
+          amountMinor: 0,
+          currency: input.region === "MX" ? "MXN" : "USD",
+        },
       })),
       professionals: input.employees.map((employee) => ({
         professionalId: employee.id,
@@ -96,6 +98,25 @@ export const upgradeBusinessProfile = (
   assertValid(upgraded);
   return upgraded;
 };
+
+const normalizeLegacyV2Prices = (profile: BusinessConfigurationV2): BusinessConfigurationV2 => ({
+  ...profile,
+  locations: profile.locations.map((location) => ({
+    ...location,
+    services: location.services.map((assignment) => {
+      const legacy = assignment as typeof assignment & { priceAmountMinor?: number; priceCurrency?: string };
+      if (assignment.price) return assignment;
+      return {
+        serviceId: assignment.serviceId,
+        active: assignment.active,
+        price: {
+          amountMinor: legacy.priceAmountMinor ?? 0,
+          currency: legacy.priceCurrency ?? (profile.region === "MX" ? "MXN" : "USD"),
+        },
+      };
+    }),
+  })),
+});
 
 const assertValid = (profile: BusinessConfigurationV2): void => {
   const errors = validateMultiLocationBusiness(profile);

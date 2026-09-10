@@ -150,6 +150,9 @@ auditoría y protección contra borrar o desactivar referencias asignadas.
 `/api/admin/locations/:locationId/professionals/:professionalId` administra su
 asignación, servicios, horario y calendario por sucursal. Las referencias en
 asignaciones o citas deben migrarse antes de desactivar o eliminar.
+Cada oferta sucursal–servicio expresa su precio como
+`Money { amountMinor, currency }`; Business exige unidades menores enteras no
+negativas y una moneda ISO 4217. El precio sigue siendo informativo, sin pagos.
 
 ## Superficie y brechas activas
 

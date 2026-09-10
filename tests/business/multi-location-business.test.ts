@@ -40,7 +40,7 @@ const profile: BusinessConfigurationV2 = {
       minimumRescheduleNoticeMinutes: 0,
       concurrentCapacity: 1,
     },
-    services: [{ serviceId: "consultation", active: true, priceAmountMinor: 80000, priceCurrency: "MXN" }],
+    services: [{ serviceId: "consultation", active: true, price: { amountMinor: 80000, currency: "MXN" } }],
     professionals: [{
       professionalId: "professional-one", active: true, serviceIds: ["consultation"], openingHours: [],
       calendarId: "professional-one@example.com",
@@ -90,5 +90,19 @@ describe("multi-location business model", () => {
       expect.objectContaining({ path: "locations.0.services.0.active" }),
       expect.objectContaining({ path: "locations.0.professionals.0.active" }),
     ]));
+  });
+
+  it("accepts only non-negative minor units and ISO 4217 currencies", () => {
+    const invalid = structuredClone(profile);
+    invalid.locations[0]!.services[0]!.price = { amountMinor: -1, currency: "ZZZ" };
+    expect(validateMultiLocationBusiness(invalid)).toContainEqual({
+      path: "locations.0.services.0.price",
+      message: "Amount must be non-negative integer minor units.",
+    });
+    invalid.locations[0]!.services[0]!.price = { amountMinor: 100, currency: "ZZZ" };
+    expect(validateMultiLocationBusiness(invalid)).toContainEqual({
+      path: "locations.0.services.0.price",
+      message: "Currency must be an uppercase ISO 4217 code.",
+    });
   });
 });

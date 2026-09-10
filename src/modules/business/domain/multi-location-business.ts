@@ -8,6 +8,7 @@ import type {
   TenantId,
 } from "../../../shared/types/identifiers.js";
 import type { OpeningHoursRule } from "../application/contracts.js";
+import { validateMoney, type Money } from "./money.js";
 
 export const MULTI_LOCATION_BUSINESS_SCHEMA_VERSION = 2 as const;
 export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 60] as const;
@@ -57,8 +58,7 @@ export interface LocationSchedulingPolicy {
 export interface LocationServiceAssignment {
   serviceId: ServiceId;
   active: boolean;
-  priceAmountMinor: number;
-  priceCurrency: string;
+  price: Money;
 }
 
 export interface LocationProfessionalAssignment {
@@ -159,12 +159,8 @@ export const validateMultiLocationBusiness = (
       if (assignment.active && !activeServiceIds.has(assignment.serviceId)) {
         errors.push({ path: `${assignmentPath}.active`, message: "An active assignment requires an active tenant service." });
       }
-      if (!Number.isSafeInteger(assignment.priceAmountMinor) || assignment.priceAmountMinor < 0) {
-        errors.push({ path: `${assignmentPath}.priceAmountMinor`, message: "Must be non-negative minor units." });
-      }
-      if (!/^[A-Z]{3}$/.test(assignment.priceCurrency)) {
-        errors.push({ path: `${assignmentPath}.priceCurrency`, message: "Must be an ISO 4217 code." });
-      }
+      const priceError = validateMoney(assignment.price);
+      if (priceError) errors.push({ path: `${assignmentPath}.price`, message: priceError });
     }
     uniqueIds(errors, `${path}.professionals`, location.professionals.map(({ professionalId }) => professionalId));
     for (const [assignmentIndex, assignment] of location.professionals.entries()) {
