@@ -18,6 +18,7 @@ describe("development application composition", () => {
 
     const before = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
+      locationId: "default",
       serviceId: "consultation",
       employeeId: "employee-1",
       ...monday,
@@ -28,6 +29,7 @@ describe("development application composition", () => {
 
     const created = await app.appointments.createAppointment({
       tenantId: app.tenantId,
+      locationId: "default",
       customerId: customer.value.id,
       serviceId: "consultation",
       employeeId: selected.employeeId,
@@ -39,6 +41,7 @@ describe("development application composition", () => {
 
     const after = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
+      locationId: "default",
       serviceId: "consultation",
       employeeId: "employee-1",
       ...monday,

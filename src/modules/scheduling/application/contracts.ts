@@ -1,5 +1,5 @@
 import type { Result } from "../../../shared/domain/result.js";
-import type { EmployeeId, ServiceId, TenantId } from "../../../shared/types/identifiers.js";
+import type { EmployeeId, LocationId, ServiceId, TenantId } from "../../../shared/types/identifiers.js";
 
 export interface SchedulingService {
   findAvailableSlots(
@@ -12,6 +12,7 @@ export interface SchedulingService {
 
 export interface FindAvailableSlotsQuery {
   tenantId: TenantId;
+  locationId: LocationId;
   serviceId: ServiceId;
   employeeId?: EmployeeId;
   rangeStart: string;
@@ -21,6 +22,7 @@ export interface FindAvailableSlotsQuery {
 
 export interface ValidateSlotQuery {
   tenantId: TenantId;
+  locationId: LocationId;
   serviceId: ServiceId;
   employeeId: EmployeeId;
   startAt: string;

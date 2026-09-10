@@ -6,6 +6,7 @@ import type {
   EmployeeId,
   IdempotencyKey,
   ISODateTime,
+  LocationId,
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
@@ -13,6 +14,7 @@ import type { Appointment } from "../domain/appointment.js";
 
 export interface CreateAppointmentCommand {
   tenantId: TenantId;
+  locationId: LocationId;
   customerId: CustomerId;
   serviceId: ServiceId;
   employeeId: EmployeeId;
@@ -24,17 +26,20 @@ export interface CreateAppointmentCommand {
 
 export interface CancelAppointmentCommand {
   tenantId: TenantId;
+  locationId: LocationId;
   appointmentId: AppointmentId;
 }
 
 export interface RescheduleAppointmentCommand {
   tenantId: TenantId;
+  locationId: LocationId;
   appointmentId: AppointmentId;
   startAt: ISODateTime;
 }
 
 export interface GetAppointmentQuery {
   tenantId: TenantId;
+  locationId: LocationId;
   appointmentId: AppointmentId;
 }
 

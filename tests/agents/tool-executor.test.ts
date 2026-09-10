@@ -12,6 +12,7 @@ import {
 const confirmedAppointment: Appointment = {
   id: "appointment-1",
   tenantId: "tenant-a",
+  locationId: "default",
   customerId: "customer-1",
   serviceId: "service-1",
   employeeId: "employee-1",
@@ -62,7 +63,7 @@ function fixture() {
   };
 }
 
-const context = { tenantId: "tenant-a", callId: "call-1", customerId: "customer-1" };
+const context = { tenantId: "tenant-a", locationId: "default", callId: "call-1", customerId: "customer-1" };
 const business: BusinessProfile = {
   region: "US", tenantId: "tenant-a", businessId: "business-a", name: "YIBO Dental", timezone: "America/Denver", locale: "en-US", active: true,
   calledNumbers: ["+19155550123"], employees: [{ id: "employee-1", displayName: "Dr. Alex", active: true }],
@@ -98,7 +99,7 @@ describe("ToolExecutorImpl", () => {
       customerId: "test-customer", source: "DEVELOPER_TEST", sourceCallId: "developer-call",
     }));
     expect(deleted).toEqual({ toolCallId: "delete-test", ok: true, data: { deleted: 1 } });
-    expect(cancelAppointment).toHaveBeenCalledWith({ tenantId: "tenant-a", appointmentId: "appointment-1" });
+    expect(cancelAppointment).toHaveBeenCalledWith({ tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1" });
   });
 
   it("cannot delete normal appointments through a public session", async () => {
@@ -122,7 +123,9 @@ describe("ToolExecutorImpl", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(findAvailableSlots).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-a" }));
+    expect(findAvailableSlots).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-a", locationId: "default",
+    }));
   });
 
   it("automatically selects the clinic default service for a natural date and returns the earliest slot", async () => {
@@ -154,6 +157,7 @@ describe("ToolExecutorImpl", () => {
       name: "check_availability",
       arguments: {
         tenantId: "tenant-b",
+        locationId: "other-location",
         service: "Consultation",
         rangeStart: "2026-08-10T00:00:00.000Z",
         rangeEnd: "2026-08-11T00:00:00.000Z",
@@ -179,6 +183,7 @@ describe("ToolExecutorImpl", () => {
     expect(result.ok).toBe(true);
     expect(createAppointment).toHaveBeenCalledWith({
       tenantId: "tenant-a",
+      locationId: "default",
       customerId: "customer-1",
       serviceId: "service-1",
       employeeId: "employee-1",
@@ -269,7 +274,7 @@ describe("ToolExecutorImpl", () => {
 
   it("does not create an appointment without a verified customer", async () => {
     const { createAppointment, executor } = fixture();
-    const result = await executor.execute({ tenantId: "tenant-a", callId: "call-1" }, {
+    const result = await executor.execute({ tenantId: "tenant-a", locationId: "default", callId: "call-1" }, {
       toolCallId: "tool-1",
       name: "create_appointment",
       arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
@@ -300,7 +305,7 @@ describe("ToolExecutorImpl", () => {
     });
 
     expect(rescheduleAppointment).toHaveBeenCalledWith({
-      tenantId: "tenant-a", appointmentId: "appointment-1", startAt: "2026-08-11T21:00:00.000Z",
+      tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1", startAt: "2026-08-11T21:00:00.000Z",
     });
     expect(result).toMatchObject({ ok: true, data: { appointment: { id: "appointment-1", startAt: "2026-08-11T21:00:00.000Z" } } });
   });
@@ -352,6 +357,6 @@ describe("ToolExecutorImpl", () => {
     });
 
     expect(result).toEqual({ toolCallId: "tool-1", ok: true, data: { transferred: true } });
-    expect(transferToConfiguredDestination).toHaveBeenCalledWith({ tenantId: "tenant-a", callId: "call-1" });
+    expect(transferToConfiguredDestination).toHaveBeenCalledWith({ tenantId: "tenant-a", locationId: "default", callId: "call-1" });
   });
 });

@@ -22,6 +22,7 @@ describe("AgentDefinitionService", () => {
 
     const result = await service.prepare({
       tenantId: "tenant-a",
+      locationId: "default",
       callId: "call-1",
       customerId: "customer-1",
     });
@@ -42,6 +43,7 @@ describe("AgentDefinitionService", () => {
       toolExecutor,
       trustedContext: {
         tenantId: "tenant-a",
+        locationId: "default",
         callId: "call-1",
         customerId: "customer-1",
       },
@@ -54,7 +56,7 @@ describe("AgentDefinitionService", () => {
       { execute: vi.fn() },
     );
 
-    await expect(service.prepare({ tenantId: "tenant-a", callId: "call-1" })).resolves.toEqual({
+    await expect(service.prepare({ tenantId: "tenant-a", locationId: "default", callId: "call-1" })).resolves.toEqual({
       ok: false,
       error: { code: "CONFIGURATION_NOT_FOUND" },
     });
@@ -71,8 +73,8 @@ describe("AgentDefinitionService", () => {
     }]);
     const service = new AgentDefinitionService(configuration, { execute: vi.fn() });
 
-    const publicSession = await service.prepare({ tenantId: "tenant-a", callId: "call-public" });
-    const localDeveloperSession = await service.prepare({ tenantId: "tenant-a", callId: "call-dev", developerTestModeAuthorized: true });
+    const publicSession = await service.prepare({ tenantId: "tenant-a", locationId: "default", callId: "call-public" });
+    const localDeveloperSession = await service.prepare({ tenantId: "tenant-a", locationId: "default", callId: "call-dev", developerTestModeAuthorized: true });
 
     expect(publicSession.ok && publicSession.value.tools.map((tool) => tool.name)).not.toContain("enable_developer_test_mode");
     expect(localDeveloperSession.ok && localDeveloperSession.value.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([

@@ -8,7 +8,9 @@ import { ScriptedVoiceMediaGateway, type ConversationTransport } from "../../src
 const business: BusinessProfile = {
   region: "US",
   tenantId: "tenant-smileline", businessId: "business-smileline", name: "SmileLine Dental", timezone: "America/Denver", locale: "en-US", active: true,
-  calledNumbers: ["+13035550123"], employees: [], services: [], openingHours: [],
+  calledNumbers: ["+13035550123"], employees: [{ id: "employee-1", displayName: "Dr. Lee", active: true }],
+  services: [{ id: "service-1", name: "Consultation", durationMinutes: 30, bufferMinutes: 0, eligibleEmployeeIds: ["employee-1"] }],
+  openingHours: [],
 };
 
 const incoming = { type: "INCOMING_CALL" as const, callId: "call-1", from: "+13035550999", to: "+13035550123", occurredAt: "2026-08-09T18:00:00.000Z" };
@@ -59,7 +61,7 @@ describe("CallOrchestratorService", () => {
     await system.orchestrator.handleTelephonyEvent(incoming);
 
     expect(system.repository.stateHistory.map((entry) => entry.state)).toEqual(["RINGING", "ANSWERED", "AI_CONNECTING", "IN_CONVERSATION"]);
-    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", from: incoming.from, to: incoming.to, state: "IN_CONVERSATION" });
+    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, locationId: "default", customerId: "customer-1", from: incoming.from, to: incoming.to, state: "IN_CONVERSATION" });
     expect(system.voice.openedCallIds).toEqual([incoming.callId]);
     expect(system.runtime.openedInputs).toEqual([{
       conversationId: incoming.callId,

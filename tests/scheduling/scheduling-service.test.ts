@@ -31,7 +31,7 @@ const createService = (appointments = noAppointments, calendar = noCalendarConfl
 describe("SchedulingService", () => {
   it("returns slots only in the intersection of business and employee hours", async () => {
     const result = await createService().findAvailableSlots({
-      tenantId: business.tenantId, serviceId: "cleaning",
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
       rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
     });
 
@@ -51,20 +51,20 @@ describe("SchedulingService", () => {
       findConfirmedIntervals: async () => [{ startAt: "2026-08-10T16:00:00.000Z", endAt: "2026-08-10T16:30:00.000Z" }],
     };
     await expect(createService(appointments).validateSlot({
-      tenantId: business.tenantId, serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "SLOT_CONFLICT" } });
   });
 
   it("rejects an external calendar outage with a retryable typed error", async () => {
     const calendar: CalendarPort = { getBusyIntervals: async () => ({ ok: false, error: { code: "PROVIDER_UNAVAILABLE", retryable: true } }) };
     await expect(createService(noAppointments, calendar).validateSlot({
-      tenantId: business.tenantId, serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T16:30:00.000Z",
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T16:30:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "EXTERNAL_CALENDAR_UNAVAILABLE", retryable: true } });
   });
 
   it("does not accept a slot outside the employee's working hours", async () => {
     await expect(createService().validateSlot({
-      tenantId: business.tenantId, serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T15:00:00.000Z",
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T15:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BUSINESS_HOURS" } });
   });
 });

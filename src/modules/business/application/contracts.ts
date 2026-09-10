@@ -3,24 +3,35 @@ import type {
   BusinessId,
   EmployeeId,
   IANATimeZone,
+  LocationId,
   RegionId,
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
+import type { BusinessConfigurationV2, LocationDefinition } from "../domain/multi-location-business.js";
 
 export interface BusinessDirectory {
+  resolveLocationByCalledNumber(
+    phoneNumber: string,
+  ): Promise<Result<BusinessLocationContext, BusinessLookupError>>;
+
+  getLocation(
+    tenantId: TenantId,
+    locationId: LocationId,
+  ): Promise<Result<BusinessLocationContext, BusinessLookupError>>;
+
   getBusinessByCalledNumber(
     phoneNumber: string,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
 
   getBusinessProfile(
     tenantId: TenantId,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
 
   updateBusinessTimezone(
     tenantId: TenantId,
     timezone: IANATimeZone,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
 }
 
 export interface BusinessProfile {
@@ -37,6 +48,13 @@ export interface BusinessProfile {
   services: ServiceDefinition[];
   employees: EmployeeDefinition[];
   openingHours: OpeningHoursRule[];
+}
+
+export interface BusinessLocationContext {
+  tenantId: TenantId;
+  locationId: LocationId;
+  business: BusinessConfigurationV2;
+  location: LocationDefinition;
 }
 
 export type LegacyBusinessProfileV1 = BusinessProfile;
@@ -65,4 +83,5 @@ export type BusinessLookupError =
   | { code: "INVALID_CALLED_NUMBER" }
   | { code: "BUSINESS_NOT_FOUND" }
   | { code: "BUSINESS_INACTIVE" }
+  | { code: "LOCATION_NOT_FOUND" }
   | { code: "BUSINESS_CONFIGURATION_INVALID"; message: string };

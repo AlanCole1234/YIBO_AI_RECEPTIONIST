@@ -18,11 +18,12 @@ export async function registerAgentConfigurationRoutes(
       const mapped = toHttpError(business.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
+    const location = business.value.locations.find(({ id }) => id === "default") ?? business.value.locations[0]!;
 
     return {
       current: await app.agentConfiguration.get(app.tenantId),
       recommended: app.agentConfiguration.recommended(
-        business.value.locale,
+        location.locale,
         business.value.name,
         app.config.openAiRealtimeModel,
       ),

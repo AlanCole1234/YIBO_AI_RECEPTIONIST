@@ -21,6 +21,7 @@ export async function registerAvailabilityRoutes(server: FastifyInstance, app: Y
     }
     const result = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
+      locationId: "default",
       serviceId,
       ...(employeeId ? { employeeId } : {}),
       rangeStart,

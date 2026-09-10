@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessProfile,
 } from "../../src/modules/business/index.js";
 
@@ -24,8 +25,7 @@ describe("BusinessDirectoryService", () => {
     const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
 
     await expect(service.getBusinessByCalledNumber("+1 303-555-0123")).resolves.toEqual({
-      ok: true,
-      value: profile,
+      ok: true, value: upgradeBusinessProfile(profile),
     });
   });
 
@@ -63,13 +63,36 @@ describe("BusinessDirectoryService", () => {
   it("saves a valid IANA timezone and rejects an invalid one", async () => {
     const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
 
-    await expect(service.updateBusinessTimezone(profile.tenantId, "America/Denver")).resolves.toEqual({
-      ok: true,
-      value: { ...profile, timezone: "America/Denver" },
+    await expect(service.updateBusinessTimezone(profile.tenantId, "America/Denver")).resolves.toMatchObject({
+      ok: true, value: { locations: [{ id: "default", timezone: "America/Denver" }] },
     });
     await expect(service.updateBusinessTimezone(profile.tenantId, "Not/A-Timezone")).resolves.toMatchObject({
       ok: false,
       error: { code: "BUSINESS_CONFIGURATION_INVALID" },
+    });
+  });
+
+  it("resolves tenant and location exclusively from the called number", async () => {
+    const multiLocation = upgradeBusinessProfile(profile);
+    const north = structuredClone(multiLocation.locations[0]!);
+    north.id = "north";
+    north.name = "North";
+    north.timezone = "America/Chicago";
+    north.calledNumbers = ["+13125550123"];
+    multiLocation.locations.push(north);
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([multiLocation]));
+
+    await expect(service.resolveLocationByCalledNumber("+1 312 555 0123")).resolves.toMatchObject({
+      ok: true,
+      value: {
+        tenantId: profile.tenantId,
+        locationId: "north",
+        location: { timezone: "America/Chicago" },
+      },
+    });
+    await expect(service.getLocation(profile.tenantId, "missing")).resolves.toEqual({
+      ok: false,
+      error: { code: "LOCATION_NOT_FOUND" },
     });
   });
 });

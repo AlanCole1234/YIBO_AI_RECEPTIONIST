@@ -41,15 +41,16 @@ export class CallOrchestratorService implements CallOrchestrator {
   private async handleIncoming(event: Extract<TelephonyEvent, { type: "INCOMING_CALL" }>): Promise<void> {
     if (await this.calls.findByCallId(event.callId)) return;
 
-    const business = await this.businessDirectory.getBusinessByCalledNumber(event.to);
-    if (!business.ok) {
+    const location = await this.businessDirectory.resolveLocationByCalledNumber(event.to);
+    if (!location.ok) {
       await this.telephony.hangup(event.callId);
       return;
     }
 
     const record: CallRecord = {
       callId: event.callId,
-      tenantId: business.value.tenantId,
+      tenantId: location.value.tenantId,
+      locationId: location.value.locationId,
       from: event.from,
       to: event.to,
       state: "RINGING",
@@ -70,6 +71,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     const agent = await this.agents.prepare({
       callId: record.callId,
       tenantId: record.tenantId,
+      locationId: record.locationId,
       customerId: customer.value.id,
       ...(this.developerTestModeAuthorized ? { developerTestModeAuthorized: true as const } : {}),
     });

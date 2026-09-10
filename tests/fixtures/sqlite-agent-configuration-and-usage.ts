@@ -17,7 +17,7 @@ try {
   const usage = new SqliteConversationUsageRepository(database, "MX");
   const calls = new SqliteCallRepository(database, "MX");
   await calls.create({
-    tenantId: DEVELOPMENT_BUSINESS.tenantId, callId: "call-1", from: "+529990000001",
+    tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-1", from: "+529990000001",
     to: DEVELOPMENT_BUSINESS.calledNumbers[0]!, state: "RINGING",
     createdAt: "2026-08-25T10:00:00.000Z", updatedAt: "2026-08-25T10:00:00.000Z",
   });

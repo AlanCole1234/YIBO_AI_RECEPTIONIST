@@ -1,8 +1,8 @@
-import type { BusinessProfile } from "../application/contracts.js";
+import type { VersionedBusinessProfile } from "../domain/upgrade-business-profile.js";
 import type { TenantId } from "../../../shared/types/identifiers.js";
 
 export interface BusinessRepository {
-  findByTenantId(tenantId: TenantId): Promise<BusinessProfile | null>;
-  findByCalledNumber(calledNumber: string): Promise<BusinessProfile | null>;
-  save(profile: BusinessProfile): Promise<void>;
+  findByTenantId(tenantId: TenantId): Promise<VersionedBusinessProfile | null>;
+  findByCalledNumber(calledNumber: string): Promise<VersionedBusinessProfile | null>;
+  save(profile: VersionedBusinessProfile): Promise<void>;
 }

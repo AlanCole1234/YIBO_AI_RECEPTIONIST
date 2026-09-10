@@ -9,6 +9,7 @@ import {
 
 const trustedContext = {
   tenantId: "tenant-1",
+  locationId: "default",
   callId: "call-1",
   customerId: "customer-1",
 };

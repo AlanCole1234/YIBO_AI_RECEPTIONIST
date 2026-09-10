@@ -53,6 +53,7 @@ const scheduling = (validate: SchedulingService["validateSlot"] = async (query) 
 
 const command = {
   tenantId: "tenant-a",
+  locationId: "default",
   customerId: "customer-1",
   serviceId: "service-1",
   employeeId: "employee-1",
@@ -119,7 +120,7 @@ describe("AppointmentServiceImpl", () => {
     calendar.failNext({ code: "PROVIDER_UNAVAILABLE", retryable: true });
 
     const result = await service.createAppointment(command);
-    const stored = await service.getAppointment({ tenantId: "tenant-a", appointmentId: "appointment-1" });
+    const stored = await service.getAppointment({ tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1" });
 
     expect(result).toEqual({ ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true } });
     expect(stored.ok && stored.value.status).toBe("FAILED");
@@ -131,6 +132,18 @@ describe("AppointmentServiceImpl", () => {
 
     await expect(service.getAppointment({
       tenantId: "tenant-b",
+      locationId: "default",
+      appointmentId: "appointment-1",
+    })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
+  });
+
+  it("never returns an appointment through another location", async () => {
+    const { service } = fixture();
+    await service.createAppointment(command);
+
+    await expect(service.getAppointment({
+      tenantId: "tenant-a",
+      locationId: "other-location",
       appointmentId: "appointment-1",
     })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
   });
@@ -173,6 +186,7 @@ describe("AppointmentServiceImpl", () => {
 
     const cancelled = await service.cancelAppointment({
       tenantId: "tenant-a",
+      locationId: "default",
       appointmentId: "appointment-1",
     });
 
@@ -185,6 +199,7 @@ describe("AppointmentServiceImpl", () => {
 
     const rescheduled = await service.rescheduleAppointment({
       tenantId: "tenant-a",
+      locationId: "default",
       appointmentId: "appointment-1",
       startAt: "2026-08-10T16:00:00.000Z",
     });

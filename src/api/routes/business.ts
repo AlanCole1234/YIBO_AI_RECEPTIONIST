@@ -10,8 +10,7 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
       const mapped = toHttpError(result.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
-    const { region, name, timezone, locale, services, employees, openingHours } = result.value;
-    return { region, name, timezone, locale, services, employees, openingHours };
+    return legacyBusinessFacade(result.value);
   });
 
   server.put<{ Body: { timezone?: unknown } }>(
@@ -33,11 +32,36 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
       entityId: result.value.businessId,
       action: "update_timezone",
       entityVersion: "legacy",
-      before: before.ok ? { timezone: before.value.timezone } : undefined,
-      after: { timezone: result.value.timezone },
+      before: before.ok ? { timezone: defaultLocation(before.value).timezone } : undefined,
+      after: { timezone: defaultLocation(result.value).timezone },
     });
-    const { region, name, timezone, locale, services, employees, openingHours } = result.value;
-    return { region, name, timezone, locale, services, employees, openingHours };
+    return legacyBusinessFacade(result.value);
     },
   );
 }
+
+type CurrentBusinessProfile = Extract<
+  Awaited<ReturnType<YiboApplication["business"]["getBusinessProfile"]>>,
+  { ok: true }
+>["value"];
+
+const defaultLocation = (profile: CurrentBusinessProfile) =>
+  profile.locations.find(({ id }) => id === "default") ?? profile.locations[0]!;
+
+const legacyBusinessFacade = (profile: CurrentBusinessProfile) => {
+  const location = defaultLocation(profile);
+  return {
+    region: profile.region,
+    name: profile.name,
+    timezone: location.timezone,
+    locale: location.locale,
+    services: profile.services.map((service) => ({
+      ...service,
+      eligibleEmployeeIds: location.professionals
+        .filter((professional) => professional.serviceIds.includes(service.id))
+        .map(({ professionalId }) => professionalId),
+    })),
+    employees: profile.professionals,
+    openingHours: location.openingHours,
+  };
+};

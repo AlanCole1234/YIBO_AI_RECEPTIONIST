@@ -77,6 +77,7 @@ describe("in-memory call to appointment", () => {
     expect(createdAppointment).toMatchObject({
       id: APPOINTMENT_ID,
       tenantId: TENANT_ID,
+      locationId: "default",
       customerId: CUSTOMER_ID,
       status: "CONFIRMED",
       idempotencyKey: `${CALL_ID}:${CREATE_TOOL_CALL_ID}`,
@@ -87,6 +88,7 @@ describe("in-memory call to appointment", () => {
 
     const persisted = await app.appointments.getAppointment({
       tenantId: TENANT_ID,
+      locationId: "default",
       appointmentId: APPOINTMENT_ID,
     });
     expect(persisted).toEqual({ ok: true, value: createdAppointment });
@@ -99,6 +101,7 @@ describe("in-memory call to appointment", () => {
 
     const calendar = await app.calendar.getBusyIntervals({
       tenantId: TENANT_ID,
+      locationId: "default",
       employeeId: selected.employeeId,
       rangeStart: selected.startAt,
       rangeEnd: selected.endAt,

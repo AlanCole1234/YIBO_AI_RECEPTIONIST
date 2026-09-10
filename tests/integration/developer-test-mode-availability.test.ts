@@ -4,6 +4,7 @@ import { dateTimeInTimezone } from "../../src/modules/scheduling/domain/time.js"
 
 const developer = {
   tenantId: "tenant-yibo-demo-us",
+  locationId: "default",
   callId: "developer-call",
   developerTestModeAuthorized: true as const,
 };

@@ -25,6 +25,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       : `dashboard:${app.ids.generate("idempotency")}`;
     const result = await app.appointments.createAppointment({
       tenantId: app.tenantId,
+      locationId: "default",
       customerId: customerId as string,
       serviceId: serviceId as string,
       employeeId: employeeId as string,
@@ -54,6 +55,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     async (request, reply) => {
     const result = await app.appointments.getAppointment({
       tenantId: app.tenantId,
+      locationId: "default",
       appointmentId: request.params.appointmentId,
     });
     if (!result.ok) {

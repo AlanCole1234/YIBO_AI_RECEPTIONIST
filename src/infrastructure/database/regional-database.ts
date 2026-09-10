@@ -2,7 +2,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { BusinessProfile } from "../../modules/business/index.js";
+import type { VersionedBusinessProfile } from "../../modules/business/index.js";
 import type { RegionId } from "../../shared/types/identifiers.js";
 
 const migrations = [
@@ -54,7 +54,7 @@ export function migrateDatabase(database: DatabaseSync): void {
   });
 }
 
-export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): void {
+export function seedBusiness(database: DatabaseSync, profile: VersionedBusinessProfile): void {
   withWriteTransaction(database, () => {
     database.prepare(`
       INSERT INTO businesses(region_id, tenant_id, business_id, profile_json)
@@ -62,9 +62,17 @@ export function seedBusiness(database: DatabaseSync, profile: BusinessProfile): 
       ON CONFLICT(region_id, tenant_id) DO NOTHING
     `).run(profile.region, profile.tenantId, profile.businessId, JSON.stringify(profile));
     const insertNumber = database.prepare(
-      "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, phone) VALUES (?, ?, ?)",
+      "INSERT OR IGNORE INTO called_numbers(region_id, tenant_id, location_id, phone) VALUES (?, ?, ?, ?)",
     );
-    for (const phone of profile.calledNumbers) insertNumber.run(profile.region, profile.tenantId, phone);
+    const assignments = profile.schemaVersion === 2
+      ? profile.locations.flatMap((location) => location.calledNumbers.map((phone) => ({ phone, locationId: location.id })))
+      : profile.calledNumbers.map((phone) => ({ phone, locationId: "default" }));
+    for (const { phone, locationId } of assignments) {
+      insertNumber.run(profile.region, profile.tenantId, locationId, phone);
+      database.prepare(`UPDATE called_numbers SET location_id = ?
+        WHERE region_id = ? AND tenant_id = ? AND phone = ?`)
+        .run(locationId, profile.region, profile.tenantId, phone);
+    }
   });
 }
 

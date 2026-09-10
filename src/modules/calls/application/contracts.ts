@@ -1,4 +1,4 @@
-import type { CustomerId, TenantId } from "../../../shared/types/identifiers.js";
+import type { CustomerId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
 import type { AssistantPlaybackPosition } from "../../conversation/index.js";
 
 export interface CallOrchestrator {
@@ -24,6 +24,7 @@ export type TelephonyEvent =
 export interface CallRecord {
   callId: string;
   tenantId: TenantId;
+  locationId: LocationId;
   customerId?: CustomerId;
   from: string;
   to: string;

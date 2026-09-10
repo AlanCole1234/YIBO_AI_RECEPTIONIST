@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 2 — Dominio multi-sucursal y migración**.
-- Tarea activa: **LOC-004 — contexto confiable por número marcado**.
+- Tarea activa: **LOC-005 — fixtures y adaptadores en memoria canónicos**.
 - Último checkpoint cerrado: Checkpoint 1; `pnpm typecheck`, 159 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -60,8 +60,8 @@ con `pnpm test` y `pnpm build`.
 | LOC-001 | DONE | ADR-003, LocationId, catálogos, sucursales, asignaciones y validación |
 | LOC-002 | DONE | Entrada v1 explícita y upgrader puro/idempotente a sucursal default v2 |
 | LOC-003 | DONE | Migración v7 idempotente; backfill default sin pérdida en números, llamadas y citas |
-| LOC-004 | IN_PROGRESS | Contexto confiable tenant/location por número marcado |
-| LOC-005 | TODO | Fixtures y adaptadores en memoria migrados |
+| LOC-004 | DONE | DID resuelve tenant/location y ambos se propagan sin aceptar IDs del modelo |
+| LOC-005 | IN_PROGRESS | Fixtures y adaptadores en memoria migrados |
 | LOC-006 | TODO | API administrativa versionada con edición optimista |
 | CAT-001 | TODO | CRUD de servicios compartidos |
 | CAT-002 | TODO | CRUD de profesionales y asignaciones |
@@ -119,7 +119,7 @@ con `pnpm test` y `pnpm build`.
 - Monolito modular con puertos y adaptadores.
 - Una sesión de conversación por llamada (`ADR-001`).
 - La IA solicita; el dominio valida y ejecuta.
-- `tenantId`, `callId` y `customerId` son contexto confiable.
+- `tenantId`, `locationId`, `callId` y `customerId` son contexto confiable.
 - Scheduling consulta y Appointments muta y revalida.
 - Instantes internos en UTC y presentación en zona IANA del negocio.
 - No se persisten audio ni transcripciones.

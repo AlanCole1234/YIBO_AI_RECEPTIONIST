@@ -1,4 +1,4 @@
-import type { EmployeeId, TenantId } from "../../../shared/types/identifiers.js";
+import type { EmployeeId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
 import type { OpeningHoursRule } from "../../business/index.js";
 
 export interface EmployeeWorkingHoursProvider {
@@ -7,5 +7,6 @@ export interface EmployeeWorkingHoursProvider {
 
 export interface EmployeeWorkingHoursQuery {
   tenantId: TenantId;
+  locationId: LocationId;
   employeeId: EmployeeId;
 }

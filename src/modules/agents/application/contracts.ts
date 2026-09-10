@@ -2,6 +2,7 @@ import type { Result } from "../../../shared/domain/result.js";
 import type {
   CallId,
   CustomerId,
+  LocationId,
   TenantId,
   ToolCallId,
 } from "../../../shared/types/identifiers.js";
@@ -45,6 +46,7 @@ export type AgentToolResult =
 
 export interface ToolExecutionContext {
   tenantId: TenantId;
+  locationId: LocationId;
   callId: CallId;
   customerId?: CustomerId;
   /** Server-trusted and available only from the local development harness. */

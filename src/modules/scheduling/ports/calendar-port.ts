@@ -1,5 +1,5 @@
 import type { Result } from "../../../shared/domain/result.js";
-import type { EmployeeId, TenantId } from "../../../shared/types/identifiers.js";
+import type { EmployeeId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
 
 export interface CalendarPort {
   getBusyIntervals(
@@ -9,6 +9,7 @@ export interface CalendarPort {
 
 export interface GetBusyIntervalsQuery {
   tenantId: TenantId;
+  locationId: LocationId;
   employeeId: EmployeeId;
   rangeStart: string;
   rangeEnd: string;

@@ -5,6 +5,7 @@ import type { CalendarPort, BusyInterval } from "../../scheduling/ports/calendar
 type CalendarEvent = {
   externalEventId: string;
   tenantId: string;
+  locationId: string;
   appointmentId: string;
   employeeId: string;
   title: string;
@@ -26,6 +27,7 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
 
   async getBusyIntervals(query: {
     tenantId: string;
+    locationId: string;
     employeeId: string;
     rangeStart: string;
     rangeEnd: string;
@@ -38,7 +40,8 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
 
     const intervals: BusyInterval[] = [];
     for (const event of this.events.values()) {
-      if (event.cancelled || event.tenantId !== query.tenantId || event.employeeId !== query.employeeId) continue;
+      if (event.cancelled || event.tenantId !== query.tenantId || event.locationId !== query.locationId
+        || event.employeeId !== query.employeeId) continue;
       if (overlaps(new Date(event.startAt), new Date(event.endAt), rangeStart, rangeEnd)) {
         intervals.push({ startAt: event.startAt, endAt: event.endAt });
       }
@@ -48,6 +51,7 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
 
   async createEvent(command: {
     tenantId: string;
+    locationId: string;
     appointmentId: string;
     employeeId: string;
     title: string;
@@ -57,11 +61,11 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
   }) {
     const start = new Date(command.startAt);
     const end = new Date(command.endAt);
-    if (!command.tenantId || !command.appointmentId || !command.employeeId || !command.idempotencyKey || !isValidRange(start, end)) {
+    if (!command.tenantId || !command.locationId || !command.appointmentId || !command.employeeId || !command.idempotencyKey || !isValidRange(start, end)) {
       return failure({ code: "VALIDATION_ERROR" as const, message: "A complete and valid calendar event is required." });
     }
 
-    const key = `${command.tenantId}:${command.idempotencyKey}`;
+    const key = `${command.tenantId}:${command.locationId}:${command.idempotencyKey}`;
     const existingId = this.eventIdByKey.get(key);
     if (existingId) return success({ provider: "in-memory", externalEventId: existingId });
 
@@ -71,9 +75,11 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
     return success({ provider: "in-memory", externalEventId });
   }
 
-  async cancelEvent(command: { tenantId: string; externalEventId: string }) {
+  async cancelEvent(command: { tenantId: string; locationId: string; externalEventId: string }) {
     const event = this.events.get(command.externalEventId);
-    if (!event || event.tenantId !== command.tenantId) return failure({ code: "EVENT_NOT_FOUND" as const });
+    if (!event || event.tenantId !== command.tenantId || event.locationId !== command.locationId) {
+      return failure({ code: "EVENT_NOT_FOUND" as const });
+    }
     this.events.set(event.externalEventId, { ...event, cancelled: true });
     return success(undefined);
   }

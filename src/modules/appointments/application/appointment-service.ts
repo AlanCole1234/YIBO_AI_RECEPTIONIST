@@ -46,18 +46,21 @@ export class AppointmentServiceImpl implements AppointmentService {
     if (!await this.customers.exists(command.tenantId, command.customerId)) {
       return failure<CreateAppointmentError>({ code: "CUSTOMER_NOT_FOUND" });
     }
-    const configuration = await this.businesses.getBusinessProfile(command.tenantId);
+    const configuration = await this.businesses.getLocation(command.tenantId, command.locationId);
     if (!configuration.ok) return failure<CreateAppointmentError>({ code: "VALIDATION_ERROR", message: "Business is unavailable" });
-    if (!configuration.value.services.some((service) => service.id === command.serviceId)) {
+    const offered = configuration.value.location.services.some((service) => service.serviceId === command.serviceId && service.active);
+    if (!offered || !configuration.value.business.services.some((service) => service.id === command.serviceId && service.active)) {
       return failure<CreateAppointmentError>({ code: "SERVICE_NOT_FOUND" });
     }
-    if (!configuration.value.employees.some((employee) => employee.id === command.employeeId && employee.active)) {
+    const assigned = configuration.value.location.professionals.some((professional) =>
+      professional.professionalId === command.employeeId && professional.active && professional.serviceIds.includes(command.serviceId));
+    if (!assigned || !configuration.value.business.professionals.some((employee) => employee.id === command.employeeId && employee.active)) {
       return failure<CreateAppointmentError>({ code: "EMPLOYEE_NOT_FOUND" });
     }
-    const service = configuration.value.services.find((candidate) => candidate.id === command.serviceId)!;
+    const service = configuration.value.business.services.find((candidate) => candidate.id === command.serviceId)!;
     const customer = await this.customers.get(command.tenantId, command.customerId);
 
-    return this.guard.execute(command.tenantId, command.employeeId, async () => {
+    return this.guard.execute(command.tenantId, command.locationId, command.employeeId, async () => {
       const raced = await this.repository.findByIdempotencyKey(command.tenantId, command.idempotencyKey);
       if (raced) {
         return sameRequest(raced, command) && raced.status === "CONFIRMED"
@@ -67,6 +70,7 @@ export class AppointmentServiceImpl implements AppointmentService {
 
       const slot = await this.scheduling.validateSlot({
         tenantId: command.tenantId,
+        locationId: command.locationId,
         serviceId: command.serviceId,
         employeeId: command.employeeId,
         startAt: command.startAt,
@@ -85,6 +89,7 @@ export class AppointmentServiceImpl implements AppointmentService {
 
       calendarLog("calendar.trace.booking.service", {
         tenantId: pending.tenantId,
+        locationId: pending.locationId,
         appointmentId: pending.id,
         startAt: pending.startAt,
         endAt: pending.endAt,
@@ -93,6 +98,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       calendarLog("calendar.booking.started", { tenantId: pending.tenantId, appointmentId: pending.id, startAt: pending.startAt });
       const external = await this.calendar.createEvent({
         tenantId: pending.tenantId,
+        locationId: pending.locationId,
         appointmentId: pending.id,
         employeeId: pending.employeeId,
         title: command.source === "DEVELOPER_TEST" ? "[YIBO TEST] Test Appointment" : `${service.name} appointment`,
@@ -121,13 +127,14 @@ export class AppointmentServiceImpl implements AppointmentService {
 
   async cancelAppointment(command: CancelAppointmentCommand) {
     const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
-    if (!appointment) return failure<CancelAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
+    if (!appointment || appointment.locationId !== command.locationId) return failure<CancelAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
     if (appointment.status === "CANCELLED") {
       return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
     }
     if (appointment.externalCalendarEventId) {
       const cancelled = await this.calendar.cancelEvent({
         tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
         externalEventId: appointment.externalCalendarEventId,
       });
       if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
@@ -142,14 +149,15 @@ export class AppointmentServiceImpl implements AppointmentService {
       return failure<RescheduleAppointmentError>({ code: "VALIDATION_ERROR", message: "startAt must be a valid ISO datetime" });
     }
     const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
-    if (!appointment) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
+    if (!appointment || appointment.locationId !== command.locationId) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
     if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
       return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
     }
 
-    return this.guard.execute(appointment.tenantId, appointment.employeeId, async () => {
+    return this.guard.execute(appointment.tenantId, appointment.locationId, appointment.employeeId, async () => {
       const slot = await this.scheduling.validateSlot({
         tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
         serviceId: appointment.serviceId,
         employeeId: appointment.employeeId,
         startAt: command.startAt,
@@ -161,13 +169,14 @@ export class AppointmentServiceImpl implements AppointmentService {
         );
       }
 
-      const configuration = await this.businesses.getBusinessProfile(appointment.tenantId);
+      const configuration = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
       const service = configuration.ok
-        ? configuration.value.services.find((candidate) => candidate.id === appointment.serviceId)
+        ? configuration.value.business.services.find((candidate) => candidate.id === appointment.serviceId)
         : undefined;
       const customer = await this.customers.get(appointment.tenantId, appointment.customerId);
       const replacement = await this.calendar.createEvent({
         tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
         appointmentId: appointment.id,
         employeeId: appointment.employeeId,
         title: `${service?.name ?? "Appointment"} appointment`,
@@ -181,11 +190,13 @@ export class AppointmentServiceImpl implements AppointmentService {
 
       const oldCancelled = await this.calendar.cancelEvent({
         tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
         externalEventId: appointment.externalCalendarEventId!,
       });
       if (!oldCancelled.ok) {
         await this.calendar.cancelEvent({
           tenantId: appointment.tenantId,
+          locationId: appointment.locationId,
           externalEventId: replacement.value.externalEventId,
         });
         return failure<RescheduleAppointmentError>(calendarFailure(oldCancelled.error));
@@ -204,14 +215,14 @@ export class AppointmentServiceImpl implements AppointmentService {
 
   async getAppointment(query: GetAppointmentQuery) {
     const appointment = await this.repository.findById(query.tenantId, query.appointmentId);
-    return appointment
+    return appointment && appointment.locationId === query.locationId
       ? success(appointment)
       : failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
   }
 }
 
 const validateCreate = (command: CreateAppointmentCommand): string | null => {
-  if (!command.tenantId || !command.customerId || !command.serviceId || !command.employeeId || !command.idempotencyKey) {
+  if (!command.tenantId || !command.locationId || !command.customerId || !command.serviceId || !command.employeeId || !command.idempotencyKey) {
     return "Required identifiers must not be empty";
   }
   return validDate(command.startAt) ? null : "startAt must be a valid ISO datetime";
@@ -221,6 +232,7 @@ const validDate = (value: string): boolean => !Number.isNaN(new Date(value).valu
 
 const sameRequest = (appointment: Appointment, command: CreateAppointmentCommand): boolean =>
   appointment.customerId === command.customerId &&
+  appointment.locationId === command.locationId &&
   appointment.serviceId === command.serviceId &&
   appointment.employeeId === command.employeeId &&
   appointment.startAt === new Date(command.startAt).toISOString();

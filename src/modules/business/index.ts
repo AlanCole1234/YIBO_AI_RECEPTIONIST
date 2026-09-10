@@ -2,6 +2,7 @@ export { BusinessDirectoryService } from "./application/business-directory-servi
 export type {
   BusinessDirectory,
   BusinessLookupError,
+  BusinessLocationContext,
   BusinessProfile,
   LegacyBusinessProfileV1,
   EmployeeDefinition,

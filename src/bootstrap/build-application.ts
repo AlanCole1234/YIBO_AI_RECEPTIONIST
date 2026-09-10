@@ -187,10 +187,10 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     },
   };
   const workingHours: EmployeeWorkingHoursProvider = {
-    getWorkingHours: async ({ tenantId: candidateTenantId, employeeId }) => {
-      const profile = await business.getBusinessProfile(candidateTenantId);
-      if (!profile.ok || !profile.value.employees.some((employee) => employee.id === employeeId && employee.active)) return [];
-      return profile.value.openingHours.map((rule) => ({ ...rule }));
+    getWorkingHours: async ({ tenantId: candidateTenantId, locationId, employeeId }) => {
+      const profile = await business.getLocation(candidateTenantId, locationId);
+      if (!profile.ok || !profile.value.business.professionals.some((employee) => employee.id === employeeId && employee.active)) return [];
+      return profile.value.location.openingHours.map((rule) => ({ ...rule }));
     },
   };
   const confirmedAppointments: ConfirmedAppointmentReader = {
@@ -216,16 +216,18 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   // Calendar. It uses the same scheduling and appointment services, with an
   // isolated in-memory calendar and demo clinic hours beginning at 7:00 AM.
   const developerTestBusiness: BusinessDirectory = {
+    resolveLocationByCalledNumber: async (phoneNumber) => demoLocation(await business.resolveLocationByCalledNumber(phoneNumber)),
+    getLocation: async (candidateTenantId, locationId) => demoLocation(await business.getLocation(candidateTenantId, locationId)),
     getBusinessByCalledNumber: async (phoneNumber) => demoBusiness(await business.getBusinessByCalledNumber(phoneNumber)),
     getBusinessProfile: async (candidateTenantId) => demoBusiness(await business.getBusinessProfile(candidateTenantId)),
     updateBusinessTimezone: async (candidateTenantId, timezone) => demoBusiness(await business.updateBusinessTimezone(candidateTenantId, timezone)),
   };
   const developerTestCalendar = new InMemoryCalendarAdapter();
   const developerTestWorkingHours: EmployeeWorkingHoursProvider = {
-    getWorkingHours: async ({ tenantId: candidateTenantId, employeeId }) => {
-      const profile = await developerTestBusiness.getBusinessProfile(candidateTenantId);
-      return profile.ok && profile.value.employees.some((employee) => employee.id === employeeId && employee.active)
-        ? profile.value.openingHours.map((rule) => ({ ...rule }))
+    getWorkingHours: async ({ tenantId: candidateTenantId, locationId, employeeId }) => {
+      const profile = await developerTestBusiness.getLocation(candidateTenantId, locationId);
+      return profile.ok && profile.value.business.professionals.some((employee) => employee.id === employeeId && employee.active)
+        ? profile.value.location.openingHours.map((rule) => ({ ...rule }))
         : [];
     },
   };
@@ -325,12 +327,27 @@ const unavailableTransfer: HumanTransferPort = {
 };
 
 type BusinessProfileResult = Awaited<ReturnType<BusinessDirectory["getBusinessProfile"]>>;
+type BusinessLocationResult = Awaited<ReturnType<BusinessDirectory["getLocation"]>>;
 
 const demoBusiness = (result: BusinessProfileResult): BusinessProfileResult => {
   if (!result.ok) return result;
+  return success({ ...result.value, locations: result.value.locations.map((location) => ({
+    ...location,
+    openingHours: location.openingHours.map((rule) => ({ ...rule, startTime: "07:00" })),
+  })) });
+};
+
+const demoLocation = (result: BusinessLocationResult): BusinessLocationResult => {
+  if (!result.ok) return result;
+  const openingHours = result.value.location.openingHours.map((rule) => ({ ...rule, startTime: "07:00" }));
   return success({
     ...result.value,
-    openingHours: result.value.openingHours.map((rule) => ({ ...rule, startTime: "07:00" })),
+    location: { ...result.value.location, openingHours },
+    business: {
+      ...result.value.business,
+      locations: result.value.business.locations.map((location) =>
+        location.id === result.value.locationId ? { ...location, openingHours } : location),
+    },
   });
 };
 

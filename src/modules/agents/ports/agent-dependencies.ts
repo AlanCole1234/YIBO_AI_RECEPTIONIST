@@ -1,5 +1,5 @@
 import type { Result } from "../../../shared/domain/result.js";
-import type { CallId, TenantId } from "../../../shared/types/identifiers.js";
+import type { CallId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentToolName, ConversationBehavior } from "../application/contracts.js";
 
 export interface AgentConfiguration {
@@ -21,6 +21,7 @@ export interface AgentConfigurationRepository extends AgentConfigurationSource {
 export interface HumanTransferPort {
   transferToConfiguredDestination(input: {
     tenantId: TenantId;
+    locationId: LocationId;
     callId: CallId;
   }): Promise<Result<void, { code: "DESTINATION_NOT_CONFIGURED" | "TRANSFER_FAILED"; retryable: boolean }>>;
 }

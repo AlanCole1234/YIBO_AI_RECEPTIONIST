@@ -1,6 +1,6 @@
 import { failure, success } from "../../../shared/domain/result.js";
 import type { Clock } from "../../../shared/application/system.js";
-import type { EmployeeDefinition, OpeningHoursRule, ServiceDefinition } from "../../business/index.js";
+import type { OpeningHoursRule, ProfessionalDefinition, TenantServiceDefinition } from "../../business/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import {
   intersects,
@@ -37,18 +37,19 @@ export class SchedulingServiceImpl implements SchedulingService {
     const range = parseRange(query.rangeStart, query.rangeEnd);
     if (!range) return failure<SchedulingError>({ code: "INVALID_TIME_RANGE" });
 
-    const configuration = await this.configuration(query.tenantId, query.serviceId, query.employeeId);
+    const configuration = await this.configuration(query.tenantId, query.locationId, query.serviceId, query.employeeId);
     if (!configuration.ok) return configuration;
-    const { business, service, employees } = configuration.value;
+    const { location, service, employees } = configuration.value;
 
     const slots: AvailableSlot[] = [];
     for (const employee of employees) {
       const employeeSlots = await this.availableForEmployee({
         tenantId: query.tenantId,
+        locationId: query.locationId,
         employee,
         service,
-        timezone: business.timezone,
-        businessHours: business.openingHours,
+        timezone: location.timezone,
+        businessHours: location.openingHours,
         rangeStart: range.start,
         rangeEnd: range.end,
       });
@@ -64,18 +65,18 @@ export class SchedulingServiceImpl implements SchedulingService {
     const start = new Date(query.startAt);
     if (Number.isNaN(start.valueOf())) return failure<SchedulingError>({ code: "INVALID_TIME_RANGE" });
 
-    const configuration = await this.configuration(query.tenantId, query.serviceId, query.employeeId);
+    const configuration = await this.configuration(query.tenantId, query.locationId, query.serviceId, query.employeeId);
     if (!configuration.ok) return configuration;
-    const { business, service, employees } = configuration.value;
+    const { location, service, employees } = configuration.value;
     const employee = employees[0]!;
     const end = new Date(start.valueOf() + (service.durationMinutes + service.bufferMinutes) * 60_000);
 
     const isWithinHours = await this.isWithinHours(
-      query.tenantId, employee.id, business.timezone, business.openingHours, start, end,
+      query.tenantId, query.locationId, employee.id, location.timezone, location.openingHours, start, end,
     );
     if (!isWithinHours) return failure<SchedulingError>({ code: "OUTSIDE_BUSINESS_HOURS" });
 
-    const conflict = await this.hasConflict(query.tenantId, employee.id, start, end);
+    const conflict = await this.hasConflict(query.tenantId, query.locationId, employee.id, start, end);
     if (!conflict.ok) return conflict;
     if (conflict.value) return failure<SchedulingError>({ code: "SLOT_CONFLICT" });
 
@@ -87,28 +88,31 @@ export class SchedulingServiceImpl implements SchedulingService {
     });
   }
 
-  private async configuration(tenantId: string, serviceId: string, requestedEmployeeId?: string) {
-    const businessResult = await this.businessDirectory.getBusinessProfile(tenantId);
+  private async configuration(tenantId: string, locationId: string, serviceId: string, requestedEmployeeId?: string) {
+    const businessResult = await this.businessDirectory.getLocation(tenantId, locationId);
     if (!businessResult.ok) return failure<SchedulingError>({ code: "EMPLOYEE_UNAVAILABLE" });
-    const business = businessResult.value;
-    const service = business.services.find((candidate) => candidate.id === serviceId);
+    const { business, location } = businessResult.value;
+    const offered = location.services.find((candidate) => candidate.serviceId === serviceId && candidate.active);
+    const service = offered ? business.services.find((candidate) => candidate.id === serviceId && candidate.active) : undefined;
     if (!service) return failure<SchedulingError>({ code: "SERVICE_NOT_FOUND" });
 
-    const employees = business.employees.filter((employee) =>
-      employee.active && service.eligibleEmployeeIds.includes(employee.id) &&
-      (!requestedEmployeeId || employee.id === requestedEmployeeId),
-    );
+    const employees = location.professionals
+      .filter((assignment) => assignment.active && assignment.serviceIds.includes(serviceId))
+      .map((assignment) => business.professionals.find((candidate) => candidate.id === assignment.professionalId && candidate.active))
+      .filter((candidate): candidate is ProfessionalDefinition => Boolean(candidate))
+      .filter((employee) => !requestedEmployeeId || employee.id === requestedEmployeeId);
     if (requestedEmployeeId && employees.length === 0) {
       return failure<SchedulingError>({ code: "EMPLOYEE_NOT_FOUND" });
     }
     if (employees.length === 0) return failure<SchedulingError>({ code: "EMPLOYEE_UNAVAILABLE" });
-    return success({ business, service, employees });
+    return success({ location, service, employees });
   }
 
   private async availableForEmployee(input: {
     tenantId: string;
-    employee: EmployeeDefinition;
-    service: ServiceDefinition;
+    locationId: string;
+    employee: ProfessionalDefinition;
+    service: TenantServiceDefinition;
     timezone: string;
     businessHours: OpeningHoursRule[];
     rangeStart: Date;
@@ -116,11 +120,12 @@ export class SchedulingServiceImpl implements SchedulingService {
   }) {
     const employeeHours = await this.workingHours.getWorkingHours({
       tenantId: input.tenantId,
+      locationId: input.locationId,
       employeeId: input.employee.id,
     });
     if (employeeHours.length === 0) return success<AvailableSlot[]>([]);
 
-    const conflict = await this.conflictIntervals(input.tenantId, input.employee.id, input.rangeStart, input.rangeEnd);
+    const conflict = await this.conflictIntervals(input.tenantId, input.locationId, input.employee.id, input.rangeStart, input.rangeEnd);
     if (!conflict.ok) return conflict;
     const result: AvailableSlot[] = [];
     const firstDay = localParts(input.rangeStart, input.timezone);
@@ -151,9 +156,9 @@ export class SchedulingServiceImpl implements SchedulingService {
   }
 
   private async isWithinHours(
-    tenantId: string, employeeId: string, timezone: string, businessHours: OpeningHoursRule[], start: Date, end: Date,
+    tenantId: string, locationId: string, employeeId: string, timezone: string, businessHours: OpeningHoursRule[], start: Date, end: Date,
   ): Promise<boolean> {
-    const employeeHours = await this.workingHours.getWorkingHours({ tenantId, employeeId });
+    const employeeHours = await this.workingHours.getWorkingHours({ tenantId, locationId, employeeId });
     const localStart = localParts(start, timezone);
     const localEnd = localParts(end, timezone);
     if (localStart.year !== localEnd.year || localStart.month !== localEnd.month || localStart.day !== localEnd.day) return false;
@@ -164,14 +169,14 @@ export class SchedulingServiceImpl implements SchedulingService {
     return rulesForDay(businessHours, weekday).some(inRule) && rulesForDay(employeeHours, weekday).some(inRule);
   }
 
-  private async hasConflict(tenantId: string, employeeId: string, start: Date, end: Date) {
-    const intervals = await this.conflictIntervals(tenantId, employeeId, start, end);
+  private async hasConflict(tenantId: string, locationId: string, employeeId: string, start: Date, end: Date) {
+    const intervals = await this.conflictIntervals(tenantId, locationId, employeeId, start, end);
     if (!intervals.ok) return intervals;
     return success(intersects(start, end, intervals.value));
   }
 
-  private async conflictIntervals(tenantId: string, employeeId: string, rangeStart: Date, rangeEnd: Date) {
-    const query = { tenantId, employeeId, rangeStart: rangeStart.toISOString(), rangeEnd: rangeEnd.toISOString() };
+  private async conflictIntervals(tenantId: string, locationId: string, employeeId: string, rangeStart: Date, rangeEnd: Date) {
+    const query = { tenantId, locationId, employeeId, rangeStart: rangeStart.toISOString(), rangeEnd: rangeEnd.toISOString() };
     const [localIntervals, externalIntervals] = await Promise.all([
       this.appointments.findConfirmedIntervals(query),
       this.calendar.getBusyIntervals(query),

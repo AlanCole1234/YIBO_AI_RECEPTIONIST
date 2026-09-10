@@ -16,7 +16,7 @@ import {
   GoogleCalendarAdapter,
   GoogleOAuthService,
 } from "../modules/integrations/index.js";
-import type { BusinessProfile } from "../modules/business/index.js";
+import { upgradeBusinessProfile, type BusinessProfile } from "../modules/business/index.js";
 import {
   DEVELOPMENT_BUSINESS,
   DEVELOPMENT_US_BUSINESS,
@@ -123,7 +123,10 @@ function buildGoogleIntegration(
     oauth,
     calendar: new GoogleCalendarAdapter(
       calendarId,
-      async (tenantId) => (await businesses.findByTenantId(tenantId))?.timezone ?? tenant.timezone,
+      async (tenantId) => {
+        const profile = await businesses.findByTenantId(tenantId);
+        return profile ? upgradeBusinessProfile(profile).locations[0]!.timezone : tenant.timezone;
+      },
       oauth,
     ),
   };

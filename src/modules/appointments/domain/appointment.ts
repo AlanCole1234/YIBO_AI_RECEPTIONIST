@@ -5,6 +5,7 @@ import type {
   EmployeeId,
   IdempotencyKey,
   ISODateTime,
+  LocationId,
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
@@ -18,6 +19,7 @@ export type AppointmentStatus =
 export interface Appointment {
   id: AppointmentId;
   tenantId: TenantId;
+  locationId: LocationId;
   customerId: CustomerId;
   serviceId: ServiceId;
   employeeId: EmployeeId;

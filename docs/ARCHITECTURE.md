@@ -16,7 +16,8 @@ La frontera esencial es:
 
 ```mermaid
 flowchart LR
-  TEL["Telefonía / Voice Lab"] --> CALLS["calls"]
+  TEL["Telefonía / Voice Lab"] --> DID["Número marcado → tenant/location"]
+  DID --> CALLS["calls"]
   CALLS --> AGENTS["agents: definición y tools"]
   CALLS --> VOICE["voice: transporte PCM"]
   AGENTS --> CONV["conversation: lifecycle"]
@@ -66,9 +67,11 @@ servicios y profesionales compartidos y sucursales con `LocationId`, dirección,
 zona, locale, números, horarios, cierres, políticas, precios y asignaciones de
 calendario. El formato histórico se reconoce como v1 y un upgrader puro,
 idempotente y validado produce la única forma v2, incluyendo la sucursal
-`default` y defaults conservadores. Los consumidores ejecutables aún leen el
-perfil histórico hasta que la migración persistente y el contexto de sucursal
-queden incorporados.
+`default` y defaults conservadores. `BusinessDirectory` entrega siempre esa
+forma canónica aunque la persistencia todavía contenga v1. El número marcado
+resuelve exactamente un `{tenantId, locationId}` activo; Calls conserva ambos y
+los propaga como contexto confiable a AgentDefinition, tools, Scheduling y
+Appointments.
 
 ## Configuración del agente
 
@@ -86,8 +89,8 @@ roadmap los moverá a una fábrica/compilador versionado.
 
 Scheduling genera slots cada 15 minutos y cruza:
 
-1. zona horaria y horario del negocio;
-2. empleado activo y elegible para el servicio;
+1. zona horaria y horario de la sucursal resuelta;
+2. profesional activo y asignado al servicio en esa sucursal;
 3. duración y buffer;
 4. citas confirmadas locales disponibles para el adaptador;
 5. ocupación externa mediante Google FreeBusy.
@@ -112,7 +115,8 @@ frontera de tools.
 
 ## Invariantes
 
-- El modelo no elige `tenantId`, `callId`, `customerId` ni idempotency key.
+- El modelo no elige `tenantId`, `locationId`, `callId`, `customerId` ni
+  idempotency key.
 - Campos confiables enviados por una tool son rechazados.
 - Instantes persistidos y contratos internos usan ISO UTC; la conversación usa
   la zona IANA del negocio.
