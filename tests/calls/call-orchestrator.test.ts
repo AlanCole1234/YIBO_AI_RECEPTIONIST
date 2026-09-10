@@ -101,6 +101,20 @@ describe("CallOrchestratorService", () => {
     expect(system.repository.stateHistory.at(-1)).toEqual({ callId: incoming.callId, state: "COMPLETED" });
   });
 
+  it("closes media after a transferred call without replacing its terminal state", async () => {
+    const system = createOrchestrator();
+    await system.orchestrator.handleTelephonyEvent(incoming);
+    await system.repository.updateState(incoming.callId, "TRANSFERRED", "2026-08-09T18:02:00.000Z");
+
+    await system.orchestrator.handleTelephonyEvent({
+      type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:03:00.000Z",
+    });
+
+    expect(system.runtime.latestSession.closeCount).toBe(1);
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
+    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ state: "TRANSFERRED" });
+  });
+
   it("fails and hangs up when an agent definition cannot be prepared", async () => {
     const system = createOrchestrator({ agentOk: false });
     await system.orchestrator.handleTelephonyEvent(incoming);

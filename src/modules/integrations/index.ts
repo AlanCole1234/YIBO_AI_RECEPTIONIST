@@ -4,3 +4,4 @@ export type { CalendarAssignment, CalendarAssignmentResolver } from "./calendar/
 export { GoogleCalendarAdapter } from "./google/google-calendar-adapter.js";
 export { GoogleOAuthService } from "./google/google-oauth-service.js";
 export type { GoogleCalendarAccessStatus, GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./google/contracts.js";
+export { TelephonyHumanTransferAdapter } from "./telephony/telephony-human-transfer-adapter.js";

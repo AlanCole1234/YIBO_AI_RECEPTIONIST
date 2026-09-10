@@ -54,6 +54,7 @@ import {
 import {
   GoogleOAuthService,
   InMemoryCalendarAdapter,
+  TelephonyHumanTransferAdapter,
 } from "../modules/integrations/index.js";
 import {
   SchedulingServiceImpl,
@@ -67,7 +68,7 @@ import {
   type VoiceMediaGateway,
 } from "../modules/voice/index.js";
 import type { Clock, IdGenerator } from "../shared/application/system.js";
-import { failure, success } from "../shared/domain/result.js";
+import { success } from "../shared/domain/result.js";
 import {
   DEVELOPMENT_BUSINESS,
   DEVELOPMENT_US_BUSINESS,
@@ -75,6 +76,7 @@ import {
 import { loadConfiguration, type ApplicationConfiguration } from "./configuration.js";
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
 import type { OrganizationCostReader } from "../modules/billing/index.js";
+import type { TelephonyGateway } from "../modules/telephony/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
 import {
   AdminCredentialService,
@@ -107,7 +109,11 @@ export interface YiboApplication {
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
   calendar: ApplicationCalendar;
-  telephony: InMemoryCallTelephonyGateway;
+  telephony: TelephonyGateway & {
+    readonly answeredCallIds?: string[];
+    readonly hungUpCallIds?: string[];
+    readonly transfers?: Array<{ callId: string; destination: unknown }>;
+  };
   ids: IdGenerator;
   billing?: OrganizationCostReader;
   googleOAuth?: GoogleOAuthService;
@@ -132,6 +138,7 @@ export interface BuildApplicationOptions {
   ids?: IdGenerator;
   runtime?: ConversationRuntimePort;
   humanTransfer?: HumanTransferPort;
+  telephonyGateway?: TelephonyGateway;
   agentConfigurationRepository?: AgentConfigurationRepository;
   usageRecorder?: ConversationUsageRecorder;
   callRepository?: CallRepository & CallHistoryReader;
@@ -179,6 +186,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("audit"),
   );
   const business = new BusinessDirectoryService(businessRepository);
+  const telephony = options.telephonyGateway ?? new InMemoryCallTelephonyGateway();
+  const callRepository = options.callRepository ?? new InMemoryCallRepository();
   const customerRepository = options.customerRepository ?? new InMemoryCustomerRepository();
   const customers = new DefaultCustomerService(
     customerRepository,
@@ -264,7 +273,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     () => ids.generate("appointment"),
     clock,
   );
-  const transfer = options.humanTransfer ?? unavailableTransfer;
+  const transfer = options.humanTransfer
+    ?? new TelephonyHumanTransferAdapter(business, callRepository, telephony, clock);
   const tools = new ToolExecutorImpl(scheduling, appointments, transfer, business, clock, customers, {
     scheduling: developerTestScheduling,
     appointments: developerTestAppointments,
@@ -295,8 +305,6 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),
   });
   const voice = new ScriptedVoiceMediaGateway();
-  const telephony = new InMemoryCallTelephonyGateway();
-  const callRepository = options.callRepository ?? new InMemoryCallRepository();
   const calls = new CallOrchestratorService(
     business,
     customers,
@@ -307,6 +315,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     callRepository,
     options.developerTestModeAuthorized ?? false,
   );
+  telephony.onEvent((event) => calls.handleTelephonyEvent(event));
 
   return {
     tenantId,
@@ -337,13 +346,6 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
 
 const systemClock: Clock = { now: () => new Date() };
 const uuidGenerator: IdGenerator = { generate: (scope) => `${scope}-${randomUUID()}` };
-const unavailableTransfer: HumanTransferPort = {
-  transferToConfiguredDestination: async () => failure({
-    code: "DESTINATION_NOT_CONFIGURED" as const,
-    retryable: false,
-  }),
-};
-
 type BusinessProfileResult = Awaited<ReturnType<BusinessDirectory["getBusinessProfile"]>>;
 type BusinessLocationResult = Awaited<ReturnType<BusinessDirectory["getLocation"]>>;
 

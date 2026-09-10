@@ -99,13 +99,14 @@ export class CallOrchestratorService implements CallOrchestrator {
 
   private async shutdown(callId: string, occurredAt: string): Promise<void> {
     const record = await this.calls.findByCallId(callId);
-    if (!record || terminalStates.has(record.state)) return;
+    if (!record) return;
 
     const session = this.sessions.get(callId);
     if (session) {
       await session.close();
       this.sessions.delete(callId);
     }
+    if (terminalStates.has(record.state)) return;
     await this.transition(callId, "COMPLETED", occurredAt);
   }
 

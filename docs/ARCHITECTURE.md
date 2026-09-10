@@ -145,6 +145,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 - Cada sucursal puede guardar un destino de transferencia tipado como teléfono
   normalizado o extensión numérica. La API versionada no admite URI, SIP ni un
   destino proporcionado por el modelo.
+- `TelephonyHumanTransferAdapter` resuelve ese destino con el contexto confiable,
+  persiste `TRANSFERRING` y luego `TRANSFERRED`; un fallo del gateway compensa el
+  estado a `IN_CONVERSATION` para que el agente pueda seguir atendiendo.
 
 ## Invariantes
 
