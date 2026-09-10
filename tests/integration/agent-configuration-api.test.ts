@@ -2,11 +2,36 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
 import { buildApplication } from "../../src/bootstrap/index.js";
+import { AGENT_TOOL_DEFINITIONS } from "../../src/modules/agents/index.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("agent configuration API", () => {
+  it("publishes every non-developer tool with complete dashboard metadata", async () => {
+    server = await createApiServer(buildApplication());
+
+    const response = await server.inject({ method: "GET", url: "/api/configuration" });
+    const body = response.json<{ availableTools: Array<Record<string, unknown>> }>();
+    const expected = AGENT_TOOL_DEFINITIONS
+      .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
+      .map(({ name }) => name);
+
+    expect(body.availableTools.map(({ name }) => name)).toEqual(expected);
+    expect(body.availableTools.map(({ name }) => name)).toContain("update_customer");
+    for (const descriptor of body.availableTools) {
+      expect(descriptor).toEqual(expect.objectContaining({
+        name: expect.any(String),
+        description: expect.any(String),
+        title: expect.any(String),
+        help: expect.any(String),
+        route: expect.any(String),
+        icon: expect.any(String),
+        kind: expect.stringMatching(/^(consult|mutate|external)$/),
+      }));
+    }
+  });
+
   it("reads the tenant configuration and applies updates to the shared agent service", async () => {
     const app = buildApplication();
     server = await createApiServer(app);
