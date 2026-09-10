@@ -8,7 +8,7 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 |---|---|---|
 | [ADR-001](ADR-001-conversation-runtime.md) | Aceptado | Runtime único de conversación |
 | [ADR-002](ADR-002-admin-authentication.md) | Aceptado | Autenticación, sesión y roles administrativos |
-| ADR-003 | Pendiente | Modelo multi-sucursal y migración |
+| [ADR-003](ADR-003-multi-location-business.md) | Aceptado | Modelo multi-sucursal y migración |
 | ADR-004 | Pendiente | Configuración versionada del agente |
 | ADR-005 | Pendiente | Enrutamiento de calendarios |
 | ADR-006 | Pendiente | Snapshot de precios en citas |

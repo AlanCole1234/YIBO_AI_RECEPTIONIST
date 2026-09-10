@@ -1,0 +1,236 @@
+import type {
+  BusinessId,
+  EmployeeId,
+  IANATimeZone,
+  LocationId,
+  RegionId,
+  ServiceId,
+  TenantId,
+} from "../../../shared/types/identifiers.js";
+import type { OpeningHoursRule } from "../application/contracts.js";
+
+export const MULTI_LOCATION_BUSINESS_SCHEMA_VERSION = 2 as const;
+export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 60] as const;
+
+export interface TenantServiceDefinition {
+  id: ServiceId;
+  name: string;
+  description: string;
+  durationMinutes: number;
+  bufferMinutes: number;
+  active: boolean;
+}
+
+export interface ProfessionalDefinition {
+  id: EmployeeId;
+  displayName: string;
+  active: boolean;
+}
+
+export interface LocationAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  administrativeArea?: string;
+  postalCode?: string;
+  countryCode: string;
+}
+
+export interface LocationClosure {
+  id: string;
+  startLocal: string;
+  endLocal: string;
+  administrativeReason: string;
+}
+
+export interface LocationSchedulingPolicy {
+  defaultServiceId: ServiceId;
+  slotIncrementMinutes: typeof SLOT_INCREMENT_MINUTES[number];
+  minimumLeadTimeMinutes: number;
+  maximumBookingHorizonDays: number;
+  maximumResults: number;
+  minimumCancellationNoticeMinutes: number;
+  minimumRescheduleNoticeMinutes: number;
+  concurrentCapacity: number;
+}
+
+export interface LocationServiceAssignment {
+  serviceId: ServiceId;
+  active: boolean;
+  priceAmountMinor: number;
+  priceCurrency: string;
+}
+
+export interface LocationProfessionalAssignment {
+  professionalId: EmployeeId;
+  active: boolean;
+  serviceIds: ServiceId[];
+  openingHours: OpeningHoursRule[];
+  calendarId?: string;
+}
+
+export interface LocationDefinition {
+  id: LocationId;
+  name: string;
+  active: boolean;
+  address: LocationAddress;
+  timezone: IANATimeZone;
+  locale: string;
+  calledNumbers: string[];
+  openingHours: OpeningHoursRule[];
+  closures: LocationClosure[];
+  policies: LocationSchedulingPolicy;
+  services: LocationServiceAssignment[];
+  professionals: LocationProfessionalAssignment[];
+  defaultCalendarId?: string;
+  transferDestination?: string;
+}
+
+export interface BusinessConfigurationV2 {
+  schemaVersion: typeof MULTI_LOCATION_BUSINESS_SCHEMA_VERSION;
+  region: RegionId;
+  tenantId: TenantId;
+  businessId: BusinessId;
+  name: string;
+  active: boolean;
+  services: TenantServiceDefinition[];
+  professionals: ProfessionalDefinition[];
+  locations: LocationDefinition[];
+}
+
+export type MultiLocationBusinessValidationError = { path: string; message: string };
+
+export const validateMultiLocationBusiness = (
+  profile: BusinessConfigurationV2,
+): MultiLocationBusinessValidationError[] => {
+  const errors: MultiLocationBusinessValidationError[] = [];
+  required(errors, "tenantId", profile.tenantId);
+  required(errors, "businessId", profile.businessId);
+  required(errors, "name", profile.name);
+  uniqueIds(errors, "services", profile.services.map(({ id }) => id));
+  uniqueIds(errors, "professionals", profile.professionals.map(({ id }) => id));
+  uniqueIds(errors, "locations", profile.locations.map(({ id }) => id));
+
+  const serviceIds = new Set(profile.services.map(({ id }) => id));
+  const professionalIds = new Set(profile.professionals.map(({ id }) => id));
+  for (const [index, service] of profile.services.entries()) {
+    required(errors, `services.${index}.name`, service.name);
+    if (!Number.isInteger(service.durationMinutes) || service.durationMinutes <= 0) {
+      errors.push({ path: `services.${index}.durationMinutes`, message: "Must be a positive integer." });
+    }
+    if (!Number.isInteger(service.bufferMinutes) || service.bufferMinutes < 0) {
+      errors.push({ path: `services.${index}.bufferMinutes`, message: "Must be a non-negative integer." });
+    }
+  }
+
+  const allNumbers = new Set<string>();
+  for (const [index, location] of profile.locations.entries()) {
+    const path = `locations.${index}`;
+    required(errors, `${path}.id`, location.id);
+    required(errors, `${path}.name`, location.name);
+    required(errors, `${path}.locale`, location.locale);
+    required(errors, `${path}.address.line1`, location.address.line1);
+    required(errors, `${path}.address.city`, location.address.city);
+    if (!/^[A-Z]{2}$/.test(location.address.countryCode)) {
+      errors.push({ path: `${path}.address.countryCode`, message: "Must be an ISO 3166-1 alpha-2 code." });
+    }
+    if (!isTimeZone(location.timezone)) {
+      errors.push({ path: `${path}.timezone`, message: "Must be a valid IANA timezone." });
+    }
+    if (location.active && location.calledNumbers.length === 0) {
+      errors.push({ path: `${path}.calledNumbers`, message: "An active location requires a called number." });
+    }
+    if (!location.active && location.calledNumbers.length > 0) {
+      errors.push({ path: `${path}.calledNumbers`, message: "Called numbers may belong only to active locations." });
+    }
+    for (const [numberIndex, phone] of location.calledNumbers.entries()) {
+      const normalized = normalizePhone(phone);
+      if (!normalized) errors.push({ path: `${path}.calledNumbers.${numberIndex}`, message: "Invalid phone number." });
+      else if (allNumbers.has(normalized)) errors.push({ path: `${path}.calledNumbers.${numberIndex}`, message: "Called number belongs to more than one location." });
+      else allNumbers.add(normalized);
+    }
+    validateHours(errors, `${path}.openingHours`, location.openingHours);
+    uniqueIds(errors, `${path}.services`, location.services.map(({ serviceId }) => serviceId));
+    for (const [assignmentIndex, assignment] of location.services.entries()) {
+      const assignmentPath = `${path}.services.${assignmentIndex}`;
+      if (!serviceIds.has(assignment.serviceId)) errors.push({ path: `${assignmentPath}.serviceId`, message: "Unknown tenant service." });
+      if (!Number.isSafeInteger(assignment.priceAmountMinor) || assignment.priceAmountMinor < 0) {
+        errors.push({ path: `${assignmentPath}.priceAmountMinor`, message: "Must be non-negative minor units." });
+      }
+      if (!/^[A-Z]{3}$/.test(assignment.priceCurrency)) {
+        errors.push({ path: `${assignmentPath}.priceCurrency`, message: "Must be an ISO 4217 code." });
+      }
+    }
+    uniqueIds(errors, `${path}.professionals`, location.professionals.map(({ professionalId }) => professionalId));
+    for (const [assignmentIndex, assignment] of location.professionals.entries()) {
+      const assignmentPath = `${path}.professionals.${assignmentIndex}`;
+      if (!professionalIds.has(assignment.professionalId)) errors.push({ path: `${assignmentPath}.professionalId`, message: "Unknown tenant professional." });
+      if (new Set(assignment.serviceIds).size !== assignment.serviceIds.length
+        || assignment.serviceIds.some((serviceId) => !location.services.some((service) => service.serviceId === serviceId))) {
+        errors.push({ path: `${assignmentPath}.serviceIds`, message: "Services must be unique assignments of this location." });
+      }
+      validateHours(errors, `${assignmentPath}.openingHours`, assignment.openingHours);
+      if (assignment.calendarId !== undefined) required(errors, `${assignmentPath}.calendarId`, assignment.calendarId);
+    }
+    if (!location.services.some(({ serviceId, active }) => serviceId === location.policies.defaultServiceId && active)) {
+      errors.push({ path: `${path}.policies.defaultServiceId`, message: "Must reference an active location service." });
+    }
+    if (!(SLOT_INCREMENT_MINUTES as readonly number[]).includes(location.policies.slotIncrementMinutes)) {
+      errors.push({ path: `${path}.policies.slotIncrementMinutes`, message: "Unsupported slot increment." });
+    }
+    for (const field of ["minimumLeadTimeMinutes", "maximumBookingHorizonDays", "maximumResults",
+      "minimumCancellationNoticeMinutes", "minimumRescheduleNoticeMinutes", "concurrentCapacity"] as const) {
+      const value = location.policies[field];
+      if (!Number.isInteger(value) || value < (field === "concurrentCapacity" || field === "maximumResults" ? 1 : 0)) {
+        errors.push({ path: `${path}.policies.${field}`, message: "Invalid non-negative policy value." });
+      }
+    }
+    for (const [closureIndex, closure] of location.closures.entries()) {
+      if (!closure.id.trim() || !closure.administrativeReason.trim() || !isLocalDateTime(closure.startLocal)
+        || !isLocalDateTime(closure.endLocal) || closure.startLocal >= closure.endLocal) {
+        errors.push({ path: `${path}.closures.${closureIndex}`, message: "Closure requires an ID, reason and ordered local date range." });
+      }
+    }
+    if (location.defaultCalendarId !== undefined) required(errors, `${path}.defaultCalendarId`, location.defaultCalendarId);
+  }
+  if (profile.active && !profile.locations.some(({ active }) => active)) {
+    errors.push({ path: "locations", message: "An active business requires an active location." });
+  }
+  return errors;
+};
+
+const required = (errors: MultiLocationBusinessValidationError[], path: string, value: string): void => {
+  if (!value.trim()) errors.push({ path, message: "Required." });
+};
+
+const uniqueIds = (errors: MultiLocationBusinessValidationError[], path: string, ids: string[]): void => {
+  if (ids.some((id) => !id.trim()) || new Set(ids).size !== ids.length) {
+    errors.push({ path, message: "IDs must be non-empty and unique." });
+  }
+};
+
+const isTimeZone = (value: string): boolean => {
+  try { Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; }
+};
+
+const normalizePhone = (value: string): string | null => {
+  const normalized = value.trim().replace(/[\s().-]/g, "");
+  return /^\+[1-9]\d{6,14}$/.test(normalized) ? normalized : null;
+};
+
+const validateHours = (
+  errors: MultiLocationBusinessValidationError[],
+  path: string,
+  hours: OpeningHoursRule[],
+): void => {
+  for (const [index, rule] of hours.entries()) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.startTime)
+      || !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.endTime)
+      || rule.startTime >= rule.endTime) {
+      errors.push({ path: `${path}.${index}`, message: "Hours require ordered HH:mm values." });
+    }
+  }
+};
+
+const isLocalDateTime = (value: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value) && !Number.isNaN(Date.parse(`${value}Z`));

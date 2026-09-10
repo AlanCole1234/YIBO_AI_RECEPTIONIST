@@ -61,6 +61,12 @@ dueño de la sesión; Voice sólo transporta PCM mono de 24 kHz.
 | `integrations` | Google OAuth/Calendar y calendario en memoria |
 | `billing` | Lectura opcional de costos de organización OpenAI |
 
+Business ya define el contrato validado de siguiente generación: catálogos de
+servicios y profesionales compartidos y sucursales con `LocationId`, dirección,
+zona, locale, números, horarios, cierres, políticas, precios y asignaciones de
+calendario. Los consumidores ejecutables aún leen el perfil histórico; el
+checkpoint activo incorpora el upgrader único antes de migrar persistencia.
+
 ## Configuración del agente
 
 La configuración se guarda por tenant en `agent_configurations` como JSON y se
