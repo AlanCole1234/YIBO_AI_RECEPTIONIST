@@ -32,6 +32,28 @@ export interface BusinessDirectory {
     tenantId: TenantId,
     timezone: IANATimeZone,
   ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
+
+  getBusinessConfiguration(
+    tenantId: TenantId,
+  ): Promise<Result<VersionedBusinessConfiguration, BusinessLookupError>>;
+
+  updateBusinessConfiguration(
+    tenantId: TenantId,
+    configuration: EditableBusinessConfiguration,
+    expectedVersion: number,
+  ): Promise<Result<VersionedBusinessConfiguration, BusinessLookupError>>;
+}
+
+export type EditableBusinessConfiguration = Omit<
+  BusinessConfigurationV2,
+  "schemaVersion" | "region" | "tenantId" | "businessId"
+>;
+
+export interface VersionedBusinessConfiguration {
+  version: number;
+  region: RegionId;
+  businessId: BusinessId;
+  configuration: EditableBusinessConfiguration;
 }
 
 export interface BusinessProfile {
@@ -84,4 +106,5 @@ export type BusinessLookupError =
   | { code: "BUSINESS_NOT_FOUND" }
   | { code: "BUSINESS_INACTIVE" }
   | { code: "LOCATION_NOT_FOUND" }
+  | { code: "CONFIGURATION_VERSION_CONFLICT"; currentVersion: number | null }
   | { code: "BUSINESS_CONFIGURATION_INVALID"; message: string };

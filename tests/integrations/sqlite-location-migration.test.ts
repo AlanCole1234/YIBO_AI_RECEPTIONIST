@@ -13,11 +13,12 @@ describe("SQLite location context migration", () => {
       appointment: { id: "appointment-1", location_id: "default" },
       counts: { calledNumbers: 1, calls: 1, appointments: 1 },
       freshColumns: {
+        businesses: expect.arrayContaining(["configuration_version"]),
         called_numbers: expect.arrayContaining(["location_id"]),
         calls: expect.arrayContaining(["location_id"]),
         appointments: expect.arrayContaining(["location_id"]),
       },
     });
-    expect(result.versions).toEqual([1, 2, 3, 4, 5, 6, 7].map((version) => ({ version })));
+    expect(result.versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((version) => ({ version })));
   });
 });

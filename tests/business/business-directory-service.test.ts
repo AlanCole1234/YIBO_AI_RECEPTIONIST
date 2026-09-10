@@ -91,4 +91,28 @@ describe("BusinessDirectoryService", () => {
       error: { code: "LOCATION_NOT_FOUND" },
     });
   });
+
+  it("uses optimistic versions for complete administrative updates", async () => {
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
+    const current = await service.getBusinessConfiguration(profile.tenantId);
+    if (!current.ok) throw new Error("Expected business configuration");
+
+    const first = await service.updateBusinessConfiguration(profile.tenantId, {
+      ...current.value.configuration,
+      name: "SmileLine Updated",
+    }, current.value.version);
+    expect(first).toMatchObject({
+      ok: true,
+      value: { version: 2, configuration: { name: "SmileLine Updated" } },
+    });
+
+    await expect(service.updateBusinessConfiguration(
+      profile.tenantId,
+      current.value.configuration,
+      current.value.version,
+    )).resolves.toEqual({
+      ok: false,
+      error: { code: "CONFIGURATION_VERSION_CONFLICT", currentVersion: 2 },
+    });
+  });
 });

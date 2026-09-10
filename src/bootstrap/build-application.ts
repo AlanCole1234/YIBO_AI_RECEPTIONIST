@@ -223,6 +223,9 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     getBusinessByCalledNumber: async (phoneNumber) => demoBusiness(await business.getBusinessByCalledNumber(phoneNumber)),
     getBusinessProfile: async (candidateTenantId) => demoBusiness(await business.getBusinessProfile(candidateTenantId)),
     updateBusinessTimezone: async (candidateTenantId, timezone) => demoBusiness(await business.updateBusinessTimezone(candidateTenantId, timezone)),
+    getBusinessConfiguration: (candidateTenantId) => business.getBusinessConfiguration(candidateTenantId),
+    updateBusinessConfiguration: (candidateTenantId, configuration, version) =>
+      business.updateBusinessConfiguration(candidateTenantId, configuration, version),
   };
   const developerTestCalendar = new InMemoryCalendarAdapter();
   const developerTestWorkingHours: EmployeeWorkingHoursProvider = {

@@ -9,9 +9,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 2 — Dominio multi-sucursal y migración**.
-- Tarea activa: **LOC-006 — API administrativa con edición optimista**.
-- Último checkpoint cerrado: Checkpoint 1; `pnpm typecheck`, 159 pruebas
+- Checkpoint activo: **Checkpoint 3 — Catálogos, precios y políticas de agenda**.
+- Tarea activa: **CAT-001 — CRUD validado de servicios compartidos**.
+- Último checkpoint cerrado: Checkpoint 2; `pnpm typecheck`, 175 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
 ## Capacidades existentes
@@ -62,8 +62,8 @@ con `pnpm test` y `pnpm build`.
 | LOC-003 | DONE | Migración v7 idempotente; backfill default sin pérdida en números, llamadas y citas |
 | LOC-004 | DONE | DID resuelve tenant/location y ambos se propagan sin aceptar IDs del modelo |
 | LOC-005 | DONE | Fixtures MX/US y persistencia en memoria usan exclusivamente v2 canónica |
-| LOC-006 | IN_PROGRESS | API administrativa versionada con edición optimista |
-| CAT-001 | TODO | CRUD de servicios compartidos |
+| LOC-006 | DONE | GET/PUT admin, If-Match, CAS SQLite/memoria, 409 y auditoría versionada |
+| CAT-001 | IN_PROGRESS | CRUD de servicios compartidos |
 | CAT-002 | TODO | CRUD de profesionales y asignaciones |
 | PRICE-001 | TODO | Money ISO 4217 por oferta de sucursal |
 | PRICE-002 | TODO | Snapshot de nombre y precio en la cita |

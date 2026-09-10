@@ -4,12 +4,18 @@ export type {
   BusinessLookupError,
   BusinessLocationContext,
   BusinessProfile,
+  EditableBusinessConfiguration,
   LegacyBusinessProfileV1,
   EmployeeDefinition,
   OpeningHoursRule,
   ServiceDefinition,
+  VersionedBusinessConfiguration,
 } from "./application/contracts.js";
-export type { BusinessRepository } from "./ports/business-repository.js";
+export type {
+  BusinessRepository,
+  SaveBusinessConfigurationResult,
+  StoredBusinessConfiguration,
+} from "./ports/business-repository.js";
 export { InMemoryBusinessRepository } from "./infrastructure/in-memory-business-repository.js";
 export {
   MULTI_LOCATION_BUSINESS_SCHEMA_VERSION,

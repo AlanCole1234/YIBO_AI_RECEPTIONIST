@@ -107,8 +107,8 @@ frontera de tools.
 - SQLite se separa por región MX/US y todas las claves operativas incluyen
   `tenant_id`.
 - Las migraciones viven en `src/infrastructure/database/migrations/`; la v7
-  agrega `location_id` a números, llamadas y citas y rellena registros previos
-  con `default`.
+  agrega `location_id` a números, llamadas y citas y la v8 agrega la versión
+  optimista del documento de negocio. Ambas conservan los registros previos.
 - Google OAuth guarda tokens cifrados por tenant.
 - Google Calendar usa hoy un `calendarId` global del entorno y resuelve la zona
   desde el perfil del tenant.
@@ -136,6 +136,10 @@ exigen el `Origin` configurado y ningún endpoint acepta tenant o región desde
 datos no confiables. Cada mutación administrativa actual registra sujeto,
 tenant, entidad, acción, versión, instante y diff; credenciales, PII e
 instrucciones se sustituyen por marcadores o huellas antes de persistir.
+La configuración multi-sucursal completa se lee y reemplaza mediante
+`/api/admin/business-configuration`; `PUT` exige `If-Match`, incrementa la
+versión atómicamente y responde `409 CONFIGURATION_VERSION_CONFLICT` si otro
+editor ganó la carrera.
 
 ## Superficie y brechas activas
 

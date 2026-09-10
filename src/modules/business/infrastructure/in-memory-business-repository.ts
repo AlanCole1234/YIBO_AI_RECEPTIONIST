@@ -6,6 +6,7 @@ import type { TenantId } from "../../../shared/types/identifiers.js";
 
 export class InMemoryBusinessRepository implements BusinessRepository {
   private readonly byTenant = new Map<TenantId, BusinessConfigurationV2>();
+  private readonly versionByTenant = new Map<TenantId, number>();
   private readonly tenantByCalledNumber = new Map<string, TenantId>();
 
   constructor(profiles: VersionedBusinessProfile[]) {
@@ -15,6 +16,14 @@ export class InMemoryBusinessRepository implements BusinessRepository {
   async findByTenantId(tenantId: TenantId): Promise<VersionedBusinessProfile | null> {
     const value = this.byTenant.get(tenantId);
     return value ? structuredClone(value) : null;
+  }
+
+  async findConfigurationByTenantId(tenantId: TenantId) {
+    const profile = this.byTenant.get(tenantId);
+    const version = this.versionByTenant.get(tenantId);
+    return profile && version !== undefined
+      ? { profile: structuredClone(profile), version }
+      : null;
   }
 
   async findByCalledNumber(calledNumber: string): Promise<VersionedBusinessProfile | null> {
@@ -29,11 +38,25 @@ export class InMemoryBusinessRepository implements BusinessRepository {
       this.add(canonical);
       return;
     }
+    const expectedVersion = this.versionByTenant.get(canonical.tenantId)!;
+    const saved = await this.saveIfVersion(canonical, expectedVersion);
+    if (!saved.saved) throw new Error("Business configuration changed during save.");
+  }
+
+  async saveIfVersion(profile: VersionedBusinessProfile, expectedVersion: number) {
+    const canonical = upgradeBusinessProfile(profile);
+    const currentVersion = this.versionByTenant.get(canonical.tenantId);
+    if (currentVersion === undefined || currentVersion !== expectedVersion) {
+      return { saved: false as const, currentVersion: currentVersion ?? null };
+    }
     const candidate = new Map(this.byTenant);
     candidate.set(canonical.tenantId, structuredClone(canonical));
     const numberIndex = calledNumberIndex(candidate.values());
     this.byTenant.set(canonical.tenantId, structuredClone(canonical));
     this.replaceCalledNumberIndex(numberIndex);
+    const version = currentVersion + 1;
+    this.versionByTenant.set(canonical.tenantId, version);
+    return { saved: true as const, version };
   }
 
   private add(profile: VersionedBusinessProfile): void {
@@ -45,6 +68,7 @@ export class InMemoryBusinessRepository implements BusinessRepository {
     candidate.set(canonical.tenantId, structuredClone(canonical));
     const numberIndex = calledNumberIndex(candidate.values());
     this.byTenant.set(canonical.tenantId, structuredClone(canonical));
+    this.versionByTenant.set(canonical.tenantId, 1);
     this.replaceCalledNumberIndex(numberIndex);
   }
 

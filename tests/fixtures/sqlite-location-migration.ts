@@ -54,7 +54,7 @@ try {
   migrateDatabase(database);
   const freshDatabase = new DatabaseSync(":memory:");
   migrateDatabase(freshDatabase);
-  const freshColumns = Object.fromEntries(["called_numbers", "calls", "appointments"].map((table) => [
+  const freshColumns = Object.fromEntries(["businesses", "called_numbers", "calls", "appointments"].map((table) => [
     table,
     (freshDatabase.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(({ name }) => name),
   ]));
