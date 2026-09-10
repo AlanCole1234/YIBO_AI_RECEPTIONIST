@@ -19,7 +19,7 @@ describe("in-memory call to appointment", () => {
     const ids: IdGenerator = {
       generate: (scope) => scope === "customer" ? CUSTOMER_ID : scope === "appointment" ? APPOINTMENT_ID : `${scope}-e2e`,
     };
-    const app = buildApplication({ ids });
+    const app = buildApplication({ ids, clock: { now: () => new Date("2026-08-01T00:00:00.000Z") } });
     if (!(app.runtime instanceof ScriptedConversationRuntime)) {
       throw new Error("The E2E scenario requires the in-memory scripted runtime");
     }

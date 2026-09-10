@@ -67,6 +67,17 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       });
   }
 
+  async findConfirmedLocationIntervals(query: { tenantId: string; locationId: string; rangeStart: string; rangeEnd: string }) {
+    return this.database.prepare(`SELECT start_at, end_at FROM appointments
+      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND status = 'CONFIRMED'
+        AND start_at < ? AND ? < end_at ORDER BY start_at`
+    ).all(this.region, query.tenantId, query.locationId, query.rangeEnd, query.rangeStart)
+      .map((row) => {
+        const value = row as { start_at: string; end_at: string };
+        return { startAt: value.start_at, endAt: value.end_at };
+      });
+  }
+
   private row(value: AppointmentRow | undefined): Appointment | null {
     if (!value) return null;
     return {

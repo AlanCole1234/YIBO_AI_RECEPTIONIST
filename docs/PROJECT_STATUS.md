@@ -9,9 +9,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 3 — Catálogos, precios y políticas de agenda**.
-- Tarea activa: **SCHED-005 — capacidad y concurrencia por profesional/sucursal**.
-- Último checkpoint cerrado: Checkpoint 2; `pnpm typecheck`, 175 pruebas
+- Checkpoint activo: **Checkpoint 4 — Calendarios y transferencia**.
+- Tarea activa: **CAL-001 — resolver de calendario por asignación**.
+- Último checkpoint cerrado: Checkpoint 3; `pnpm typecheck`, 198 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
 ## Capacidades existentes
@@ -71,8 +71,8 @@ con `pnpm test` y `pnpm build`.
 | SCHED-002 | DONE | Cierres locales bloquean slots; el motivo queda sólo en administración |
 | SCHED-003 | DONE | API versionada y validación completa de política por sucursal |
 | SCHED-004 | DONE | Grid, lead time, horizonte, límites y avisos aplicados en dominio |
-| SCHED-005 | IN_PROGRESS | Capacidad y concurrencia por profesional/sucursal |
-| CAL-001 | TODO | Resolver de calendario por tenant/location/employee |
+| SCHED-005 | DONE | Capacidad profesional 1, límite de sucursal y guard location-wide |
+| CAL-001 | IN_PROGRESS | Resolver de calendario por tenant/location/employee |
 | CAL-002 | TODO | Fallback de sucursal y override profesional |
 | CAL-003 | TODO | Validación y estado de asignaciones Google |
 | CAL-004 | TODO | Operaciones Google mediante calendario resuelto |

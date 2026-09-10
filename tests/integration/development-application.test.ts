@@ -8,7 +8,7 @@ const monday = {
 
 describe("development application composition", () => {
   it("confirms a booking and makes the occupied slot unavailable", async () => {
-    const app = buildApplication();
+    const app = buildApplication({ clock: { now: () => new Date("2026-08-01T00:00:00.000Z") } });
     const customer = await app.customers.findOrCreateByPhone({
       tenantId: app.tenantId,
       phone: "+529991234567",

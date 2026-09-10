@@ -35,6 +35,15 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
   }
 
+  async findConfirmedLocationIntervals(query: { tenantId: TenantId; locationId: string; rangeStart: string; rangeEnd: string }) {
+    return [...this.appointments.values()]
+      .filter((appointment) => appointment.tenantId === query.tenantId
+        && appointment.locationId === query.locationId && appointment.status === "CONFIRMED"
+        && appointment.startAt < query.rangeEnd && query.rangeStart < appointment.endAt)
+      .map(({ startAt, endAt }) => ({ startAt, endAt }))
+      .sort((left, right) => left.startAt.localeCompare(right.startAt));
+  }
+
   async save(appointment: Appointment): Promise<void> {
     this.appointments.set(`${appointment.tenantId}:${appointment.id}`, { ...appointment });
   }

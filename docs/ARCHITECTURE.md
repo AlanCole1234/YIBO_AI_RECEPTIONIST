@@ -109,6 +109,9 @@ soportado y un servicio predeterminado activo de esa sucursal.
 Scheduling aplica `slotIncrementMinutes`, anticipación, horizonte y máximo de
 resultados al listar y al revalidar. Appointments aplica por dominio los avisos
 mínimos de cancelación y reprogramación; el prompt no puede evadirlos.
+La capacidad del profesional permanece en 1 y se aplica además el límite
+concurrente de la sucursal. Las reservas se serializan por `{tenant, location}`
+para que profesionales distintos no excedan el último cupo durante una carrera.
 
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el

@@ -257,4 +257,21 @@ describe("AppointmentServiceImpl", () => {
       appointmentId: "appointment-1", startAt: "2026-08-10T16:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "RESCHEDULE_NOTICE_NOT_MET" } });
   });
+
+  it("serializes different professionals competing for the same location capacity", async () => {
+    const guard = new InMemoryAppointmentConcurrencyGuard();
+    let active = 0;
+    let maximum = 0;
+    const operation = async () => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active -= 1;
+    };
+    await Promise.all([
+      guard.execute("tenant-a", "default", "employee-1", operation),
+      guard.execute("tenant-a", "default", "employee-2", operation),
+    ]);
+    expect(maximum).toBe(1);
+  });
 });

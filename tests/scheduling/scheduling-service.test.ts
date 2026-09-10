@@ -22,7 +22,10 @@ const workingHours: EmployeeWorkingHoursProvider = {
   getWorkingHours: async () => [{ dayOfWeek: 1, startTime: "09:30", endTime: "11:30" }],
 };
 
-const noAppointments: ConfirmedAppointmentReader = { findConfirmedIntervals: async () => [] };
+const noAppointments: ConfirmedAppointmentReader = {
+  findConfirmedIntervals: async () => [],
+  findConfirmedLocationIntervals: async () => [],
+};
 const noCalendarConflicts: CalendarPort = { getBusyIntervals: async () => success([]) };
 const clock = { now: () => new Date("2026-08-01T00:00:00.000Z") };
 
@@ -56,6 +59,7 @@ describe("SchedulingService", () => {
   it("rejects a slot that overlaps a local confirmed appointment", async () => {
     const appointments: ConfirmedAppointmentReader = {
       findConfirmedIntervals: async () => [{ startAt: "2026-08-10T16:00:00.000Z", endAt: "2026-08-10T16:30:00.000Z" }],
+      findConfirmedLocationIntervals: async () => [{ startAt: "2026-08-10T16:00:00.000Z", endAt: "2026-08-10T16:30:00.000Z" }],
     };
     await expect(createService(appointments).validateSlot({
       tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
@@ -164,5 +168,32 @@ describe("SchedulingService", () => {
       tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
       employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
     })).resolves.toEqual({ ok: false, error: { code: "OUTSIDE_BOOKING_WINDOW" } });
+  });
+
+  it("applies location capacity in addition to professional capacity one", async () => {
+    const configured = upgradeBusinessProfile(business);
+    configured.professionals.push({ id: "dr-other", displayName: "Dr. Other", active: true });
+    configured.locations[0]!.professionals.push({
+      professionalId: "dr-other", active: true, serviceIds: ["cleaning"], openingHours: [],
+    });
+    const locationAppointments: ConfirmedAppointmentReader = {
+      findConfirmedIntervals: async () => [],
+      findConfirmedLocationIntervals: async () => [{
+        startAt: "2026-08-10T15:30:00.000Z", endAt: "2026-08-10T17:30:00.000Z",
+      }],
+    };
+    configured.locations[0]!.policies.concurrentCapacity = 1;
+    const full = await createService(locationAppointments, noCalendarConflicts, workingHours, configured).findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning", employeeId: "dr-lee",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    });
+    expect(full).toEqual({ ok: true, value: [] });
+
+    configured.locations[0]!.policies.concurrentCapacity = 2;
+    const available = await createService(locationAppointments, noCalendarConflicts, workingHours, configured).validateSlot({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      employeeId: "dr-lee", startAt: "2026-08-10T16:00:00.000Z",
+    });
+    expect(available.ok).toBe(true);
   });
 });

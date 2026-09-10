@@ -60,6 +60,7 @@ export class SchedulingServiceImpl implements SchedulingService {
         rangeStart: effectiveRange.start,
         rangeEnd: effectiveRange.end,
         slotIncrementMinutes: location.policies.slotIncrementMinutes,
+        concurrentCapacity: location.policies.concurrentCapacity,
       });
       if (!employeeSlots.ok) return employeeSlots;
       slots.push(...employeeSlots.value);
@@ -91,6 +92,15 @@ export class SchedulingServiceImpl implements SchedulingService {
     );
     if (!isWithinHours) return failure<SchedulingError>({ code: "OUTSIDE_BUSINESS_HOURS" });
     if (intersects(start, end, closureIntervals(location.closures, location.timezone))) {
+      return failure<SchedulingError>({ code: "SLOT_CONFLICT" });
+    }
+    const locationIntervals = await this.appointments.findConfirmedLocationIntervals({
+      tenantId: query.tenantId,
+      locationId: query.locationId,
+      rangeStart: start.toISOString(),
+      rangeEnd: end.toISOString(),
+    });
+    if (overlapCount(start, end, locationIntervals) >= location.policies.concurrentCapacity) {
       return failure<SchedulingError>({ code: "SLOT_CONFLICT" });
     }
 
@@ -137,6 +147,7 @@ export class SchedulingServiceImpl implements SchedulingService {
     rangeStart: Date;
     rangeEnd: Date;
     slotIncrementMinutes: number;
+    concurrentCapacity: number;
   }) {
     const employeeHours = await this.workingHours.getWorkingHours({
       tenantId: input.tenantId,
@@ -147,6 +158,12 @@ export class SchedulingServiceImpl implements SchedulingService {
 
     const conflict = await this.conflictIntervals(input.tenantId, input.locationId, input.employee.id, input.rangeStart, input.rangeEnd);
     if (!conflict.ok) return conflict;
+    const locationIntervals = await this.appointments.findConfirmedLocationIntervals({
+      tenantId: input.tenantId,
+      locationId: input.locationId,
+      rangeStart: input.rangeStart.toISOString(),
+      rangeEnd: input.rangeEnd.toISOString(),
+    });
     const result: AvailableSlot[] = [];
     const firstDay = localParts(input.rangeStart, input.timezone);
     const lastDay = localParts(input.rangeEnd, input.timezone);
@@ -167,6 +184,7 @@ export class SchedulingServiceImpl implements SchedulingService {
             const end = new Date(start.valueOf() + (input.service.durationMinutes + input.service.bufferMinutes) * 60_000);
             if (start < input.rangeStart || end > input.rangeEnd
               || intersects(start, end, closureIntervals(input.closures, input.timezone))
+              || overlapCount(start, end, locationIntervals) >= input.concurrentCapacity
               || intersects(start, end, conflict.value)) continue;
             result.push({ employeeId: input.employee.id, startAt: start.toISOString(), endAt: end.toISOString() });
           }
@@ -239,3 +257,9 @@ const closureIntervals = (closures: LocationClosure[], timezone: string) => clos
   const end = normalizeDateTimeForTimezone(closure.endLocal, timezone);
   return start && end && start < end ? [{ startAt: start.toISOString(), endAt: end.toISOString() }] : [];
 });
+
+const overlapCount = (
+  start: Date,
+  end: Date,
+  intervals: Array<{ startAt: string; endAt: string }>,
+): number => intervals.filter((interval) => new Date(interval.startAt) < end && start < new Date(interval.endAt)).length;
