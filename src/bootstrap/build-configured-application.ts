@@ -16,7 +16,7 @@ import {
   GoogleCalendarAdapter,
   GoogleOAuthService,
 } from "../modules/integrations/index.js";
-import { upgradeBusinessProfile, type BusinessProfile } from "../modules/business/index.js";
+import { upgradeBusinessProfile, type BusinessConfigurationV2 } from "../modules/business/index.js";
 import {
   DEVELOPMENT_BUSINESS,
   DEVELOPMENT_US_BUSINESS,
@@ -29,7 +29,8 @@ import {
 
 export async function buildConfiguredApplication(options: BuildApplicationOptions = {}): Promise<YiboApplication> {
   const environment = options.environment ?? process.env;
-  const businesses = options.businesses ?? [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS];
+  const businesses = (options.businesses ?? [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS])
+    .map(upgradeBusinessProfile);
   const tenantId = options.tenantId ?? DEVELOPMENT_BUSINESS.tenantId;
   const tenant = businesses.find((profile) => profile.tenantId === tenantId);
   if (!tenant) throw new Error(`Unknown bootstrap tenant: ${tenantId}`);
@@ -54,7 +55,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
       ?? DEFAULT_REALTIME_MODEL;
     await configurationService.update(
       tenantId,
-      configurationService.recommended(tenant.locale, tenant.name, model, {
+      configurationService.recommended(tenant.locations[0]!.locale, tenant.name, model, {
         ...(applicationConfig?.conversationVoice ? { voice: applicationConfig.conversationVoice } : {}),
         ...(applicationConfig?.maxOutputTokens ? { maxOutputTokens: applicationConfig.maxOutputTokens } : {}),
         ...(applicationConfig?.vadThreshold !== undefined
@@ -105,7 +106,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
 
 function buildGoogleIntegration(
   environment: NodeJS.ProcessEnv,
-  tenant: BusinessProfile,
+  tenant: BusinessConfigurationV2,
   database: ReturnType<typeof openRegionalDatabase>,
   businesses: SqliteBusinessRepository,
 ): { oauth: GoogleOAuthService; calendar: GoogleCalendarAdapter } | undefined {
@@ -125,7 +126,7 @@ function buildGoogleIntegration(
       calendarId,
       async (tenantId) => {
         const profile = await businesses.findByTenantId(tenantId);
-        return profile ? upgradeBusinessProfile(profile).locations[0]!.timezone : tenant.timezone;
+        return profile ? upgradeBusinessProfile(profile).locations[0]!.timezone : tenant.locations[0]!.timezone;
       },
       oauth,
     ),

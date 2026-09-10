@@ -1,10 +1,11 @@
 import { normalizePhoneNumber } from "../domain/validate-business-profile.js";
-import type { VersionedBusinessProfile } from "../domain/upgrade-business-profile.js";
+import { upgradeBusinessProfile, type VersionedBusinessProfile } from "../domain/upgrade-business-profile.js";
+import type { BusinessConfigurationV2 } from "../domain/multi-location-business.js";
 import type { BusinessRepository } from "../ports/business-repository.js";
 import type { TenantId } from "../../../shared/types/identifiers.js";
 
 export class InMemoryBusinessRepository implements BusinessRepository {
-  private readonly byTenant = new Map<TenantId, VersionedBusinessProfile>();
+  private readonly byTenant = new Map<TenantId, BusinessConfigurationV2>();
   private readonly tenantByCalledNumber = new Map<string, TenantId>();
 
   constructor(profiles: VersionedBusinessProfile[]) {
@@ -23,36 +24,46 @@ export class InMemoryBusinessRepository implements BusinessRepository {
   }
 
   async save(profile: VersionedBusinessProfile): Promise<void> {
+    const canonical = upgradeBusinessProfile(profile);
     if (!this.byTenant.has(profile.tenantId)) {
-      this.add(profile);
+      this.add(canonical);
       return;
     }
-    this.byTenant.set(profile.tenantId, structuredClone(profile));
-    this.rebuildCalledNumbers();
+    const candidate = new Map(this.byTenant);
+    candidate.set(canonical.tenantId, structuredClone(canonical));
+    const numberIndex = calledNumberIndex(candidate.values());
+    this.byTenant.set(canonical.tenantId, structuredClone(canonical));
+    this.replaceCalledNumberIndex(numberIndex);
   }
 
   private add(profile: VersionedBusinessProfile): void {
-    if (this.byTenant.has(profile.tenantId)) {
-      throw new Error(`Duplicate business tenant: ${profile.tenantId}`);
+    const canonical = upgradeBusinessProfile(profile);
+    if (this.byTenant.has(canonical.tenantId)) {
+      throw new Error(`Duplicate business tenant: ${canonical.tenantId}`);
     }
-    this.byTenant.set(profile.tenantId, structuredClone(profile));
-    this.rebuildCalledNumbers();
+    const candidate = new Map(this.byTenant);
+    candidate.set(canonical.tenantId, structuredClone(canonical));
+    const numberIndex = calledNumberIndex(candidate.values());
+    this.byTenant.set(canonical.tenantId, structuredClone(canonical));
+    this.replaceCalledNumberIndex(numberIndex);
   }
 
-  private rebuildCalledNumbers(): void {
+  private replaceCalledNumberIndex(index: Map<string, TenantId>): void {
     this.tenantByCalledNumber.clear();
-    for (const profile of this.byTenant.values()) for (const number of calledNumbers(profile)) {
-      const normalized = normalizePhoneNumber(number);
-      if (!normalized) continue;
-      if (this.tenantByCalledNumber.has(normalized)) {
-        throw new Error(`Called number already belongs to another active tenant: ${normalized}`);
-      }
-      this.tenantByCalledNumber.set(normalized, profile.tenantId);
-    }
+    for (const [phone, tenantId] of index) this.tenantByCalledNumber.set(phone, tenantId);
   }
 }
 
-const calledNumbers = (profile: VersionedBusinessProfile): string[] =>
-  profile.schemaVersion === 2
-    ? profile.locations.filter(({ active }) => active).flatMap(({ calledNumbers }) => calledNumbers)
-    : profile.calledNumbers;
+const calledNumberIndex = (profiles: Iterable<BusinessConfigurationV2>): Map<string, TenantId> => {
+  const index = new Map<string, TenantId>();
+  for (const profile of profiles) for (const number of profile.locations
+    .filter(({ active }) => active).flatMap(({ calledNumbers }) => calledNumbers)) {
+    const normalized = normalizePhoneNumber(number);
+    if (!normalized) continue;
+    if (index.has(normalized)) {
+      throw new Error(`Called number already belongs to another active tenant: ${normalized}`);
+    }
+    index.set(normalized, profile.tenantId);
+  }
+  return index;
+};

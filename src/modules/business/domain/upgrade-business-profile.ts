@@ -25,7 +25,11 @@ export const upgradeBusinessProfile = (
   const servicesByProfessional = new Map(input.employees.map(({ id }) => [id, [] as string[]]));
   for (const service of input.services) {
     for (const professionalId of service.eligibleEmployeeIds) {
-      servicesByProfessional.get(professionalId)?.push(service.id);
+      const assignedServices = servicesByProfessional.get(professionalId);
+      if (!assignedServices) {
+        throw new Error(`Cannot upgrade service ${service.id}: unknown professional ${professionalId}.`);
+      }
+      assignedServices.push(service.id);
     }
   }
   const upgraded: BusinessConfigurationV2 = {
@@ -51,7 +55,10 @@ export const upgradeBusinessProfile = (
     locations: [{
       id: "default",
       name: input.name,
-      active: input.active,
+      // Business activity gates routing globally. Keeping the migrated location
+      // active preserves its DID assignment when an inactive tenant is later
+      // reactivated, without making the inactive business routable.
+      active: input.calledNumbers.length > 0,
       address: {
         line1: "Pending configuration",
         city: "Pending configuration",

@@ -18,7 +18,7 @@ try {
   const calls = new SqliteCallRepository(database, "MX");
   await calls.create({
     tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-1", from: "+529990000001",
-    to: DEVELOPMENT_BUSINESS.calledNumbers[0]!, state: "RINGING",
+    to: DEVELOPMENT_BUSINESS.locations[0]!.calledNumbers[0]!, state: "RINGING",
     createdAt: "2026-08-25T10:00:00.000Z", updatedAt: "2026-08-25T10:00:00.000Z",
   });
   await calls.updateState("call-1", "COMPLETED", "2026-08-25T10:03:00.000Z");

@@ -71,7 +71,8 @@ idempotente y validado produce la única forma v2, incluyendo la sucursal
 forma canónica aunque la persistencia todavía contenga v1. El número marcado
 resuelve exactamente un `{tenantId, locationId}` activo; Calls conserva ambos y
 los propaga como contexto confiable a AgentDefinition, tools, Scheduling y
-Appointments.
+Appointments. Los fixtures MX/US y el repositorio en memoria también almacenan
+v2; aceptar v1 queda limitado a fronteras de migración compatibles.
 
 ## Configuración del agente
 

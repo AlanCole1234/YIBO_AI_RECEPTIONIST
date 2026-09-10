@@ -22,9 +22,10 @@ import {
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessDirectory,
-  type BusinessProfile,
   type BusinessRepository,
+  type VersionedBusinessProfile,
 } from "../modules/business/index.js";
 import {
   CallOrchestratorService,
@@ -118,7 +119,7 @@ export interface BuildApplicationOptions {
   environment?: NodeJS.ProcessEnv;
   config?: ApplicationConfiguration;
   tenantId?: string;
-  businesses?: BusinessProfile[];
+  businesses?: VersionedBusinessProfile[];
   businessRepository?: BusinessRepository;
   clock?: Clock;
   ids?: IdGenerator;
@@ -143,7 +144,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const config = options.config ?? loadConfiguration(environment);
   const clock = options.clock ?? systemClock;
   const ids = options.ids ?? uuidGenerator;
-  const profiles = options.businesses ?? [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS];
+  const profiles = (options.businesses ?? [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS])
+    .map(upgradeBusinessProfile);
   const tenantId = options.tenantId ?? DEVELOPMENT_BUSINESS.tenantId;
   const tenant = profiles.find((profile) => profile.tenantId === tenantId);
   if (!tenant) throw new Error(`Unknown bootstrap tenant: ${tenantId}`);
@@ -255,7 +257,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const configurationRepository = options.agentConfigurationRepository ?? new InMemoryAgentConfigurationSource(profiles.map((profile) => ({
       tenantId: profile.tenantId,
       configuration: createDefaultAgentConfiguration({
-        locale: profile.locale,
+        locale: profile.locations[0]!.locale,
         businessName: profile.name,
         model: config.openAiRealtimeModel,
         voice: config.conversationVoice,

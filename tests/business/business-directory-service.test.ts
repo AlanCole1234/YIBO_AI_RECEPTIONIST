@@ -47,17 +47,13 @@ describe("BusinessDirectoryService", () => {
     });
   });
 
-  it("prevents a service from referencing an employee in another tenant", async () => {
+  it("rejects a cross-tenant professional reference at the in-memory boundary", () => {
     const invalidProfile = {
       ...profile,
       services: [{ ...profile.services[0]!, eligibleEmployeeIds: ["not-in-this-tenant"] }],
     };
-    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([invalidProfile]));
-
-    await expect(service.getBusinessProfile(profile.tenantId)).resolves.toMatchObject({
-      ok: false,
-      error: { code: "BUSINESS_CONFIGURATION_INVALID" },
-    });
+    expect(() => new InMemoryBusinessRepository([invalidProfile]))
+      .toThrow("unknown professional not-in-this-tenant");
   });
 
   it("saves a valid IANA timezone and rejects an invalid one", async () => {

@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 2 — Dominio multi-sucursal y migración**.
-- Tarea activa: **LOC-005 — fixtures y adaptadores en memoria canónicos**.
+- Tarea activa: **LOC-006 — API administrativa con edición optimista**.
 - Último checkpoint cerrado: Checkpoint 1; `pnpm typecheck`, 159 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
 
@@ -61,8 +61,8 @@ con `pnpm test` y `pnpm build`.
 | LOC-002 | DONE | Entrada v1 explícita y upgrader puro/idempotente a sucursal default v2 |
 | LOC-003 | DONE | Migración v7 idempotente; backfill default sin pérdida en números, llamadas y citas |
 | LOC-004 | DONE | DID resuelve tenant/location y ambos se propagan sin aceptar IDs del modelo |
-| LOC-005 | IN_PROGRESS | Fixtures y adaptadores en memoria migrados |
-| LOC-006 | TODO | API administrativa versionada con edición optimista |
+| LOC-005 | DONE | Fixtures MX/US y persistencia en memoria usan exclusivamente v2 canónica |
+| LOC-006 | IN_PROGRESS | API administrativa versionada con edición optimista |
 | CAT-001 | TODO | CRUD de servicios compartidos |
 | CAT-002 | TODO | CRUD de profesionales y asignaciones |
 | PRICE-001 | TODO | Money ISO 4217 por oferta de sucursal |

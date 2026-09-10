@@ -1,11 +1,11 @@
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS } from "../../app/development-fixtures.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BusinessProfile } from "../../modules/business/index.js";
+import type { BusinessConfigurationV2 } from "../../modules/business/index.js";
 import { defaultDatabasePath, migrateDatabase, openRegionalDatabase, seedBusiness } from "./regional-database.js";
 
 export function initializeLocalDatabases(): void {
-  for (const profile of [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS] satisfies BusinessProfile[]) {
+  for (const profile of [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS] satisfies BusinessConfigurationV2[]) {
     const database = openRegionalDatabase(profile.region);
     try {
       migrateDatabase(database);
