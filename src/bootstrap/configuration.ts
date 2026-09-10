@@ -5,6 +5,7 @@ export interface ApplicationConfiguration {
   openAiRealtimeModel: string;
   conversationVoice: string;
   maxOutputTokens: number;
+  dashboardOrigin: string;
   openAiApiKey?: string;
   openAiAdminKey?: string;
   vadThreshold?: number;
@@ -33,6 +34,7 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     1,
     4096,
   ) ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  const dashboardOrigin = validOrigin(environment.YIBO_DASHBOARD_ORIGIN?.trim() || "http://localhost:5173");
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
   const openAiAdminKey = environment.OPENAI_ADMIN_KEY?.trim();
   const vadThreshold = optionalNumber(environment.YIBO_VAD_THRESHOLD, "YIBO_VAD_THRESHOLD", 0, 1);
@@ -47,12 +49,23 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     openAiRealtimeModel,
     conversationVoice,
     maxOutputTokens,
+    dashboardOrigin,
     ...(openAiApiKey ? { openAiApiKey } : {}),
     ...(openAiAdminKey ? { openAiAdminKey } : {}),
     ...(vadThreshold === undefined ? {} : { vadThreshold }),
     ...(vadPrefixPaddingMs === undefined ? {} : { vadPrefixPaddingMs }),
     ...(vadSilenceDurationMs === undefined ? {} : { vadSilenceDurationMs }),
   };
+}
+
+function validOrigin(value: string): string {
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol) || url.pathname !== "/" || url.search || url.hash) throw new Error();
+    return url.origin;
+  } catch {
+    throw new ConfigurationError("YIBO_DASHBOARD_ORIGIN must be an HTTP(S) origin without path");
+  }
 }
 
 function optionalNumber(raw: string | undefined, name: string, minimum: number, maximum: number): number | undefined {

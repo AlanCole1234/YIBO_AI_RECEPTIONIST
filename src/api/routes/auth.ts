@@ -1,11 +1,15 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
+import { createAdminGuard, isAllowedLoginOrigin } from "../admin-guard.js";
+import { adminSessionCookie, adminSessionToken } from "../admin-session-cookie.js";
 
-const COOKIE_NAME = "yibo_admin_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 export async function registerAuthRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
   server.post<{ Body: { email?: unknown; password?: unknown } }>("/api/auth/login", async (request, reply) => {
+    if (!isAllowedLoginOrigin(request, app)) {
+      return reply.code(403).send({ error: { code: "ORIGIN_NOT_ALLOWED" } });
+    }
     if (typeof request.body?.email !== "string" || typeof request.body?.password !== "string") {
       return reply.code(400).send({ error: { code: "INVALID_CREDENTIALS" } });
     }
@@ -28,12 +32,12 @@ export async function registerAuthRoutes(server: FastifyInstance, app: YiboAppli
       now,
       expiresAt: new Date(now.valueOf() + SESSION_DURATION_MS),
     });
-    reply.header("set-cookie", sessionCookie(token, request, SESSION_DURATION_MS / 1000));
+    reply.header("set-cookie", adminSessionCookie(token, request, SESSION_DURATION_MS / 1000));
     return { principal: publicPrincipal(identity) };
   });
 
   server.get("/api/auth/me", async (request, reply) => {
-    const token = sessionToken(request);
+    const token = adminSessionToken(request);
     if (!token) return reply.code(401).send({ error: { code: "AUTHENTICATION_REQUIRED" } });
     const verified = await app.adminAuth.sessions.verify(token, new Date());
     if (!verified.ok || verified.principal.tenantId !== app.tenantId) {
@@ -42,28 +46,13 @@ export async function registerAuthRoutes(server: FastifyInstance, app: YiboAppli
     return { principal: publicPrincipal(verified.principal) };
   });
 
-  server.post("/api/auth/logout", async (request, reply) => {
-    const token = sessionToken(request);
+  server.post("/api/auth/logout", { preHandler: createAdminGuard(app, "operator") }, async (request, reply) => {
+    const token = adminSessionToken(request);
     if (token) await app.adminAuth.sessions.revoke(token);
-    reply.header("set-cookie", sessionCookie("", request, 0));
+    reply.header("set-cookie", adminSessionCookie("", request, 0));
     return { loggedOut: true };
   });
 }
-
-export const sessionToken = (request: FastifyRequest): string | undefined => {
-  const cookie = request.headers.cookie;
-  if (!cookie) return undefined;
-  for (const part of cookie.split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name === COOKIE_NAME) return decodeURIComponent(value.join("="));
-  }
-  return undefined;
-};
-
-const sessionCookie = (value: string, request: FastifyRequest, maxAge: number): string => {
-  const secure = request.protocol === "https" || process.env.NODE_ENV === "production";
-  return `${COOKIE_NAME}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
-};
 
 const publicPrincipal = (identity: { subject: string; tenantId: string; roles: string[] }) => ({
   subject: identity.subject,

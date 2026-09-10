@@ -19,6 +19,7 @@ describe("admin authentication API", () => {
 
     const login = await server.inject({
       method: "POST", url: "/api/auth/login",
+      headers: { origin: app.config.dashboardOrigin },
       payload: { email: "admin@yibo.example", password: "a-secure-password" },
     });
     expect(login.statusCode).toBe(200);
@@ -32,7 +33,10 @@ describe("admin authentication API", () => {
     expect(me.statusCode).toBe(200);
     expect(me.json()).toMatchObject({ principal: { tenantId: app.tenantId } });
 
-    const logout = await server.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie } });
+    const logout = await server.inject({
+      method: "POST", url: "/api/auth/logout",
+      headers: { cookie, origin: app.config.dashboardOrigin },
+    });
     expect(logout.statusCode).toBe(200);
     const rejected = await server.inject({ method: "GET", url: "/api/auth/me", headers: { cookie } });
     expect(rejected.statusCode).toBe(401);
@@ -43,10 +47,67 @@ describe("admin authentication API", () => {
     server = await createApiServer(app);
     for (const email of ["missing@yibo.example", "admin@yibo.example"]) {
       const response = await server.inject({
-        method: "POST", url: "/api/auth/login", payload: { email, password: "wrong-password-value" },
+        method: "POST", url: "/api/auth/login",
+        headers: { origin: app.config.dashboardOrigin },
+        payload: { email, password: "wrong-password-value" },
       });
       expect(response.statusCode).toBe(401);
       expect(response.json()).toEqual({ error: { code: "INVALID_CREDENTIALS" } });
     }
+  });
+
+  it("rejects untrusted origins and tenant selectors before a protected mutation", async () => {
+    const app = buildApplication({ adminSessionSecret: "a-development-test-secret-that-is-long-enough" });
+    const identity = await app.adminAuth.credentials.create({
+      tenantId: app.tenantId,
+      email: "operator@yibo.example",
+      password: "a-secure-password",
+      roles: ["operator"],
+    });
+    server = await createApiServer(app);
+
+    const wrongOrigin = await server.inject({
+      method: "POST", url: "/api/auth/login",
+      headers: { origin: "https://attacker.example" },
+      payload: { email: identity.email, password: "a-secure-password" },
+    });
+    expect(wrongOrigin.statusCode).toBe(403);
+
+    const login = await server.inject({
+      method: "POST", url: "/api/auth/login",
+      headers: { origin: app.config.dashboardOrigin },
+      payload: { email: identity.email, password: "a-secure-password" },
+    });
+    const cookie = login.headers["set-cookie"];
+    const missingOrigin = await server.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie } });
+    expect(missingOrigin.statusCode).toBe(403);
+    expect(missingOrigin.json()).toEqual({ error: { code: "ORIGIN_NOT_ALLOWED" } });
+
+    const selectedTenant = await server.inject({
+      method: "POST", url: "/api/auth/logout",
+      headers: { cookie, origin: app.config.dashboardOrigin },
+      payload: { tenantId: "tenant-other" },
+    });
+    expect(selectedTenant.statusCode).toBe(400);
+    expect(selectedTenant.json()).toEqual({ error: { code: "UNTRUSTED_TENANT_SELECTOR" } });
+  });
+
+  it("rejects a valid session issued for another tenant", async () => {
+    const app = buildApplication({ adminSessionSecret: "a-development-test-secret-that-is-long-enough" });
+    server = await createApiServer(app);
+    const now = new Date();
+    const token = await app.adminAuth.sessions.issue({
+      subject: "other-admin", tenantId: "tenant-other", roles: ["tenant_admin"], now,
+      expiresAt: new Date(now.valueOf() + 60_000),
+    });
+    const response = await server.inject({
+      method: "POST", url: "/api/auth/logout",
+      headers: {
+        origin: app.config.dashboardOrigin,
+        cookie: `yibo_admin_session=${encodeURIComponent(token)}`,
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: { code: "TENANT_ACCESS_DENIED" } });
   });
 });

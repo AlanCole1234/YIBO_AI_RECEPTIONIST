@@ -51,6 +51,7 @@ describe("buildApplication", () => {
         openAiRealtimeModel: "gpt-realtime-2.1",
         conversationVoice: "marin",
         maxOutputTokens: 512,
+        dashboardOrigin: "http://localhost:5173",
       },
     });
     expect(app.runtime).toBeInstanceOf(OpenAIRealtimeAdapter);
@@ -65,6 +66,7 @@ describe("buildApplication", () => {
         openAiRealtimeModel: "gpt-realtime-2.1",
         conversationVoice: "marin",
         maxOutputTokens: 512,
+        dashboardOrigin: "http://localhost:5173",
       },
       runtime,
     });
