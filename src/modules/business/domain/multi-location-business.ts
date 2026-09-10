@@ -174,7 +174,9 @@ export const validateMultiLocationBusiness = (
         errors.push({ path: `${assignmentPath}.serviceIds`, message: "Services must be unique assignments of this location." });
       }
       validateHours(errors, `${assignmentPath}.openingHours`, assignment.openingHours);
-      if (assignment.calendarId !== undefined) required(errors, `${assignmentPath}.calendarId`, assignment.calendarId);
+      if (assignment.calendarId !== undefined && !isValidCalendarId(assignment.calendarId)) {
+        errors.push({ path: `${assignmentPath}.calendarId`, message: "Invalid calendar identifier." });
+      }
     }
     if (!location.services.some(({ serviceId, active }) => serviceId === location.policies.defaultServiceId && active)) {
       errors.push({ path: `${path}.policies.defaultServiceId`, message: "Must reference an active location service." });
@@ -196,13 +198,18 @@ export const validateMultiLocationBusiness = (
         errors.push({ path: `${path}.closures.${closureIndex}`, message: "Closure requires an ID, reason and ordered local date range." });
       }
     }
-    if (location.defaultCalendarId !== undefined) required(errors, `${path}.defaultCalendarId`, location.defaultCalendarId);
+    if (location.defaultCalendarId !== undefined && !isValidCalendarId(location.defaultCalendarId)) {
+      errors.push({ path: `${path}.defaultCalendarId`, message: "Invalid calendar identifier." });
+    }
   }
   if (profile.active && !profile.locations.some(({ active }) => active)) {
     errors.push({ path: "locations", message: "An active business requires an active location." });
   }
   return errors;
 };
+
+export const isValidCalendarId = (value: string): boolean =>
+  value.length <= 255 && /^[^\s\u0000-\u001F\u007F]+$/.test(value);
 
 const required = (errors: MultiLocationBusinessValidationError[], path: string, value: string): void => {
   if (!value.trim()) errors.push({ path, message: "Required." });

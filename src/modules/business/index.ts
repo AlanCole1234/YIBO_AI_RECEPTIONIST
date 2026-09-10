@@ -2,6 +2,7 @@ export { BusinessDirectoryService } from "./application/business-directory-servi
 export { BusinessCatalogService } from "./application/business-catalog-service.js";
 export type {
   BusinessCatalogError,
+  LocationCalendarSnapshot,
   LocationPolicySnapshot,
   ProfessionalCatalogSnapshot,
   ProfessionalUsageReader,
@@ -30,6 +31,7 @@ export {
   MULTI_LOCATION_BUSINESS_SCHEMA_VERSION,
   SLOT_INCREMENT_MINUTES,
   validateMultiLocationBusiness,
+  isValidCalendarId,
 } from "./domain/multi-location-business.js";
 export { validateMoney } from "./domain/money.js";
 export type { Money } from "./domain/money.js";

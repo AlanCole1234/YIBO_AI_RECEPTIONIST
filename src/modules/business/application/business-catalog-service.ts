@@ -47,6 +47,19 @@ export interface LocationPolicySnapshot {
   policy: LocationSchedulingPolicy;
 }
 
+export interface LocationCalendarSnapshot {
+  version: number;
+  locationId: string;
+  defaultCalendarId?: string;
+  professionals: Array<{
+    professionalId: string;
+    displayName: string;
+    calendarId?: string;
+    effectiveCalendarId?: string;
+    source: "professional" | "location" | "unconfigured";
+  }>;
+}
+
 export class BusinessCatalogService {
   constructor(
     private readonly businesses: BusinessDirectory,
@@ -290,6 +303,83 @@ export class BusinessCatalogService {
     return updated.ok
       ? success<LocationPolicySnapshot>({ version: updated.value.version, locationId, policy: structuredClone(policy) })
       : failure<BusinessCatalogError>(updated.error);
+  }
+
+  async getLocationCalendars(tenantId: TenantId, locationId: string) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    if (!location) return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    const names = new Map(current.value.configuration.professionals.map(({ id, displayName }) => [id, displayName]));
+    return success<LocationCalendarSnapshot>({
+      version: current.value.version,
+      locationId,
+      ...(location.defaultCalendarId ? { defaultCalendarId: location.defaultCalendarId } : {}),
+      professionals: location.professionals.map((assignment) => {
+        const effectiveCalendarId = assignment.calendarId ?? location.defaultCalendarId;
+        return {
+          professionalId: assignment.professionalId,
+          displayName: names.get(assignment.professionalId) ?? assignment.professionalId,
+          ...(assignment.calendarId ? { calendarId: assignment.calendarId } : {}),
+          ...(effectiveCalendarId ? { effectiveCalendarId } : {}),
+          source: assignment.calendarId ? "professional" : location.defaultCalendarId ? "location" : "unconfigured",
+        };
+      }),
+    });
+  }
+
+  async updateLocationDefaultCalendar(
+    tenantId: TenantId,
+    locationId: string,
+    calendarId: string | undefined,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    if (!current.value.configuration.locations.some(({ id }) => id === locationId)) {
+      return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((location) => {
+        if (location.id !== locationId) return location;
+        const { defaultCalendarId: _removed, ...withoutCalendar } = location;
+        return calendarId ? { ...withoutCalendar, defaultCalendarId: calendarId } : withoutCalendar;
+      }),
+    }, expectedVersion);
+    if (!updated.ok) return failure<BusinessCatalogError>(updated.error);
+    return this.getLocationCalendars(tenantId, locationId);
+  }
+
+  async updateProfessionalCalendar(
+    tenantId: TenantId,
+    locationId: string,
+    professionalId: string,
+    calendarId: string | undefined,
+    expectedVersion: number,
+  ) {
+    const current = await this.businesses.getBusinessConfiguration(tenantId);
+    if (!current.ok) return failure<BusinessCatalogError>(current.error);
+    const location = current.value.configuration.locations.find(({ id }) => id === locationId);
+    if (!location) return failure<BusinessCatalogError>({ code: "LOCATION_NOT_FOUND" });
+    if (!location.professionals.some(({ professionalId: id }) => id === professionalId)) {
+      return failure<BusinessCatalogError>({ code: "PROFESSIONAL_NOT_FOUND" });
+    }
+    const updated = await this.businesses.updateBusinessConfiguration(tenantId, {
+      ...current.value.configuration,
+      locations: current.value.configuration.locations.map((candidate) => candidate.id === locationId
+        ? {
+            ...candidate,
+            professionals: candidate.professionals.map((assignment) => {
+              if (assignment.professionalId !== professionalId) return assignment;
+              const { calendarId: _removed, ...withoutCalendar } = assignment;
+              return calendarId ? { ...withoutCalendar, calendarId } : withoutCalendar;
+            }),
+          }
+        : candidate),
+    }, expectedVersion);
+    if (!updated.ok) return failure<BusinessCatalogError>(updated.error);
+    return this.getLocationCalendars(tenantId, locationId);
   }
 }
 
