@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 0 — Verdad documental y consistencia**.
-- Tarea activa: **DOC-002 — alinear la documentación con el código actual**.
+- Tarea activa: **FIX-001 — unificar descriptores de herramientas**.
 
 ## Capacidades existentes
 
@@ -45,8 +45,8 @@ con `pnpm test` y `pnpm build`.
 | ID | Estado | Resultado |
 |---|---|---|
 | DOC-001 | DONE | Estado maestro, índice ADR e inventario de decisiones |
-| DOC-002 | IN_PROGRESS | Arquitectura, capacidades y guía alineadas con el código actual |
-| FIX-001 | TODO | Descriptores completos de tools y dashboard tolerante a extensiones |
+| DOC-002 | DONE | Arquitectura, capacidades y guía alineadas con el código actual |
+| FIX-001 | IN_PROGRESS | Descriptores completos de tools y dashboard tolerante a extensiones |
 | FIX-002 | TODO | Prueba de contrato backend/API/dashboard para tools |
 | FIX-003 | TODO | Fábrica única y versionada de defaults del agente |
 | AUTH-001 | TODO | Contratos de principal, sesión y roles administrativos |

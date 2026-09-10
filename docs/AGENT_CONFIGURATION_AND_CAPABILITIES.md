@@ -1,98 +1,61 @@
-# Mapa de configuración, modelo y capacidades
+# Configuración y capacidades actuales del agente
 
-## Flujo de control
+> Estado presente verificado el 10 de septiembre de 2026. Las capacidades
+> planeadas se encuentran en `PROJECT_STATUS.md`.
+
+## Construcción de una sesión
 
 ```mermaid
 flowchart LR
-  UI["YiboApiConfiguration<br/>Web Component"] --> API["DevAudioHarness API"]
-  API --> CS["AgentConfigurationService"]
-  CS --> CR["AgentConfigurationRepository"]
-  CR --> DB[("SQLite regional<br/>agent_configurations")]
-
-  CALL["CallOrchestrator"] --> ADS["AgentDefinitionService"]
-  ADS --> CR
-  ADS --> DEF["AgentDefinition<br/>instrucciones + tools permitidas<br/>conversation behavior + contexto confiable"]
+  UI["Dashboard"] --> API["/api/configuration"]
+  API --> CFG["AgentConfigurationService"]
+  CFG --> DB[("agent_configurations")]
+  CALL["CallOrchestrator"] --> DEF["AgentDefinitionService"]
+  DB --> DEF
   DEF --> CONV["ConversationService"]
-  CONV --> RT["ConversationRuntimePort"]
-  RT --> OA["OpenAIRealtimeAdapter"]
-  OA --> MODEL["Modelo Realtime"]
-
-  MODEL -->|"tool.call: datos no confiables"| CONV
-  CONV --> TE["ToolExecutor"]
-  TE -->|"consulta"| SCH["Scheduling"]
-  TE -->|"mutación validada"| APP["Appointments"]
-  TE -->|"acción externa"| HUMAN["HumanTransferPort"]
-  TE -->|"resultado seguro + toolCallId"| CONV
-  CONV --> RT
-
-  RT -->|"usage"| CONV
-  CONV --> UR["ConversationUsageRecorder"]
-  UR --> USAGE[("SQLite regional<br/>conversation_usage")]
-  API --> URD["ConversationUsageReader"]
-  URD --> USAGE
-  CALL --> CALLS[("SQLite regional<br/>calls + state transitions")]
-  HISTORY["YiboCallHistory<br/>Web Component"] --> API
-  API --> CALLS
-  CALLS -. "join por callId" .-> USAGE
+  CONV --> RT["OpenAIRealtimeAdapter"]
+  RT --> MODEL["Realtime model"]
+  MODEL -->|"function call"| EXEC["ToolExecutor"]
+  EXEC --> DOMAIN["Customers / Scheduling / Appointments / Transfer"]
 ```
 
-## Permisos efectivos
+El dashboard configura modelo, voz, locale, esfuerzo de razonamiento, límite de
+salida, VAD, instrucciones y herramientas. La configuración se valida, persiste
+por tenant y aplica a la próxima conversación.
 
-| Configuración | El modelo puede solicitar | Autoridad final |
+El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
+interrupción automáticas, timeout de silencio, tool choice automático y tools
+secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el
+esquema versionado permita controlar únicamente combinaciones soportadas.
+
+## Herramientas implementadas
+
+| Tool | Acción | Protección principal |
 |---|---|---|
-| `check_availability` | Consultar servicios y horarios disponibles | `SchedulingService` |
-| `create_appointment` | Proponer la creación de una cita | `ToolExecutor` valida argumentos; `Appointments` revalida disponibilidad e idempotencia |
-| `cancel_appointment` | Proponer cancelar una cita | `ToolExecutor` verifica que pertenece al cliente confiable; `Appointments` ejecuta |
-| `transfer_to_human` | Solicitar transferencia | `HumanTransferPort` y su configuración externa |
-| Tool deshabilitada | Nada: no se registra en la sesión | `AgentDefinitionService` filtra antes de abrir la conversación |
+| `check_availability` | Consulta slots reales o una hora exacta | Servicio/empleado y zona se resuelven en backend |
+| `update_customer` | Guarda nombre completo y teléfono | Cliente procede de la llamada |
+| `create_appointment` | Crea y confirma una cita | Requiere slot consultado, ownership e idempotencia |
+| `cancel_appointment` | Cancela cita y evento | Verifica cliente propietario |
+| `reschedule_appointment` | Valida nuevo slot y sustituye evento | Verifica cliente y compensa fallo externo |
+| `transfer_to_human` | Solicita destino configurado | El modelo no proporciona el destino |
+| `enable_developer_test_mode` | Activa fixtures aislados | Sólo sesión local autorizada |
+| `delete_test_appointments` | Limpia citas de esa prueba | Sólo citas de la sesión de prueba |
 
-`tenantId`, `callId` y `customerId` nunca son elegidos por el modelo. Proceden del contexto confiable construido por `calls`.
+`tenantId`, `callId`, `customerId` e idempotencia son contexto confiable y se
+rechazan si aparecen en argumentos del modelo. Deshabilitar una herramienta
+impide que sea registrada en la sesión.
 
-## UML de contratos
+## Calendario y citas
 
-```mermaid
-classDiagram
-  class AgentConfigurationService {
-    +get(tenantId)
-    +update(tenantId, configuration)
-    +recommended(locale, businessName, model)
-  }
-  class AgentConfigurationRepository {
-    <<port>>
-    +getConfiguration(tenantId)
-    +saveConfiguration(tenantId, configuration)
-  }
-  class AgentDefinitionService {
-    +prepare(trustedContext)
-  }
-  class ConversationService {
-    +start(command)
-  }
-  class ConversationRuntimePort {
-    <<port>>
-    +openSession(input)
-  }
-  class ToolExecutor {
-    <<application boundary>>
-    +execute(context, call)
-  }
-  class ConversationUsageRecorder {
-    <<port>>
-    +record(increment)
-  }
+Availability cruza horarios, duración/buffer, empleados elegibles, ocupación
+local y Google FreeBusy. Create vuelve a validar antes de escribir. Google OAuth
+se guarda cifrado por tenant y el modelo nunca recibe tokens, otros eventos ni
+el motivo por el que una franja está ocupada.
 
-  AgentConfigurationService --> AgentConfigurationRepository
-  AgentDefinitionService --> AgentConfigurationRepository
-  AgentDefinitionService --> ToolExecutor
-  ConversationService --> ConversationRuntimePort
-  ConversationService --> ToolExecutor
-  ConversationService --> ConversationUsageRecorder
-```
+## Datos y privacidad
 
-## Privacidad y observabilidad
-
-- Se persisten únicamente tokens, milisegundos de audio, número de tools, `tenantId`, `callId` y timestamp.
-- No se persisten API keys, prompts, transcripciones ni audio.
-- La API key permanece exclusivamente en `OPENAI_API_KEY`.
-- El panel muestra si existe una key, nunca su contenido.
-- El historial guarda caller/called number, estados, timestamps e IDs operativos; agrega consumo por `callId` sin guardar contenido de la conversación.
+- No se persisten audio ni transcripciones.
+- El consumo guarda tokens, milisegundos de audio y conteos de tools.
+- La API key sólo procede del entorno y el panel muestra únicamente su estado.
+- Los logs operativos deben conservar tenant/call para correlación sin datos de
+  pacientes; el endurecimiento pendiente está trazado en `OBS-001`.
