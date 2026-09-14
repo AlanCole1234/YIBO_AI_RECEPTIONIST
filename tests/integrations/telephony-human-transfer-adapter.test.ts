@@ -64,7 +64,7 @@ describe("TelephonyHumanTransferAdapter", () => {
     await calls.create(activeCall(business));
     const app = buildApplication({ businesses: [business], callRepository: calls });
     const result = await app.tools.execute({
-      tenantId: business.tenantId, locationId: "default", callId: "call-1", customerId: "customer-1",
+      tenantId: business.tenantId, locationId: "default", callId: "call-1", customerId: "customer-1", turnSequence: 1,
     }, { toolCallId: "tool-1", name: "transfer_to_human", arguments: {} });
 
     expect(result).toEqual({ toolCallId: "tool-1", ok: true, data: { transferred: true } });

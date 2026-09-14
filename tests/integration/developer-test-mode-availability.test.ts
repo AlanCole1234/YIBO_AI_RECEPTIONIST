@@ -7,6 +7,7 @@ const developer = {
   locationId: "default",
   callId: "developer-call",
   developerTestModeAuthorized: true as const,
+  turnSequence: 1,
 };
 
 const tuesdayClock = { now: () => new Date("2026-08-10T18:00:00.000Z") }; // Monday afternoon in Chicago

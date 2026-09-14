@@ -8,6 +8,21 @@ import {
 } from "../../src/modules/agents/index.js";
 
 describe("AgentConfigurationService", () => {
+  it("accepts confirmation policies only for enabled mutation tools", async () => {
+    const repository = new InMemoryAgentConfigurationSource([]);
+    const service = new AgentConfigurationService(repository);
+    const configured = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.toolPolicies.confirmations.requiredFor = ["create_appointment", "cancel_appointment"];
+    await expect(service.update("tenant-a", configured)).resolves.toMatchObject({
+      toolPolicies: { confirmations: { requiredFor: ["create_appointment", "cancel_appointment"] } },
+    });
+
+    configured.toolPolicies.confirmations.requiredFor = ["check_availability"];
+    await expect(service.update("tenant-a", configured)).rejects.toThrow(
+      "toolPolicies.confirmations.requiredFor must be unique enabled mutation tools",
+    );
+  });
+
   it("provides a safe recommendation and persists validated capability changes", async () => {
     const repository = new InMemoryAgentConfigurationSource([]);
     const service = new AgentConfigurationService(repository);

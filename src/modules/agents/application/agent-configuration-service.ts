@@ -116,6 +116,12 @@ function validateToolPolicies(value: AgentConfiguration): void {
       channel.enabledTools.length > 0 && !channel.enabledTools.includes("transfer_to_human"))) {
     throw new Error("automatic transfer requires transfer_to_human in every active channel");
   }
+  const confirmations = toolPolicies.confirmations.requiredFor;
+  if (new Set(confirmations).size !== confirmations.length
+    || confirmations.some((tool) => !enabled.has(tool)
+      || AGENT_TOOL_DEFINITIONS.find(({ name }) => name === tool)?.presentation?.kind !== "mutate")) {
+    throw new Error("toolPolicies.confirmations.requiredFor must be unique enabled mutation tools");
+  }
 }
 
 function validateConversationControls(value: AgentConfiguration): void {

@@ -11,6 +11,7 @@ const context = {
   locationId: "default",
   callId: "call-1",
   customerId: "customer-1",
+  turnSequence: 1,
 };
 const availabilityCall: AgentToolCall = {
   toolCallId: "tool-1",

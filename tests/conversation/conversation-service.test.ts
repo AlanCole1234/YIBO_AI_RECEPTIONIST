@@ -115,6 +115,7 @@ describe("ConversationService", () => {
     const value = fixture();
     const session = await start(value);
 
+    value.runtime.latestSession.emit({ type: "user.speech_started" });
     value.runtime.latestSession.emit({
       type: "tool.call",
       toolCallId: "tool-42",
@@ -122,7 +123,7 @@ describe("ConversationService", () => {
       arguments: { serviceId: "service-1" },
     });
 
-    await eventually(() => expect(value.execute).toHaveBeenCalledWith(trustedContext, {
+    await eventually(() => expect(value.execute).toHaveBeenCalledWith({ ...trustedContext, turnSequence: 1 }, {
       toolCallId: "tool-42",
       name: "check_availability",
       arguments: { serviceId: "service-1" },
@@ -133,6 +134,36 @@ describe("ConversationService", () => {
       data: { slots: ["2026-08-26T15:00:00.000Z"] },
     }]));
 
+    await session.close();
+  });
+
+  it("forwards a confirmation token to the runtime without placing it in trusted context", async () => {
+    const value = fixture();
+    value.execute.mockResolvedValueOnce({
+      toolCallId: "mutation-1",
+      ok: false,
+      error: {
+        code: "CONFIRMATION_REQUIRED",
+        messageForAgent: "Ask the caller to confirm.",
+        retryable: false,
+        confirmationToken: "opaque-token",
+      },
+    });
+    const session = await start(value);
+    value.runtime.latestSession.emit({
+      type: "tool.call", toolCallId: "mutation-1", name: "create_appointment", arguments: {},
+    });
+
+    await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toEqual([{
+      toolCallId: "mutation-1",
+      ok: false,
+      error: {
+        code: "CONFIRMATION_REQUIRED",
+        message: "Ask the caller to confirm.",
+        retryable: false,
+        confirmationToken: "opaque-token",
+      },
+    }]));
     await session.close();
   });
 

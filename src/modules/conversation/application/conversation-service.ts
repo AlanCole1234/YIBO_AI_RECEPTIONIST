@@ -48,6 +48,7 @@ class ActiveConversationSession implements ConversationSession {
   private completionSettled = false;
   private closePromise?: Promise<void>;
   private interruptedTurnId?: string;
+  private turnSequence = 0;
 
   constructor(private readonly dependencies: ConversationSessionControllerDependencies) {
     this.completed = new Promise((resolve) => { this.resolveCompleted = resolve; });
@@ -60,8 +61,9 @@ class ActiveConversationSession implements ConversationSession {
     return this.dependencies.runtimeSession.interrupt(position);
   }
 
-  sendText(text: string): Promise<void> {
-    return this.dependencies.runtimeSession.sendText(text);
+  async sendText(text: string): Promise<void> {
+    await this.dependencies.runtimeSession.sendText(text);
+    this.turnSequence += 1;
   }
 
   close(): Promise<void> {
@@ -115,6 +117,7 @@ class ActiveConversationSession implements ConversationSession {
         void this.executeTool(event);
         return;
       case "user.speech_started":
+        this.turnSequence += 1;
         await this.handleBargeIn();
         return;
       case "error":
@@ -167,7 +170,7 @@ class ActiveConversationSession implements ConversationSession {
     this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: "started", toolCallId: event.toolCallId, name: event.name });
     try {
       const result = await this.dependencies.command.agent.toolExecutor.execute(
-        this.dependencies.command.agent.trustedContext,
+        { ...this.dependencies.command.agent.trustedContext, turnSequence: this.turnSequence },
         {
           toolCallId: event.toolCallId,
           name: event.name,
@@ -222,6 +225,7 @@ const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok
         code: result.error.code,
         message: result.error.messageForAgent,
         retryable: result.error.retryable,
+        ...(result.error.confirmationToken ? { confirmationToken: result.error.confirmationToken } : {}),
       },
     };
 

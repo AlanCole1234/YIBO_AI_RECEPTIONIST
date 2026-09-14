@@ -50,6 +50,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
         service: { type: "string", minLength: 1, description: "Patient-facing service choice: Cleaning or Consultation. Omit only when the clinic default was already selected." },
         employeeId: { type: "string", minLength: 1 },
         startAt: { type: "string", format: "date-time", description: "Copy the accepted calendar slot's startAt exactly. Never reconstruct it as UTC or use the server timezone." },
+        confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
       },
     },
   },
@@ -59,6 +60,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     presentation: { title: "Update customer", help: "Saves the verified caller's name and callback number without returning personal data to the model.", route: "Customers", icon: "✎", kind: "mutate" },
     inputSchema: { type: "object", additionalProperties: false, required: ["name", "phone"], properties: {
       name: { type: "string", minLength: 3 }, phone: { type: "string", minLength: 7 },
+      confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
     } },
   },
   {
@@ -69,7 +71,10 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
       type: "object",
       additionalProperties: false,
       required: ["appointmentReference"],
-      properties: { appointmentReference: { type: "string", minLength: 1, description: "Opaque reference returned by list_customer_appointments." } },
+      properties: {
+        appointmentReference: { type: "string", minLength: 1, description: "Opaque reference returned by list_customer_appointments." },
+        confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
+      },
     },
   },
   {
@@ -83,6 +88,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
       properties: {
         appointmentReference: { type: "string", minLength: 1, description: "Opaque reference returned by list_customer_appointments." },
         startAt: { type: "string", format: "date-time", description: "Copy the accepted availability slot startAt unchanged." },
+        confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
       },
     },
   },

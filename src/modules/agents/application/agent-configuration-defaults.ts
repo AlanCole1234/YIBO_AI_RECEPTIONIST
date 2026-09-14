@@ -43,6 +43,7 @@ export function createDefaultToolPolicies(enabledTools: AgentToolName[]): AgentT
     limits: { totalPerCall: 20, perTool: {} },
     externalRetryAttempts: 1,
     automaticTransfer: { onLimitReached: false, onRetryableFailure: false },
+    confirmations: { requiredFor: [] },
   };
 }
 

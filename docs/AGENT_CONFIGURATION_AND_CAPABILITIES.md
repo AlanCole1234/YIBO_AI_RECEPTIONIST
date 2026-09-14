@@ -154,6 +154,16 @@ tools de prueba mutables, por lo que no admite paralelismo mientras estén
 disponibles. La definición vuelve a evaluar las tools efectivas y el adaptador
 sólo entonces envía `parallel_tool_calls: true`.
 
+`toolPolicies.confirmations.requiredFor` permite seleccionar tools mutables que
+deben atravesar `ConfirmationGateToolExecutor`; una consulta o tool deshabilitada
+se rechaza en configuración. El default es vacío para conservar el comportamiento
+existente. En el primer intento el gate no ejecuta: devuelve un token opaco ligado
+a llamada, acción, argumentos canónicos y secuencia confiable del turno. Voice y
+texto reciben esa secuencia desde `ConversationService`, nunca desde argumentos
+del modelo. La aceptación tras un turno nuevo, expiración a dos minutos y consumo
+único corresponden a `TOOL-005`; hasta entonces una política activada falla
+cerrada después de solicitar confirmación.
+
 ## Herramientas implementadas
 
 | Tool | Acción | Protección principal |

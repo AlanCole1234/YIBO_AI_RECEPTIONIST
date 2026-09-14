@@ -11,6 +11,7 @@ import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
 import { PolicyEnforcingToolExecutor } from "./policy-enforcing-tool-executor.js";
+import { ConfirmationGateToolExecutor } from "./confirmation-gate-tool-executor.js";
 
 export class AgentDefinitionService implements AgentDefinitionFactory {
   constructor(
@@ -60,10 +61,13 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       parallelToolCalls: channelPolicy.parallelToolCalls,
       channel,
       tools,
-      toolExecutor: new PolicyEnforcingToolExecutor(
-        this.toolExecutor,
-        tools.map(({ name }) => name),
-        configuration.toolPolicies,
+      toolExecutor: new ConfirmationGateToolExecutor(
+        new PolicyEnforcingToolExecutor(
+          this.toolExecutor,
+          tools.map(({ name }) => name),
+          configuration.toolPolicies,
+        ),
+        configuration.toolPolicies.confirmations.requiredFor,
       ),
       trustedContext: { ...command },
     };

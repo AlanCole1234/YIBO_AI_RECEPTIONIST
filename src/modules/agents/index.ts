@@ -7,6 +7,7 @@ export { RealtimeModelCapabilityRegistry } from "./application/model-capability-
 export type { RealtimeModelCapability, RealtimeRuntimeOptions, ReasoningEffort } from "./application/model-capability-registry.js";
 export { ToolExecutorImpl } from "./application/tool-executor.js";
 export { PolicyEnforcingToolExecutor } from "./application/policy-enforcing-tool-executor.js";
+export { ConfirmationGateToolExecutor } from "./application/confirmation-gate-tool-executor.js";
 export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export {
   AGENT_CONFIGURATION_DEFAULTS_VERSION,
@@ -41,6 +42,7 @@ export type {
   AgentToolPoliciesConfiguration,
   PrepareAgentDefinitionCommand,
   ToolExecutionContext,
+  TrustedCallContext,
   ToolExecutor,
 } from "./application/contracts.js";
 export type {

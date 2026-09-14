@@ -43,10 +43,10 @@ export type AgentToolResult =
   | {
       toolCallId: ToolCallId;
       ok: false;
-      error: { code: string; messageForAgent: string; retryable: boolean };
+      error: { code: string; messageForAgent: string; retryable: boolean; confirmationToken?: string };
     };
 
-export interface ToolExecutionContext {
+export interface TrustedCallContext {
   tenantId: TenantId;
   locationId: LocationId;
   callId: CallId;
@@ -55,11 +55,16 @@ export interface ToolExecutionContext {
   developerTestModeAuthorized?: true;
 }
 
+export interface ToolExecutionContext extends TrustedCallContext {
+  /** Monotonic sequence assigned by Conversation from caller turns, never by the model. */
+  turnSequence: number;
+}
+
 export interface ToolExecutor {
   execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult>;
 }
 
-export interface PrepareAgentDefinitionCommand extends ToolExecutionContext {}
+export interface PrepareAgentDefinitionCommand extends TrustedCallContext {}
 
 export interface AgentDefinition {
   instructions: string;
@@ -73,7 +78,7 @@ export interface AgentDefinition {
   channel: AgentChannel;
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
-  trustedContext: ToolExecutionContext;
+  trustedContext: TrustedCallContext;
 }
 
 export interface AgentConversationConfiguration {
@@ -124,6 +129,9 @@ export interface AgentToolPoliciesConfiguration {
   automaticTransfer: {
     onLimitReached: boolean;
     onRetryableFailure: boolean;
+  };
+  confirmations: {
+    requiredFor: AgentToolName[];
   };
 }
 

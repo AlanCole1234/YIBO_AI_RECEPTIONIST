@@ -28,6 +28,7 @@ export type ToolResultEnvelope =
         code: string;
         message: string;
         retryable: boolean;
+        confirmationToken?: string;
       };
     };
 

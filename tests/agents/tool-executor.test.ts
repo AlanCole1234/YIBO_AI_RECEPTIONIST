@@ -75,7 +75,7 @@ function fixture(businessProfiles: VersionedBusinessProfile[] = [business]) {
   };
 }
 
-const context = { tenantId: "tenant-a", locationId: "default", callId: "call-1", customerId: "customer-1" };
+const context = { tenantId: "tenant-a", locationId: "default", callId: "call-1", customerId: "customer-1", turnSequence: 1 };
 const business: BusinessProfile = {
   region: "US", tenantId: "tenant-a", businessId: "business-a", name: "YIBO Dental", timezone: "America/Denver", locale: "en-US", active: true,
   calledNumbers: ["+19155550123"], employees: [{ id: "employee-1", displayName: "Dr. Alex", active: true }],
@@ -124,7 +124,7 @@ describe("ToolExecutorImpl", () => {
   it("requires a verified customer before listing appointments", async () => {
     const { executor, listUpcomingAppointments } = fixture();
     const result = await executor.execute(
-      { tenantId: "tenant-a", locationId: "default", callId: "anonymous-call" },
+      { tenantId: "tenant-a", locationId: "default", callId: "anonymous-call", turnSequence: 1 },
       { toolCallId: "list-anonymous", name: "list_customer_appointments", arguments: {} },
     );
     expect(result).toMatchObject({ ok: false, error: { code: "CUSTOMER_REQUIRED" } });
@@ -376,7 +376,7 @@ describe("ToolExecutorImpl", () => {
 
   it("does not create an appointment without a verified customer", async () => {
     const { createAppointment, executor } = fixture();
-    const result = await executor.execute({ tenantId: "tenant-a", locationId: "default", callId: "call-1" }, {
+    const result = await executor.execute({ tenantId: "tenant-a", locationId: "default", callId: "call-1", turnSequence: 1 }, {
       toolCallId: "tool-1",
       name: "create_appointment",
       arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },

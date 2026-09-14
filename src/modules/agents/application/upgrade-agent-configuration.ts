@@ -116,6 +116,7 @@ function normalizeToolPolicies(value: unknown, enabled: AgentToolName[]): AgentT
   const channels = record(input.channels);
   const limits = record(input.limits);
   const automaticTransfer = record(input.automaticTransfer);
+  const confirmations = record(input.confirmations);
   return {
     channels: {
       phone: normalizeChannelPolicy(channels.phone, defaults.channels.phone),
@@ -137,6 +138,11 @@ function normalizeToolPolicies(value: unknown, enabled: AgentToolName[]): AgentT
         defaults.automaticTransfer.onRetryableFailure,
         "toolPolicies.automaticTransfer.onRetryableFailure",
       ),
+    },
+    confirmations: {
+      requiredFor: confirmations.requiredFor === undefined
+        ? [...defaults.confirmations.requiredFor]
+        : enabledTools(confirmations.requiredFor),
     },
   };
 }

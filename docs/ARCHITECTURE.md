@@ -83,6 +83,9 @@ cambios del dashboard aplican a la conversación siguiente.
 
 `AgentDefinitionService` filtra herramientas antes de abrir la sesión.
 `OpenAIRealtimeAdapter` traduce la definición neutral al payload del proveedor.
+Por llamada, `ConfirmationGateToolExecutor` precede al ejecutor de límites: liga
+las mutaciones configuradas a un token, argumentos y secuencia de turno antes de
+permitir que una solicitud alcance el dominio.
 El adaptador todavía agrega reglas conversacionales y defaults propios; el
 roadmap los moverá a una fábrica/compilador versionado.
 

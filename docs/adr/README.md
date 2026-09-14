@@ -12,7 +12,7 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 | [ADR-004](ADR-004-versioned-agent-configuration.md) | Aceptado | Configuración versionada del agente |
 | [ADR-005](ADR-005-calendar-routing.md) | Aceptado | Enrutamiento de calendarios por asignación |
 | [ADR-006](ADR-006-appointment-price-snapshots.md) | Aceptado | Money y snapshot de precios en citas |
-| ADR-007 | Pendiente | Confirmación de mutaciones solicitadas por IA |
+| [ADR-007](ADR-007-ai-action-confirmation.md) | Aceptado | Confirmación de mutaciones solicitadas por IA |
 
 ## Cuándo crear un ADR
 
