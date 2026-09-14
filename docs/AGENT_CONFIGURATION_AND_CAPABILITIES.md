@@ -147,6 +147,14 @@ transferencia automática puede activarse ante límite o fallo reintentable; usa
 del modelo. Los defaults de la migración v3→v4 dejan un límite total de 20, una
 sola tentativa y transferencia automática desactivada.
 
+Los máximos globales y por tool cuentan ejecuciones autorizadas de la llamada;
+los intentos detenidos por confirmación quedan fuera del contador. Un exceso
+devuelve `TOOL_CALL_LIMIT_REACHED` no reintentable y, si la política lo ordena,
+intenta transferencia por el destino confiable. Cualquier excepción inesperada
+del dominio o de la propia transferencia se convierte en
+`TOOL_EXECUTION_FAILED` genérico: el mensaje técnico original nunca llega al
+modelo.
+
 El paralelismo también es una opción por canal, desactivada por default. La API
 rechaza activarlo si cualquier herramienta seleccionada es `mutate` o
 `external`, usando la clasificación del registro backend. Voice Lab incluye

@@ -81,4 +81,47 @@ describe("PolicyEnforcingToolExecutor", () => {
     });
     expect(execute).toHaveBeenCalledTimes(3);
   });
+
+  it("enforces an individual tool limit without exhausting other tools", async () => {
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({
+      toolCallId: call.toolCallId, ok: true, data: {},
+    }));
+    const policy = createDefaultToolPolicies(["check_availability", "get_service_information"]);
+    policy.limits.totalPerCall = 5;
+    policy.limits.perTool.check_availability = 1;
+    const executor = new PolicyEnforcingToolExecutor(
+      { execute }, ["check_availability", "get_service_information"], policy,
+    );
+
+    await expect(executor.execute(context, availabilityCall)).resolves.toMatchObject({ ok: true });
+    await expect(executor.execute(context, { ...availabilityCall, toolCallId: "availability-over-limit" }))
+      .resolves.toMatchObject({ ok: false, error: { code: "TOOL_CALL_LIMIT_REACHED", retryable: false } });
+    await expect(executor.execute(context, {
+      toolCallId: "service-info", name: "get_service_information", arguments: {},
+    })).resolves.toMatchObject({ ok: true });
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("converts unexpected tool and transfer exceptions into safe errors", async () => {
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => {
+      throw new Error(call.name === "transfer_to_human" ? "pbx-secret-host" : "database-password-leaked");
+    });
+    const policy = createDefaultToolPolicies(["check_availability", "transfer_to_human"]);
+    policy.limits.totalPerCall = 1;
+    policy.automaticTransfer.onLimitReached = true;
+    const executor = new PolicyEnforcingToolExecutor(
+      { execute }, ["check_availability", "transfer_to_human"], policy,
+    );
+
+    const failure = await executor.execute(context, availabilityCall);
+    expect(failure).toMatchObject({
+      ok: false,
+      error: { code: "TOOL_EXECUTION_FAILED", retryable: false },
+    });
+    expect(JSON.stringify(failure)).not.toContain("database-password-leaked");
+
+    const limited = await executor.execute(context, { ...availabilityCall, toolCallId: "limit-with-failed-transfer" });
+    expect(limited).toMatchObject({ ok: false, error: { code: "TOOL_CALL_LIMIT_REACHED" } });
+    expect(JSON.stringify(limited)).not.toContain("pbx-secret-host");
+  });
 });

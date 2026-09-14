@@ -42,10 +42,10 @@ export class PolicyEnforcingToolExecutor implements ToolExecutor {
 
     this.totalCalls += 1;
     this.callsByTool.set(call.name, perToolCalls + 1);
-    let result = await this.delegate.execute(context, call);
+    let result = await this.safeExecute(context, call);
     for (let attempt = 1; !result.ok && result.error.retryable
       && attempt < this.policy.externalRetryAttempts; attempt += 1) {
-      result = await this.delegate.execute(context, call);
+      result = await this.safeExecute(context, call);
     }
     if (!result.ok && result.error.retryable && this.policy.automaticTransfer.onRetryableFailure) {
       const transferred = await this.tryAutomaticTransfer(context, call);
@@ -65,12 +65,24 @@ export class PolicyEnforcingToolExecutor implements ToolExecutor {
 
   private async tryAutomaticTransfer(context: ToolExecutionContext, source: AgentToolCall): Promise<boolean> {
     if (source.name === "transfer_to_human" || !this.enabledTools.has("transfer_to_human")) return false;
-    const result = await this.delegate.execute(context, {
+    const result = await this.safeExecute(context, {
       toolCallId: `${source.toolCallId}:automatic-transfer`,
       name: "transfer_to_human",
       arguments: {},
     });
     return result.ok;
+  }
+
+  private async safeExecute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult> {
+    try {
+      return await this.delegate.execute(context, call);
+    } catch {
+      return failure(
+        call,
+        "TOOL_EXECUTION_FAILED",
+        "The requested operation could not be completed. Do not claim that it succeeded or expose technical details.",
+      );
+    }
   }
 }
 
