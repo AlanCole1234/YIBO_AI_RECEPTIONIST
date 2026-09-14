@@ -125,9 +125,12 @@ cambiar modalidad, codec, tasa o canales.
 
 `tool_choice` y la ejecución paralela ya se configuran por canal. Esta última se
 acepta sólo cuando todas las herramientas efectivas son consultas. El panel
-actual edita el perfil `server_vad`; los modos avanzados ya están disponibles en
-el contrato y API, y su UI condicionada por capacidad corresponde a
-`UI-002/UI-003`.
+consume `modelCapabilities` y genera desde ese registro las opciones de modelo,
+voz, razonamiento, límite de salida, reducción de ruido y detección de turno.
+Oculta el turno manual en el editor telefónico, muestra sólo opciones compatibles
+y valida rangos por campo antes de guardar. `server_vad` muestra únicamente
+threshold/padding/silencio; `semantic_vad` sustituye esos controles por eagerness.
+Los controles de política y comportamiento restantes corresponden a `UI-003`.
 
 La frontera con OpenAI no arma objetos `session.update` de forma ad hoc. El
 constructor puro `buildRealtimeSessionUpdate` recibe únicamente la definición

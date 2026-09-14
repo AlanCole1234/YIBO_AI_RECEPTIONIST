@@ -227,8 +227,12 @@ negativas y una moneda ISO 4217. El precio sigue siendo informativo, sin pagos.
 
 Tras autenticarse, el dashboard permite probar voz, configurar agente/tools,
 conectar Google, consultar disponibilidad, crear/buscar citas y cambiar zona
-horaria. Las vistas se filtran por rol. No permite todavía administrar servicios,
-empleados, horarios, destinos ni calendarios por profesional.
+horaria. El editor del agente usa el esquema canónico v4 y construye sus controles
+de modelo/audio desde el registro de capacidades publicado por la API; no mantiene
+listas locales de modelos o voces. Los campos incompatibles se ocultan o muestran
+un error específico y bloquean el guardado. Las vistas se filtran por rol. No
+permite todavía administrar servicios, empleados, horarios, destinos ni
+calendarios por profesional.
 
 Las brechas, orden y evidencia actual se mantienen exclusivamente en
 `PROJECT_STATUS.md` para evitar que este documento vuelva a convertirse en un

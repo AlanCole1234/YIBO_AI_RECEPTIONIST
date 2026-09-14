@@ -6,8 +6,10 @@ import {
   type AgentConfiguration,
   type AgentConfigurationPayload,
   type AgentToolName,
-  type ReasoningEffort,
+  type RealtimeModelCapability,
+  type TurnDetectionMode,
 } from "../services/api";
+import { phoneTurnDetectionModes, validateAgentCapabilityFields } from "../services/agent-capability-controls";
 
 defineProps<{ locale: "es-MX" | "en-US" }>();
 
@@ -20,22 +22,17 @@ const steps: Array<{ id: Step; number: string; label: string }> = [
   { id: "abilities", number: "03", label: "Actions" },
   { id: "instructions", number: "04", label: "Instructions" },
 ];
-const models = [
-  { value: "gpt-realtime-2.1", label: "GPT Realtime 2.1", note: "Best conversational quality" },
-  { value: "gpt-realtime-2.1-mini", label: "GPT Realtime 2.1 Mini", note: "Lower cost" },
-];
-const voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
-const reasoningEfforts: ReasoningEffort[] = ["minimal", "low", "medium", "high"];
 const locales = [
   ["es-MX", "Español · México"], ["es-US", "Español · Estados Unidos"],
   ["es-ES", "Español · España"], ["en-US", "English · United States"],
   ["en-GB", "English · United Kingdom"], ["pt-BR", "Português · Brasil"],
 ];
-const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conversation"]["turnDetection"]> = {
-  auto: { silenceDurationMs: 800 },
-  fast: { threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
-  balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
-  patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
+type ServerVad = Extract<AgentConfiguration["audio"]["turnDetection"], { type: "server_vad" }>;
+const vadPresets: Record<Exclude<VadPreset, "custom">, ServerVad> = {
+  auto: { type: "server_vad", createResponse: true, interruptResponse: true, silenceDurationMs: 800 },
+  fast: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
+  balanced: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
+  patient: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
 };
 const loading = ref(true);
 const saving = ref(false);
@@ -45,13 +42,22 @@ const apiKeyConfigured = ref(false);
 const configuration = ref<AgentConfiguration>();
 const recommended = ref<AgentConfiguration>();
 const availableTools = ref<AgentConfigurationPayload["availableTools"]>([]);
+const modelCapabilities = ref<RealtimeModelCapability[]>([]);
 const step = ref<Step>("identity");
 const speechPlaying = ref(false);
 
 const currentStep = computed(() => steps.findIndex((candidate) => candidate.id === step.value));
+const selectedCapability = computed(() => modelCapabilities.value.find(({ id }) => id === configuration.value?.conversation.model));
+const models = computed(() => modelCapabilities.value);
+const voices = computed(() => selectedCapability.value?.voices ?? []);
+const reasoningEfforts = computed(() => selectedCapability.value?.controls.reasoningEfforts ?? []);
+const turnDetectionModes = computed(() => phoneTurnDetectionModes(selectedCapability.value));
+const outputLimits = computed(() => selectedCapability.value?.limits.responseOutputTokens ?? { minimum: 1, maximum: 4096, uiMinimum: 64, step: 64 });
+const fieldErrors = computed<Record<string, string>>(() => validateAgentCapabilityFields(configuration.value, selectedCapability.value));
+const hasFieldErrors = computed(() => Object.keys(fieldErrors.value).length > 0);
 const vadPreset = computed<VadPreset>(() => {
-  const value = configuration.value?.conversation.turnDetection;
-  if (!value) return "auto";
+  const value = configuration.value?.audio.turnDetection;
+  if (!value || value.type !== "server_vad") return "custom";
   for (const [key, preset] of Object.entries(vadPresets)) {
     if (sameVad(value, preset)) return key as Exclude<VadPreset, "custom">;
   }
@@ -69,6 +75,7 @@ async function load(): Promise<void> {
     recommended.value = clone(payload.recommended);
     configuration.value = clone(payload.current ?? payload.recommended);
     availableTools.value = payload.availableTools;
+    modelCapabilities.value = payload.modelCapabilities;
     apiKeyConfigured.value = payload.secrets.apiKeyConfigured;
   } catch (caught) {
     error.value = errorMessage(caught);
@@ -85,7 +92,32 @@ function move(offset: number): void {
 
 function applyVad(preset: Exclude<VadPreset, "custom">): void {
   if (!configuration.value) return;
-  configuration.value.conversation.turnDetection = { ...vadPresets[preset] };
+  configuration.value.audio.turnDetection = { ...vadPresets[preset] };
+}
+
+function selectModel(): void {
+  if (!configuration.value || !selectedCapability.value) return;
+  if (!selectedCapability.value.voices.includes(configuration.value.audio.voice)) {
+    configuration.value.audio.voice = selectedCapability.value.voices[0] ?? "";
+  }
+  if (!selectedCapability.value.controls.reasoningEfforts.includes(configuration.value.conversation.reasoningEffort)) {
+    configuration.value.conversation.reasoningEffort = selectedCapability.value.controls.reasoningEfforts[0] ?? "minimal";
+  }
+  if (configuration.value.audio.turnDetection.type === "manual"
+    || !turnDetectionModes.value.includes(configuration.value.audio.turnDetection.type)) {
+    setTurnDetection("server_vad");
+  }
+}
+
+function setTurnDetection(mode: TurnDetectionMode): void {
+  if (!configuration.value) return;
+  configuration.value.audio.turnDetection = mode === "semantic_vad"
+    ? { type: "semantic_vad", eagerness: "auto", createResponse: true, interruptResponse: true }
+    : mode === "manual" ? { type: "manual" } : { ...vadPresets.auto };
+}
+
+function changeTurnDetection(event: Event): void {
+  setTurnDetection((event.target as HTMLSelectElement).value as TurnDetectionMode);
 }
 
 function toggleTool(name: AgentToolName): void {
@@ -94,6 +126,19 @@ function toggleTool(name: AgentToolName): void {
   configuration.value.enabledTools = active
     ? configuration.value.enabledTools.filter((candidate) => candidate !== name)
     : [...configuration.value.enabledTools, name];
+  for (const channel of Object.values(configuration.value.toolPolicies.channels)) {
+    channel.enabledTools = active
+      ? channel.enabledTools.filter((candidate) => candidate !== name)
+      : [...channel.enabledTools, name];
+    if (!active && availableTools.value.find((tool) => tool.name === name)?.kind !== "consult") {
+      channel.parallelToolCalls = false;
+    }
+  }
+  if (active) {
+    delete configuration.value.toolPolicies.limits.perTool[name];
+    configuration.value.toolPolicies.confirmations.requiredFor = configuration.value.toolPolicies.confirmations.requiredFor
+      .filter((candidate) => candidate !== name);
+  }
 }
 
 function restoreRecommended(): void {
@@ -102,7 +147,7 @@ function restoreRecommended(): void {
 }
 
 async function save(): Promise<void> {
-  if (!configuration.value) return;
+  if (!configuration.value || hasFieldErrors.value) return;
   saving.value = true;
   saved.value = false;
   error.value = "";
@@ -124,11 +169,11 @@ function playVoicePreview(): void {
     speechPlaying.value = false;
     return;
   }
-  const sample = configuration.value.locale.startsWith("en")
+  const sample = configuration.value.identity.locale.startsWith("en")
     ? "Hello, I'm YIBO. How can I help you today?"
     : "Hola, soy YIBO. ¿En qué puedo ayudarte hoy?";
   const utterance = new SpeechSynthesisUtterance(sample);
-  utterance.lang = configuration.value.locale;
+  utterance.lang = configuration.value.identity.locale;
   const language = utterance.lang.slice(0, 2).toLowerCase();
   utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith(language)) ?? null;
   utterance.onend = () => { speechPlaying.value = false; };
@@ -138,8 +183,8 @@ function playVoicePreview(): void {
 }
 
 function sameVad(
-  left: AgentConfiguration["conversation"]["turnDetection"],
-  right: AgentConfiguration["conversation"]["turnDetection"],
+  left: ServerVad,
+  right: ServerVad,
 ): boolean {
   return left.threshold === right.threshold
     && left.prefixPaddingMs === right.prefixPaddingMs
@@ -182,24 +227,29 @@ function errorMessage(caught: unknown): string {
           <section v-if="step === 'identity'" class="step-panel">
             <div class="step-heading"><span>01</span><div><h3>Conversation personality</h3><p>Choose the model, voice, and language callers will hear.</p></div></div>
             <div class="field-grid">
-              <label>Conversation model<select v-model="configuration.conversation.model"><option v-for="model in models" :key="model.value" :value="model.value">{{ model.label }} — {{ model.note }}</option></select><small>Sets the approximate quality, speed, and cost of each turn.</small></label>
-              <label>YIBO voice<select v-model="configuration.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>This is the sound callers will hear. Marin and Cedar are good starting points.</small></label>
-              <label>Language and region<select v-model="configuration.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Adjusts pronunciation, vocabulary, dates, and times.</small></label>
-              <label>Reasoning<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>More reasoning adds latency and cost; minimal is recommended.</small></label>
+              <label>Conversation model<select v-model="configuration.conversation.model" @change="selectModel"><option v-for="model in models" :key="model.id" :value="model.id">{{ model.label }} — {{ model.badge }}</option></select><small>{{ selectedCapability?.description }}</small><em v-if="fieldErrors.model" class="field-error">{{ fieldErrors.model }}</em></label>
+              <label>YIBO voice<select v-model="configuration.audio.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>Only voices supported by this model are shown.</small><em v-if="fieldErrors.voice" class="field-error">{{ fieldErrors.voice }}</em></label>
+              <label>Language and region<select v-model="configuration.identity.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Adjusts pronunciation, vocabulary, dates, and times.</small></label>
+              <label>Reasoning<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>Options come from the selected model.</small><em v-if="fieldErrors.reasoning" class="field-error">{{ fieldErrors.reasoning }}</em></label>
             </div>
-            <label class="token-control"><span>Maximum response length <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" min="64" max="4096" step="64"><small>This is a ceiling, not a target. A normal response can use much less.</small></label>
+            <label class="token-control"><span>Maximum response length <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" :min="outputLimits.uiMinimum" :max="outputLimits.maximum" :step="outputLimits.step"><small>This is a ceiling, not a target. Range and step come from the model registry.</small><em v-if="fieldErrors.maxOutputTokens" class="field-error">{{ fieldErrors.maxOutputTokens }}</em></label>
           </section>
 
           <section v-else-if="step === 'conversation'" class="step-panel">
             <div class="step-heading"><span>02</span><div><h3>Conversation pacing</h3><p>Control when YIBO understands that you have finished speaking.</p></div></div>
-            <div class="preset-grid">
+            <div class="field-grid compact-fields">
+              <label>Turn detection<select :value="configuration.audio.turnDetection.type" @change="changeTurnDetection"><option v-for="mode in turnDetectionModes" :key="mode" :value="mode">{{ mode === 'server_vad' ? 'Server VAD' : 'Semantic VAD' }}</option></select><small>Modes unsupported by the model or phone channel are hidden.</small><em v-if="fieldErrors.turnDetection" class="field-error">{{ fieldErrors.turnDetection }}</em></label>
+              <label>Noise reduction<select v-model="configuration.audio.noiseReduction"><option v-for="mode in selectedCapability?.controls.noiseReductionModes ?? []" :key="mode" :value="mode">{{ mode.replace('_', ' ') }}</option></select><small>Uses only modes declared by the selected model.</small></label>
+            </div>
+            <div v-if="configuration.audio.turnDetection.type === 'server_vad'" class="preset-grid">
               <button v-for="preset in (['auto','fast','balanced','patient'] as const)" :key="preset" type="button" :class="{ selected: vadPreset === preset }" @click="applyVad(preset)"><i>{{ preset === 'auto' ? '✦' : preset === 'fast' ? '⚡' : preset === 'balanced' ? '◉' : '◌' }}</i><strong>{{ {auto:'Automatic',fast:'Fast',balanced:'Balanced',patient:'Patient'}[preset] }}</strong><small>{{ preset === 'auto' ? 'Uses provider-managed values.' : preset === 'fast' ? 'Responds quickly in quiet environments.' : preset === 'balanced' ? 'A good starting point for a phone receptionist.' : 'Allows longer pauses before responding.' }}</small></button>
             </div>
-            <details class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
-              <label>Sensitivity <output>{{ configuration.conversation.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.conversation.turnDetection.threshold" type="range" min="0" max="1" step="0.01"></label>
-              <label>Audio before speech <output>{{ configuration.conversation.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.conversation.turnDetection.prefixPaddingMs" type="range" min="0" max="1000" step="20"></label>
-              <label>End-of-turn silence <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
+            <details v-if="configuration.audio.turnDetection.type === 'server_vad'" class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
+              <label>Sensitivity <output>{{ configuration.audio.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.audio.turnDetection.threshold" type="range" :min="selectedCapability?.controls.serverVad.threshold.minimum" :max="selectedCapability?.controls.serverVad.threshold.maximum" step="0.01"><em v-if="fieldErrors.threshold" class="field-error">{{ fieldErrors.threshold }}</em></label>
+              <label>Audio before speech <output>{{ configuration.audio.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.audio.turnDetection.prefixPaddingMs" type="range" :min="selectedCapability?.controls.serverVad.prefixPaddingMs.minimum" :max="selectedCapability?.controls.serverVad.prefixPaddingMs.maximum" step="20"><em v-if="fieldErrors.prefixPaddingMs" class="field-error">{{ fieldErrors.prefixPaddingMs }}</em></label>
+              <label>End-of-turn silence <output>{{ configuration.audio.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.audio.turnDetection.silenceDurationMs" type="range" :min="selectedCapability?.controls.serverVad.silenceDurationMs.minimum" :max="selectedCapability?.controls.serverVad.silenceDurationMs.maximum" step="50"><em v-if="fieldErrors.silenceDurationMs" class="field-error">{{ fieldErrors.silenceDurationMs }}</em></label>
             </div></details>
+            <label v-else-if="configuration.audio.turnDetection.type === 'semantic_vad'" class="token-control">Semantic eagerness<select v-model="configuration.audio.turnDetection.eagerness"><option v-for="value in selectedCapability?.controls.semanticVadEagerness ?? []" :key="value" :value="value">{{ value }}</option></select><small>Controls how readily the model decides that the caller finished speaking.</small></label>
           </section>
 
           <section v-else-if="step === 'abilities'" class="step-panel">
@@ -211,7 +261,7 @@ function errorMessage(caught: unknown): string {
 
           <section v-else class="step-panel">
             <div class="step-heading"><span>04</span><div><h3>Core instructions</h3><p>Describe YIBO's role, tone, and limits with clear rules.</p></div></div>
-            <label class="prompt-field">Active instructions<textarea v-model="configuration.instructions" rows="12"></textarea><small>Do not include secrets or personal data. {{ configuration.instructions.length }} characters.</small></label>
+            <label class="prompt-field">Active instructions<textarea v-model="configuration.identity.instructions" rows="12"></textarea><small>Do not include secrets or personal data. {{ configuration.identity.instructions.length }} characters.</small></label>
           </section>
 
           <div class="step-actions"><button type="button" :disabled="currentStep === 0" @click="move(-1)">← Previous</button><span>Step {{ currentStep + 1 }} of 4</span><button type="button" :disabled="currentStep === 3" @click="move(1)">Next →</button></div>
@@ -219,8 +269,8 @@ function errorMessage(caught: unknown): string {
 
         <aside class="agent-preview">
           <small>PREVIEW</small><div class="voice-orb"><i></i><i></i><i></i><i></i><i></i></div>
-          <h3>{{ configuration.conversation.model.replace('gpt-', 'GPT ') }}</h3><p>Voice <strong>{{ configuration.voice }}</strong> · {{ configuration.locale }}</p>
-          <blockquote>“{{ configuration.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
+          <h3>{{ selectedCapability?.label ?? configuration.conversation.model }}</h3><p>Voice <strong>{{ configuration.audio.voice }}</strong> · {{ configuration.identity.locale }}</p>
+          <blockquote>“{{ configuration.identity.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
           <button type="button" class="preview-button" @click="playVoicePreview">{{ speechPlaying ? '■ Stop preview' : '▶ Listen to a free preview' }}</button>
           <small class="preview-note">Uses your browser's local voice. It does not use the API and does not exactly represent the OpenAI voice.</small>
           <dl><div><dt>Response</dt><dd>{{ configuration.conversation.maxOutputTokens }} max tokens</dd></div><div><dt>Capabilities</dt><dd>{{ activeToolCount }} active</dd></div><div><dt>Protection</dt><dd>Trusted context</dd></div></dl>
@@ -228,12 +278,13 @@ function errorMessage(caught: unknown): string {
       </div>
 
       <p v-if="error" class="config-error" role="alert">{{ error }}</p>
-      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
+      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : hasFieldErrors ? 'Review highlighted fields' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving || hasFieldErrors">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
     </form>
   </section>
 </template>
 
 <style scoped>
+.field-error{color:#c43855;font-size:11px;font-style:normal;font-weight:700}.compact-fields{margin-bottom:24px}
 .agent-config{--ac-bg:#07151c;--ac-panel:#0c2029;--ac-line:#24444e;--ac-mint:#5ee8c4;--ac-amber:#f6c85f;--ac-ink:#eaf7f4;color:var(--ac-ink);background:linear-gradient(145deg,#091a21,#061117);border:1px solid var(--ac-line);clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px);overflow:hidden;box-shadow:0 30px 80px #0007}.config-intro{display:flex;justify-content:space-between;gap:30px;padding:42px 46px 32px;background:radial-gradient(circle at 80% 0,#133c3c 0,transparent 35%)}.config-intro h2{margin:0 0 10px;color:#fff;font-size:clamp(28px,4vw,48px);text-transform:none;text-shadow:none}.config-intro p:not(.config-kicker){max-width:680px;color:#91afb3}.config-kicker{color:var(--ac-mint);font:700 11px/1 monospace;letter-spacing:.2em}.connection-chip{height:max-content;display:flex;align-items:center;gap:8px;padding:10px 13px;background:#321d22;border:1px solid #6a3d45;color:#ff9b9b;font:700 11px/1 monospace;text-transform:uppercase}.connection-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.connection-chip.ready{background:#12352e;border-color:#296958;color:var(--ac-mint)}.config-state{min-height:300px;display:grid;place-content:center;gap:15px;color:#91afb3}.config-state i{width:38px;height:38px;border:3px solid var(--ac-line);border-top-color:var(--ac-mint);border-radius:50%;animation:spin 1s linear infinite}.error-state{color:#ff9a9a}.config-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0 46px;border-bottom:1px solid var(--ac-line)}.config-steps button{display:flex;gap:10px;align-items:center;padding:17px 12px;border:0;border-bottom:3px solid transparent;background:transparent;color:#6f8e93;text-align:left}.config-steps button small{color:#52747a;font-family:monospace}.config-steps button.active{color:#fff;border-color:var(--ac-mint);background:#0d242c}.config-steps button.complete small{color:var(--ac-mint)}.config-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px}.config-stage{padding:40px 42px 24px;min-width:0}.step-panel{animation:enter .24s ease-out}.step-heading{display:flex;gap:16px;align-items:flex-start;margin-bottom:28px}.step-heading>span{width:45px;height:45px;display:grid;place-items:center;flex:none;background:var(--ac-mint);color:#06201a;font-weight:900;border-radius:14px 4px 14px 5px}.step-heading h3{margin:0 0 5px;color:#fff;font:700 25px/1.1 inherit}.step-heading p{margin:0;color:#84a1a6}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.field-grid label,.token-control,.advanced-grid label,.prompt-field{display:grid;gap:8px;color:#d9e8e6;font-weight:700}.field-grid small,.token-control small,.prompt-field small{color:#729196;font-weight:400;line-height:1.4}.field-grid select,.prompt-field textarea{width:100%;border:1px solid #31545e;background:#08171d;color:#eaf7f4;padding:13px;border-radius:9px}.field-grid select:focus,.prompt-field textarea:focus{outline:2px solid #5ee8c455;border-color:var(--ac-mint)}.token-control{margin-top:24px;padding:18px;background:#0b1d24;border-left:4px solid var(--ac-amber)}.token-control>span{display:flex;justify-content:space-between}.token-control output,.advanced output{color:var(--ac-mint)}input[type=range]{accent-color:var(--ac-mint)}.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.preset-grid button{display:grid;grid-template-columns:38px 1fr;text-align:left;gap:10px;padding:15px;border:1px solid var(--ac-line);border-radius:12px;background:#0a1b22;color:#dcecea}.preset-grid button i{grid-row:1/3;width:34px;height:34px;display:grid;place-items:center;background:#16323a;color:var(--ac-mint);font-style:normal;border-radius:10px}.preset-grid button small{color:#779499;line-height:1.4}.preset-grid button.selected{border-color:var(--ac-mint);background:#102d2c;box-shadow:inset 4px 0 0 var(--ac-mint)}.advanced{margin-top:22px;border:1px solid var(--ac-line);background:#09191f;padding:15px}.advanced summary{display:flex;justify-content:space-between;color:#cde0dd;cursor:pointer;font-weight:700}.advanced summary span{color:var(--ac-amber);font-size:11px}.advanced>p{color:#78969a}.advanced-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.advanced-grid label{padding:12px;background:#0d2229}.advanced-grid output{font-size:12px}.permission-flow{display:flex;align-items:center;justify-content:center;margin:0 0 24px}.permission-flow span{display:grid;padding:11px 20px;border:1px solid var(--ac-line);background:#0a1b22;text-align:center}.permission-flow small{color:#759297}.permission-flow b{color:var(--ac-mint);padding:0 8px}.permission-flow .gate{border-color:var(--ac-mint);background:#13342f;color:var(--ac-mint)}.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tool-grid button{display:grid;grid-template-columns:38px 1fr 36px;gap:12px;padding:16px;text-align:left;border:1px solid var(--ac-line);background:#091a21;color:#dbe9e7;border-radius:13px}.tool-grid button>i{width:36px;height:36px;display:grid;place-items:center;background:#173039;color:#91adb1;border-radius:10px;font:normal 22px/1 inherit}.tool-grid button span{display:grid;gap:3px}.tool-grid button span>small{color:#708e93;text-transform:uppercase;font-size:9px;letter-spacing:.08em}.tool-grid button p{margin:5px 0;color:#7e9b9f;font-size:12px;line-height:1.45}.tool-grid button em{color:#557b7e;font-size:10px;font-style:normal}.tool-grid button>b{width:34px;height:20px;padding:3px;border-radius:20px;background:#293e43}.tool-grid button>b:after{content:"";display:block;width:14px;height:14px;border-radius:50%;background:#73878a;transition:.2s}.tool-grid button.enabled{border-color:#397b6d;background:#102722}.tool-grid button.enabled>i{background:#17473d;color:var(--ac-mint)}.tool-grid button.enabled>b{background:#269c82}.tool-grid button.enabled>b:after{transform:translateX(14px);background:#fff}.security-note{padding:14px;border:1px solid #315063;background:#0e1e2a;color:#8ca6ae;font-size:12px}.prompt-field textarea{min-height:280px;resize:vertical;line-height:1.65}.step-actions{display:flex;align-items:center;justify-content:space-between;margin-top:28px;padding-top:18px;border-top:1px solid var(--ac-line)}.step-actions button{border:0;background:transparent;color:var(--ac-mint);padding:8px}.step-actions button:disabled{opacity:.25}.step-actions span{color:#66868b;font-size:11px}.agent-preview{padding:38px 24px;border-left:1px solid var(--ac-line);background:linear-gradient(180deg,#0d2229,#08171d);text-align:center}.agent-preview>small:first-child{color:#68898e;letter-spacing:.17em}.voice-orb{width:112px;height:112px;margin:28px auto 20px;display:flex;align-items:center;justify-content:center;gap:4px;border-radius:38px;background:radial-gradient(circle,#236858,#102a2b 65%);box-shadow:0 0 0 7px #173139,0 0 45px #37d4b32e}.voice-orb i{width:4px;height:36px;background:var(--ac-mint);border-radius:5px;animation:wave 1.2s ease-in-out infinite}.voice-orb i:nth-child(2),.voice-orb i:nth-child(4){height:22px;animation-delay:.18s}.voice-orb i:first-child,.voice-orb i:last-child{height:12px;animation-delay:.32s}.agent-preview h3{margin:0 0 5px;color:#fff;text-transform:capitalize}.agent-preview>p{color:#759399}.agent-preview blockquote{margin:22px 0 12px;padding:15px;background:#142b33;color:#c8dbd9;text-align:left;border-radius:14px;line-height:1.5}.preview-button{width:100%;border:1px solid #397165;background:#13362f;color:var(--ac-mint);padding:10px;border-radius:10px;font-weight:700}.preview-note{display:block;margin:8px 0 20px;color:#627f83;line-height:1.4}.agent-preview dl{display:grid;gap:0;text-align:left}.agent-preview dl div{display:flex;justify-content:space-between;padding:10px 3px;border-bottom:1px solid #203940}.agent-preview dt{color:#78979b}.agent-preview dd{margin:0;color:#b6cecb}.config-error{margin:0 42px 15px;padding:12px 14px;border:1px solid #7a3b45;background:#301b21;color:#ffaaaa}.config-actions{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;padding:16px 42px;border-top:1px solid var(--ac-line);background:#08171df2;backdrop-filter:blur(14px)}.config-actions>div{display:grid;margin-right:auto}.config-actions small{color:#69888d}.config-actions button{padding:11px 15px;border-radius:9px;font-weight:700}.restore{border:1px solid #31515a;background:transparent;color:#a9c4c2}.save{border:0;background:var(--ac-mint);color:#062019}.save:disabled{opacity:.55}@keyframes spin{to{transform:rotate(360deg)}}@keyframes enter{from{opacity:0;transform:translateY(7px)}}@keyframes wave{50%{transform:scaleY(.45)}}@media(max-width:1050px){.config-layout{grid-template-columns:1fr}.agent-preview{border-left:0;border-top:1px solid var(--ac-line)}.advanced-grid{grid-template-columns:1fr}.agent-preview dl{max-width:500px;margin:auto}}@media(max-width:700px){.config-intro{padding:28px 22px;flex-direction:column}.connection-chip{width:max-content}.config-steps{padding:0;overflow:auto}.config-steps button{min-width:130px}.config-stage{padding:28px 20px 20px}.field-grid,.preset-grid,.tool-grid{grid-template-columns:1fr}.permission-flow{font-size:11px}.permission-flow span{padding:9px}.config-actions{padding:14px 20px;flex-wrap:wrap}.config-actions>div{width:100%}.config-actions button{flex:1}}
 </style>
 

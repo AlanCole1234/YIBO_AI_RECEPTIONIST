@@ -44,28 +44,76 @@ export interface AdminPrincipal {
 
 export type AgentToolName = "get_service_information" | "list_customer_appointments" | "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human";
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+export type TurnDetectionMode = "server_vad" | "semantic_vad" | "manual";
+
+export type AgentTurnDetection =
+  | { type: "server_vad"; threshold?: number; prefixPaddingMs?: number; silenceDurationMs?: number; idleTimeoutMs?: number | null; createResponse: boolean; interruptResponse: boolean }
+  | { type: "semantic_vad"; eagerness: "auto" | "low" | "medium" | "high"; createResponse: boolean; interruptResponse: boolean }
+  | { type: "manual" };
 
 export interface AgentConfiguration {
-  schemaVersion: 1;
-  instructions: string;
-  locale: string;
-  voice?: string;
+  schemaVersion: 4;
+  identity: { instructions: string; locale: string };
   enabledTools: AgentToolName[];
   conversation: {
     model: string;
     maxOutputTokens: number;
     reasoningEffort: ReasoningEffort;
-    turnDetection: {
-      threshold?: number;
-      prefixPaddingMs?: number;
-      silenceDurationMs?: number;
+    tracing: "disabled" | "auto";
+    truncation: { mode: "auto" | "disabled" } | { mode: "retention_ratio"; retentionRatio: number; postInstructionsTokens?: number };
+  };
+  audio: { voice: string; noiseReduction: "disabled" | "near_field" | "far_field"; turnDetection: AgentTurnDetection };
+  behavior: {
+    greeting: { mode: "wait_for_caller" } | { mode: "automatic"; message: string };
+    responseStyle: { brevity: "brief" | "balanced" | "detailed"; tone: "warm" | "professional" | "direct"; pace: "slow" | "balanced" | "fast" };
+    silence: { message: string; maxPrompts: number };
+    slotOffering: { maximumOptions: number; strategy: "earliest_first" | "spread_across_day" | "match_requested_time" };
+    dataCollectionOrder: Array<"full_name" | "phone_number" | "service">;
+  };
+  toolPolicies: {
+    channels: Record<"phone" | "voice_lab", { enabledTools: AgentToolName[]; toolChoice: "auto" | "required" | "none"; parallelToolCalls: boolean }>;
+    limits: { totalPerCall: number; perTool: Partial<Record<AgentToolName, number>> };
+    externalRetryAttempts: number;
+    automaticTransfer: { onLimitReached: boolean; onRetryableFailure: boolean };
+    confirmations: { requiredFor: AgentToolName[] };
+  };
+}
+
+export interface RealtimeModelCapability {
+  id: string;
+  label: string;
+  badge: string;
+  description: string;
+  voices: string[];
+  limits: {
+    contextWindowTokens: number;
+    modelMaxOutputTokens: number;
+    responseOutputTokens: { minimum: number; maximum: number; uiMinimum: number; step: number };
+  };
+  controls: {
+    reasoningEfforts: ReasoningEffort[];
+    turnDetectionModes: TurnDetectionMode[];
+    semanticVadEagerness: Array<"auto" | "low" | "medium" | "high">;
+    noiseReductionModes: Array<"disabled" | "near_field" | "far_field">;
+    serverVad: {
+      threshold: { minimum: number; maximum: number };
+      prefixPaddingMs: { minimum: number; maximum: number };
+      silenceDurationMs: { minimum: number; maximum: number };
     };
+    idleTimeoutMs: { minimum: number; maximum: number };
+    automaticResponse: boolean;
+    responseInterruption: boolean;
+    parallelToolCalls: boolean;
+    toolChoice: boolean;
+    tracing: boolean;
+    truncation: boolean;
   };
 }
 
 export interface AgentConfigurationPayload {
   current: AgentConfiguration | null;
   recommended: AgentConfiguration;
+  modelCapabilities: RealtimeModelCapability[];
   availableTools: Array<{
     name: AgentToolName;
     description: string;
