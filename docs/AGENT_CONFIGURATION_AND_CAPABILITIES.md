@@ -44,16 +44,17 @@ mientras que el contrato Realtime acepta un entero de 1 a 4096 (o `inf`) para
 mínimo práctico del slider, sin relajar la validación de API.
 
 El registro también declara soporte del proveedor para razonamiento,
-`tool_choice`, llamadas paralelas, tracing y truncación. En `AGENT-003` sólo son
-editables los campos presentes en el esquema v1; `AGENT-004` incorporará los
-controles restantes con discriminantes y validación por modelo, nunca como JSON
-libre.
+`tool_choice`, llamadas paralelas, tracing y truncación. Los controles de
+`AGENT-004` usan uniones discriminadas y validación por modelo, nunca JSON libre.
+Los campos que sólo corresponden a un modo de detección de turno no pueden
+aparecer en otro.
 
 Fuentes normativas consultadas:
 
 - [GPT-Realtime-2.1](https://developers.openai.com/api/docs/models/gpt-realtime-2.1)
 - [GPT-Realtime-2.1 Mini](https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini)
 - [Accept call — Realtime API](https://developers.openai.com/api/reference/cli/resources/realtime/subresources/calls/methods/accept)
+- [Voice activity detection (VAD)](https://developers.openai.com/api/docs/guides/realtime-vad)
 
 El registro backend de herramientas también es la fuente de los títulos,
 descripciones, iconos, clasificación y ruta segura mostrados por el dashboard.
@@ -63,10 +64,31 @@ Los valores recomendados se construyen en una única fábrica versionada del
 módulo Agents. Bootstrap y el panel consumen esa fábrica; el adaptador Realtime
 usa siempre la definición ya resuelta y no sustituye modelo, voz o tokens.
 
-El documento canónico incluye `schemaVersion: 1`. Las configuraciones históricas
-sin versión se actualizan en los repositorios de memoria y SQLite, preservando
-sus valores y completando sólo campos ausentes. SQLite guarda la forma canónica
-al primer acceso y una versión futura desconocida se rechaza.
+El documento canónico incluye `schemaVersion: 2` y separa `identity`,
+`conversation`, `audio` y `enabledTools`. Las configuraciones históricas sin
+versión o con versión 1 se actualizan en memoria y SQLite, preservando sus
+valores y completando sólo campos ausentes. SQLite guarda la forma canónica al
+primer acceso y una versión futura desconocida se rechaza.
+
+## Controles Realtime editables
+
+| Sección | Controles | Default conservador |
+|---|---|---|
+| `identity` | instrucciones y locale | locale del tenant |
+| `conversation` | modelo, razonamiento y límite de salida | registro/modelo recomendado |
+| `conversation.tracing` | deshabilitado o `auto` | deshabilitado por privacidad |
+| `conversation.truncation` | `auto`, deshabilitada o retention ratio | `auto` |
+| `audio` | voz y reducción de ruido deshabilitada/near/far field | `near_field` |
+| `audio.turnDetection` | `server_vad`, `semantic_vad` o manual | `server_vad` |
+| `server_vad` | threshold, padding, silencio e inactividad | VAD histórico, 6 s inactivo |
+| `semantic_vad` | eagerness | `auto` |
+| ambos VAD | respuesta e interrupción automáticas | activadas |
+
+El modo manual se representa y se envía como `turn_detection: null`; sólo debe
+activarse en un canal que tenga un gesto explícito para cerrar el turno. La
+telefonía continua no proporciona ese gesto, por lo que mantener `server_vad` o
+`semantic_vad` es el ajuste operativo seguro hasta que `AGENT-006` introduzca
+políticas por canal.
 
 El texto que edita un administrador es guía, no el prompt completo.
 `AgentPromptCompiler` lo delimita y compone después el contexto confiable de la
@@ -74,10 +96,11 @@ sucursal y reglas que no son editables: el modelo no elige tenant, sucursal,
 cliente ni destino; no inventa estado externo y sólo confirma mutaciones después
 de un resultado exitoso de la herramienta.
 
-El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
-interrupción automáticas, timeout de silencio, tool choice automático y tools
-secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el
-esquema versionado permita controlar únicamente combinaciones soportadas.
+PCM mono a 24 kHz sigue siendo una invariante del transporte, no una preferencia
+administrativa. `tool_choice` y la ejecución paralela permanecen pendientes de
+las políticas seguras de `AGENT-006` y `AGENT-007`. El panel actual edita el
+perfil `server_vad`; los modos avanzados ya están disponibles en el contrato y
+API, y su UI condicionada por capacidad corresponde a `UI-002/UI-003`.
 
 ## Herramientas implementadas
 

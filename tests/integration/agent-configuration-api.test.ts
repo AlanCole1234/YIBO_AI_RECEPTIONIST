@@ -48,8 +48,8 @@ describe("agent configuration API", () => {
       current: Record<string, unknown>;
     }>();
     expect(body).toMatchObject({
-      current: { schemaVersion: 1, locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
-      recommended: { schemaVersion: 1, locale: "es-MX" },
+      current: { schemaVersion: 2, identity: { locale: "es-MX" }, conversation: { model: "gpt-realtime-2.1" } },
+      recommended: { schemaVersion: 2, identity: { locale: "es-MX" } },
       secrets: { apiKeyConfigured: false },
     });
     expect(body.modelCapabilities).toEqual(expect.arrayContaining([
@@ -69,20 +69,23 @@ describe("agent configuration API", () => {
       method: "PUT",
       url: "/api/configuration",
       headers: session.mutationHeaders,
-      payload: { ...current, voice: "cedar" },
+      payload: { ...current, audio: { ...(current.audio as object), voice: "cedar" } },
     });
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toMatchObject({
-      configuration: { voice: "cedar" },
+      configuration: { audio: { voice: "cedar" } },
       appliesTo: "next-conversation",
     });
-    expect(await app.agentConfiguration.get(app.tenantId)).toMatchObject({ voice: "cedar" });
+    expect(await app.agentConfiguration.get(app.tenantId)).toMatchObject({ audio: { voice: "cedar" } });
     await expect(app.adminAudit.listByTenant(app.tenantId)).resolves.toMatchObject([{
       entityType: "agent_configuration",
       action: "update",
-      entityVersion: "1",
-      diff: { voice: { before: "marin", after: "cedar" } },
+      entityVersion: "2",
+      diff: { audio: {
+        before: expect.objectContaining({ voice: "marin" }),
+        after: expect.objectContaining({ voice: "cedar" }),
+      } },
     }]);
   });
 
@@ -96,7 +99,7 @@ describe("agent configuration API", () => {
       method: "PUT",
       url: "/api/configuration",
       headers: session.mutationHeaders,
-      payload: { ...before, instructions: "" },
+      payload: { ...before, identity: { ...before!.identity, instructions: "" } },
     });
 
     expect(response.statusCode).toBe(400);
@@ -114,7 +117,7 @@ describe("agent configuration API", () => {
       method: "PUT",
       url: "/api/configuration",
       headers: session.mutationHeaders,
-      payload: { ...current, voice: "not-a-realtime-voice" },
+      payload: { ...current, audio: { ...current!.audio, voice: "not-a-realtime-voice" } },
     });
 
     expect(response.statusCode).toBe(400);

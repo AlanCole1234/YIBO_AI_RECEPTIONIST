@@ -13,7 +13,23 @@ try {
   const configurations = new SqliteAgentConfigurationRepository(database, "MX");
   const service = new AgentConfigurationService(configurations);
   const recommended = service.recommended("es-MX", DEVELOPMENT_BUSINESS.name, "gpt-realtime-2.1");
-  const { schemaVersion: _legacyVersion, ...legacyConfiguration } = recommended;
+  const turn = recommended.audio.turnDetection;
+  const legacyConfiguration = {
+    instructions: recommended.identity.instructions,
+    locale: recommended.identity.locale,
+    voice: recommended.audio.voice,
+    enabledTools: recommended.enabledTools,
+    conversation: {
+      model: recommended.conversation.model,
+      maxOutputTokens: recommended.conversation.maxOutputTokens,
+      reasoningEffort: recommended.conversation.reasoningEffort,
+      turnDetection: turn.type === "server_vad" ? {
+        ...(turn.threshold === undefined ? {} : { threshold: turn.threshold }),
+        ...(turn.prefixPaddingMs === undefined ? {} : { prefixPaddingMs: turn.prefixPaddingMs }),
+        ...(turn.silenceDurationMs === undefined ? {} : { silenceDurationMs: turn.silenceDurationMs }),
+      } : {},
+    },
+  };
   database.prepare(`INSERT INTO agent_configurations(region_id, tenant_id, configuration_json, updated_at)
     VALUES (?, ?, ?, ?)`).run(
       "MX", DEVELOPMENT_BUSINESS.tenantId, JSON.stringify(legacyConfiguration), new Date().toISOString(),

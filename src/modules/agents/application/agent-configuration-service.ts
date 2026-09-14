@@ -61,8 +61,8 @@ function validateConfiguration(
   capabilityRegistry: RealtimeModelCapabilityRegistry,
 ): AgentConfiguration {
   if (value.schemaVersion !== AGENT_CONFIGURATION_SCHEMA_VERSION) throw new Error("unsupported agent configuration schemaVersion");
-  if (!value.instructions.trim()) throw new Error("instructions are required");
-  if (!value.locale.trim()) throw new Error("locale is required");
+  if (!value.identity.instructions.trim()) throw new Error("identity.instructions are required");
+  if (!value.identity.locale.trim()) throw new Error("identity.locale is required");
   if (!value.conversation.model.trim()) throw new Error("conversation.model is required");
   const allowedTools = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.name));
   if (new Set(value.enabledTools).size !== value.enabledTools.length
@@ -70,5 +70,28 @@ function validateConfiguration(
     throw new Error("enabledTools contains an unknown or duplicate tool");
   }
   capabilityRegistry.validate(value);
+  validateConversationControls(value);
   return structuredClone(value);
+}
+
+function validateConversationControls(value: AgentConfiguration): void {
+  const turn = value.audio.turnDetection;
+  if (turn.type === "server_vad" && turn.idleTimeoutMs !== undefined && turn.idleTimeoutMs !== null
+    && (!Number.isInteger(turn.idleTimeoutMs) || turn.idleTimeoutMs < 1 || turn.idleTimeoutMs > 120_000)) {
+    throw new Error("audio.turnDetection.idleTimeoutMs must be between 1 and 120000");
+  }
+  const truncation = value.conversation.truncation;
+  if (truncation.mode === "retention_ratio") {
+    if (!Number.isFinite(truncation.retentionRatio)
+      || truncation.retentionRatio <= 0
+      || truncation.retentionRatio > 1) {
+      throw new Error("conversation.truncation.retentionRatio must be greater than 0 and at most 1");
+    }
+    if (truncation.postInstructionsTokens !== undefined
+      && (!Number.isInteger(truncation.postInstructionsTokens)
+        || truncation.postInstructionsTokens < 1
+        || truncation.postInstructionsTokens > 127_999)) {
+      throw new Error("conversation.truncation.postInstructionsTokens must be between 1 and 127999");
+    }
+  }
 }

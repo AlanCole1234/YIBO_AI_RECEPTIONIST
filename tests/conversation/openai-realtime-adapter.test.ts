@@ -8,7 +8,17 @@ import {
 const agent = {
   instructions: "Help the caller schedule an appointment.",
   locale: "es-MX",
-  conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const, turnDetection: {} },
+  conversation: {
+    model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const,
+    tracing: "disabled" as const, truncation: { mode: "auto" as const },
+  },
+  audio: {
+    voice: "marin", noiseReduction: "near_field" as const,
+    turnDetection: {
+      type: "server_vad" as const, createResponse: true, interruptResponse: true,
+      idleTimeoutMs: 6_000, silenceDurationMs: 800,
+    },
+  },
   tools: [{
     name: "check_availability" as const,
     description: "Find available times",
@@ -90,6 +100,7 @@ describe("OpenAIRealtimeAdapter", () => {
         max_output_tokens: 512,
         reasoning: { effort: "minimal" },
         tracing: null,
+        truncation: "auto",
       },
     });
   });
@@ -226,9 +237,12 @@ describe("OpenAIRealtimeAdapter", () => {
       conversationId: "conversation-1",
       agent: {
         ...agent,
-        conversation: {
-          ...agent.conversation,
-          turnDetection: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500 },
+        audio: {
+          ...agent.audio,
+          turnDetection: {
+            type: "server_vad", createResponse: true, interruptResponse: true,
+            idleTimeoutMs: 6000, threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500,
+          },
         },
       },
     });
@@ -244,6 +258,63 @@ describe("OpenAIRealtimeAdapter", () => {
         idle_timeout_ms: 6000,
       } } } },
     });
+  });
+
+  it("maps semantic VAD, far-field noise reduction, tracing and retention truncation", async () => {
+    const connection = new FakeRealtimeConnection();
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key", mode: "audio", connectionFactory: { connect: async () => connection },
+    });
+
+    await adapter.openSession({
+      conversationId: "conversation-semantic",
+      agent: {
+        ...agent,
+        conversation: {
+          ...agent.conversation,
+          tracing: "auto",
+          truncation: { mode: "retention_ratio", retentionRatio: 0.8, postInstructionsTokens: 12_000 },
+        },
+        audio: {
+          voice: "cedar",
+          noiseReduction: "far_field",
+          turnDetection: {
+            type: "semantic_vad", eagerness: "low", createResponse: false, interruptResponse: true,
+          },
+        },
+      },
+    });
+
+    expect(connection.sent[0]).toMatchObject({ session: {
+      audio: { input: {
+        noise_reduction: { type: "far_field" },
+        turn_detection: {
+          type: "semantic_vad", eagerness: "low", create_response: false, interrupt_response: true,
+        },
+      }, output: { voice: "cedar" } },
+      tracing: "auto",
+      truncation: {
+        type: "retention_ratio", retention_ratio: 0.8, token_limits: { post_instructions: 12_000 },
+      },
+    } });
+  });
+
+  it("maps manual turns and disabled noise reduction to null", async () => {
+    const connection = new FakeRealtimeConnection();
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key", mode: "audio", connectionFactory: { connect: async () => connection },
+    });
+    await adapter.openSession({
+      conversationId: "conversation-manual",
+      agent: {
+        ...agent,
+        audio: { voice: "marin", noiseReduction: "disabled", turnDetection: { type: "manual" } },
+      },
+    });
+    expect(connection.sent[0]).toMatchObject({ session: { audio: { input: {
+      noise_reduction: null,
+      turn_detection: null,
+    } } } });
   });
 
   it("reports a redacted provider error when the initial connection is rejected", async () => {

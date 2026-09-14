@@ -10,9 +10,11 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 5 — Esquema avanzado del agente y Realtime**.
-- Tarea activa: **AGENT-004 — controles soportados de audio, VAD, tracing y truncación**.
+- Tarea activa: **AGENT-005 — comportamiento conversacional estructurado**.
 - Último checkpoint cerrado: Checkpoint 4; `pnpm typecheck`, 215 pruebas
   aprobadas, 1 omitida y `pnpm build` aprobados.
+- Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
+  1 omitida el 14 de septiembre de 2026.
 
 ## Capacidades existentes
 
@@ -81,8 +83,8 @@ con `pnpm test` y `pnpm build`.
 | AGENT-001 | DONE | ADR-004, schemaVersion y upgrade automático conservador en memoria/SQLite |
 | AGENT-002 | DONE | Prompt compone guía editable, contexto confiable y reglas inmutables |
 | AGENT-003 | DONE | API, backend y panel consumen un registro único y rechazan combinaciones incompatibles |
-| AGENT-004 | IN_PROGRESS | Controles soportados de audio, VAD, tracing y truncación |
-| AGENT-005 | TODO | Comportamiento conversacional estructurado |
+| AGENT-004 | DONE | Esquema v2, audio/VAD, inactividad, tracing y truncación validados por modelo |
+| AGENT-005 | IN_PROGRESS | Comportamiento conversacional estructurado |
 | AGENT-006 | TODO | Políticas de tools por canal, límites y reintentos |
 | AGENT-007 | TODO | Paralelismo permitido sólo para tools de lectura |
 | AGENT-008 | TODO | Invariantes de transporte PCM/modalidad documentadas |

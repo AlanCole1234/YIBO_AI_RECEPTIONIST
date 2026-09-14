@@ -28,8 +28,8 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
 
     const instructions = this.prompts.compile({
-      editableInstructions: configuration.instructions,
-      locale: configuration.locale,
+      editableInstructions: configuration.identity.instructions,
+      locale: configuration.identity.locale,
       businessName: location.value.business.name,
       locationName: location.value.location.name,
       locationTimezone: location.value.location.timezone,
@@ -38,9 +38,10 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
 
     const definition: AgentDefinition = {
       instructions,
-      locale: configuration.locale,
-      ...(configuration.voice ? { voice: configuration.voice } : {}),
+      locale: configuration.identity.locale,
+      voice: configuration.audio.voice,
       conversation: structuredClone(configuration.conversation),
+      audio: structuredClone(configuration.audio),
       tools: AGENT_TOOL_DEFINITIONS.filter((tool) =>
         isDeveloperTestTool(tool.name)
           ? command.developerTestModeAuthorized

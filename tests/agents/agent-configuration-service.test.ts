@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentConfigurationService,
   InMemoryAgentConfigurationSource,
+  upgradeAgentConfiguration,
 } from "../../src/modules/agents/index.js";
 
 describe("AgentConfigurationService", () => {
@@ -14,13 +15,25 @@ describe("AgentConfigurationService", () => {
       "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     expect(recommended).toMatchObject({
-      schemaVersion: 1,
-      voice: "marin",
+      schemaVersion: 2,
+      identity: { locale: "es-MX" },
+      audio: {
+        voice: "marin",
+        noiseReduction: "near_field",
+        turnDetection: {
+          type: "server_vad",
+          silenceDurationMs: 800,
+          idleTimeoutMs: 6000,
+          createResponse: true,
+          interruptResponse: true,
+        },
+      },
       conversation: {
         model: "gpt-realtime-2.1",
         maxOutputTokens: 512,
         reasoningEffort: "minimal",
-        turnDetection: { silenceDurationMs: 800 },
+        tracing: "disabled",
+        truncation: { mode: "auto" },
       },
     });
     recommended.enabledTools = ["check_availability"];
@@ -40,15 +53,71 @@ describe("AgentConfigurationService", () => {
     }]);
     const service = new AgentConfigurationService(repository);
     await expect(service.get("tenant-legacy")).resolves.toEqual({
-      schemaVersion: 1,
-      instructions: "Keep this prompt", locale: "es-MX", voice: "cedar",
+      schemaVersion: 2,
+      identity: { instructions: "Keep this prompt", locale: "es-MX" },
       enabledTools: ["check_availability"],
-      conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 321, reasoningEffort: "low", turnDetection: {} },
+      conversation: {
+        model: "gpt-realtime-2.1", maxOutputTokens: 321, reasoningEffort: "low",
+        tracing: "disabled", truncation: { mode: "auto" },
+      },
+      audio: {
+        voice: "cedar", noiseReduction: "near_field",
+        turnDetection: {
+          type: "server_vad", createResponse: true, interruptResponse: true, idleTimeoutMs: 6000,
+          silenceDurationMs: 800,
+        },
+      },
     });
     await expect(service.update("tenant-legacy", {
       schemaVersion: 99,
       instructions: "future",
     } as never)).rejects.toThrow("unsupported agent configuration schemaVersion");
+  });
+
+  it("upgrades an explicit v1 document to v2 idempotently", () => {
+    const upgraded = upgradeAgentConfiguration({
+      schemaVersion: 1,
+      instructions: "Preserve these instructions",
+      locale: "en-US",
+      voice: "marin",
+      enabledTools: ["check_availability"],
+      conversation: {
+        model: "gpt-realtime-2.1-mini",
+        maxOutputTokens: 256,
+        reasoningEffort: "medium",
+        turnDetection: {
+          threshold: 0.65,
+          prefixPaddingMs: 240,
+          silenceDurationMs: 900,
+        },
+      },
+    });
+
+    expect(upgraded).toMatchObject({
+      schemaVersion: 2,
+      identity: { instructions: "Preserve these instructions", locale: "en-US" },
+      conversation: {
+        model: "gpt-realtime-2.1-mini",
+        maxOutputTokens: 256,
+        reasoningEffort: "medium",
+        tracing: "disabled",
+        truncation: { mode: "auto" },
+      },
+      audio: {
+        voice: "marin",
+        noiseReduction: "near_field",
+        turnDetection: {
+          type: "server_vad",
+          threshold: 0.65,
+          prefixPaddingMs: 240,
+          silenceDurationMs: 900,
+          idleTimeoutMs: 6000,
+          createResponse: true,
+          interruptResponse: true,
+        },
+      },
+    });
+    expect(upgradeAgentConfiguration(upgraded)).toEqual(upgraded);
   });
 
   it("rejects unknown tools and unsafe output limits", async () => {
@@ -78,7 +147,31 @@ describe("AgentConfigurationService", () => {
     await expect(service.update("tenant-1", unknownModel)).rejects.toThrow("conversation.model is not supported");
 
     const unknownVoice = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
-    unknownVoice.voice = "unlisted-voice";
+    unknownVoice.audio.voice = "unlisted-voice";
     await expect(service.update("tenant-1", unknownVoice)).rejects.toThrow("voice is not supported");
+  });
+
+  it("validates mode-specific audio, tracing and truncation controls", async () => {
+    const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
+    const semantic = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    semantic.audio.noiseReduction = "far_field";
+    semantic.audio.turnDetection = {
+      type: "semantic_vad", eagerness: "low", createResponse: false, interruptResponse: true,
+    };
+    semantic.conversation.tracing = "auto";
+    semantic.conversation.truncation = {
+      mode: "retention_ratio", retentionRatio: 0.8, postInstructionsTokens: 12_000,
+    };
+    await expect(service.update("tenant-1", semantic)).resolves.toEqual(semantic);
+
+    const invalidIdle = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    if (invalidIdle.audio.turnDetection.type === "server_vad") {
+      invalidIdle.audio.turnDetection.idleTimeoutMs = 120_001;
+    }
+    await expect(service.update("tenant-1", invalidIdle)).rejects.toThrow("idleTimeoutMs");
+
+    const invalidRetention = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    invalidRetention.conversation.truncation = { mode: "retention_ratio", retentionRatio: 0 };
+    await expect(service.update("tenant-1", invalidRetention)).rejects.toThrow("retentionRatio");
   });
 });

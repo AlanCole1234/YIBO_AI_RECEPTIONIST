@@ -10,9 +10,10 @@ import type {
   ToolResultEnvelope,
 } from "../ports/conversation-runtime-port.js";
 import type { AudioFrame } from "../ports/conversation-runtime-port.js";
-
-const DEFAULT_VAD_SILENCE_DURATION_MS = 800;
-const DEFAULT_IDLE_TIMEOUT_MS = 6_000;
+import type {
+  AgentTurnDetectionConfiguration,
+  AgentConversationConfiguration,
+} from "../../agents/index.js";
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
@@ -70,10 +71,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
     if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4096) {
       throw new Error("Realtime maxOutputTokens must be an integer between 1 and 4096");
     }
-    const turnDetection = validateTurnDetection(input.agent.conversation.turnDetection);
-    const threshold = turnDetection.threshold;
-    const prefixPaddingMs = turnDetection.prefixPaddingMs;
-    const silenceDurationMs = turnDetection.silenceDurationMs ?? DEFAULT_VAD_SILENCE_DURATION_MS;
+    const turnDetection = buildTurnDetectionPayload(input.agent.audio.turnDetection);
     let connection: RealtimeConnection;
     this.logger.info?.("OpenAI Realtime connection starting", { model, mode: this.mode });
     try {
@@ -112,20 +110,14 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
           audio: {
             input: {
               format: { type: "audio/pcm", rate: 24_000 },
-              noise_reduction: { type: "near_field" },
-              turn_detection: {
-                type: turnDetection.type ?? "server_vad",
-                create_response: true,
-                interrupt_response: true,
-                idle_timeout_ms: DEFAULT_IDLE_TIMEOUT_MS,
-                ...(threshold === undefined ? {} : { threshold }),
-                ...(prefixPaddingMs === undefined ? {} : { prefix_padding_ms: prefixPaddingMs }),
-                ...(silenceDurationMs === undefined ? {} : { silence_duration_ms: silenceDurationMs }),
-              },
+              noise_reduction: input.agent.audio.noiseReduction === "disabled"
+                ? null
+                : { type: input.agent.audio.noiseReduction },
+              turn_detection: turnDetection,
             },
             output: {
               format: { type: "audio/pcm", rate: 24_000 },
-              voice: input.agent.voice ?? "marin",
+              voice: input.agent.audio.voice,
             },
           },
         } : {}),
@@ -139,22 +131,18 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
         parallel_tool_calls: false,
         max_output_tokens: maxOutputTokens,
         reasoning: { effort: input.agent.conversation.reasoningEffort },
-        tracing: null,
+        tracing: input.agent.conversation.tracing === "auto" ? "auto" : null,
+        truncation: buildTruncationPayload(input.agent.conversation.truncation),
       },
     });
     this.logger.info?.("OpenAI Realtime session.update sent", {
       model,
       mode: this.mode,
       outputAudioFormat: this.mode === "audio" ? "pcm_s16le/24000/mono" : undefined,
-      turnDetection: this.mode === "audio" ? {
-        type: turnDetection.type ?? "server_vad",
-        createResponse: true,
-        interruptResponse: true,
-        idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
-        ...(threshold === undefined ? {} : { threshold }),
-        ...(prefixPaddingMs === undefined ? {} : { prefixPaddingMs }),
-        ...(silenceDurationMs === undefined ? {} : { silenceDurationMs }),
-      } : undefined,
+      turnDetection: this.mode === "audio" ? input.agent.audio.turnDetection : undefined,
+      noiseReduction: this.mode === "audio" ? input.agent.audio.noiseReduction : undefined,
+      tracing: input.agent.conversation.tracing,
+      truncation: input.agent.conversation.truncation.mode,
     });
     return session;
   }
@@ -632,17 +620,34 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const number = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-function validateTurnDetection(options: ServerTurnDetectionOptions): ServerTurnDetectionOptions {
-  if (options.threshold !== undefined && (options.threshold < 0 || options.threshold > 1)) {
-    throw new Error("VAD threshold must be between 0 and 1");
+function buildTurnDetectionPayload(configuration: AgentTurnDetectionConfiguration): object | null {
+  if (configuration.type === "manual") return null;
+  if (configuration.type === "semantic_vad") {
+    return {
+      type: "semantic_vad",
+      eagerness: configuration.eagerness,
+      create_response: configuration.createResponse,
+      interrupt_response: configuration.interruptResponse,
+    };
   }
-  for (const [name, value] of [
-    ["prefixPaddingMs", options.prefixPaddingMs],
-    ["silenceDurationMs", options.silenceDurationMs],
-  ] as const) {
-    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
-      throw new Error(`${name} must be a non-negative integer`);
-    }
-  }
-  return { ...options };
+  return {
+    type: "server_vad",
+    create_response: configuration.createResponse,
+    interrupt_response: configuration.interruptResponse,
+    ...(configuration.idleTimeoutMs === undefined ? {} : { idle_timeout_ms: configuration.idleTimeoutMs }),
+    ...(configuration.threshold === undefined ? {} : { threshold: configuration.threshold }),
+    ...(configuration.prefixPaddingMs === undefined ? {} : { prefix_padding_ms: configuration.prefixPaddingMs }),
+    ...(configuration.silenceDurationMs === undefined ? {} : { silence_duration_ms: configuration.silenceDurationMs }),
+  };
+}
+
+function buildTruncationPayload(configuration: AgentConversationConfiguration["truncation"]): object | string {
+  if (configuration.mode !== "retention_ratio") return configuration.mode;
+  return {
+    type: "retention_ratio",
+    retention_ratio: configuration.retentionRatio,
+    ...(configuration.postInstructionsTokens === undefined
+      ? {}
+      : { token_limits: { post_instructions: configuration.postInstructionsTokens } }),
+  };
 }

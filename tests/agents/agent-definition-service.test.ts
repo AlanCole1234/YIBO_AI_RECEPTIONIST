@@ -42,7 +42,17 @@ describe("AgentDefinitionService", () => {
       instructions: expect.stringContaining("<editable_guidance>\nBe helpful\n</editable_guidance>"),
       locale: "es-MX",
       voice: "neutral",
-      conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal", turnDetection: {} },
+      conversation: {
+        model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal",
+        tracing: "disabled", truncation: { mode: "auto" },
+      },
+      audio: {
+        voice: "neutral", noiseReduction: "near_field",
+        turnDetection: {
+          type: "server_vad", createResponse: true, interruptResponse: true, idleTimeoutMs: 6000,
+          silenceDurationMs: 800,
+        },
+      },
       tools: expect.arrayContaining([
         expect.objectContaining({ name: "check_availability" }),
         expect.objectContaining({ name: "create_appointment" }),

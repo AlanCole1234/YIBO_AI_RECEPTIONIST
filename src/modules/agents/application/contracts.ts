@@ -63,22 +63,48 @@ export interface AgentDefinition {
   instructions: string;
   locale: string;
   voice?: string;
-  conversation: ConversationBehavior;
+  conversation: AgentConversationConfiguration;
+  audio: AgentAudioConfiguration;
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
   trustedContext: ToolExecutionContext;
 }
 
-export interface ConversationBehavior {
+export interface AgentConversationConfiguration {
   model: string;
   maxOutputTokens: number;
   reasoningEffort: "minimal" | "low" | "medium" | "high";
-  turnDetection: {
-    threshold?: number;
-    prefixPaddingMs?: number;
-    silenceDurationMs?: number;
-  };
+  tracing: "disabled" | "auto";
+  truncation:
+    | { mode: "auto" | "disabled" }
+    | { mode: "retention_ratio"; retentionRatio: number; postInstructionsTokens?: number };
 }
+
+export type ConversationBehavior = AgentConversationConfiguration;
+
+export interface AgentAudioConfiguration {
+  voice: string;
+  noiseReduction: "disabled" | "near_field" | "far_field";
+  turnDetection: AgentTurnDetectionConfiguration;
+}
+
+export type AgentTurnDetectionConfiguration =
+  | {
+      type: "server_vad";
+      threshold?: number;
+      prefixPaddingMs?: number;
+      silenceDurationMs?: number;
+      idleTimeoutMs?: number | null;
+      createResponse: boolean;
+      interruptResponse: boolean;
+    }
+  | {
+      type: "semantic_vad";
+      eagerness: "auto" | "low" | "medium" | "high";
+      createResponse: boolean;
+      interruptResponse: boolean;
+    }
+  | { type: "manual" };
 
 export type AgentDefinitionError = {
   code: "CONFIGURATION_NOT_FOUND" | "BUSINESS_CONTEXT_NOT_FOUND";

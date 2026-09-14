@@ -1,14 +1,29 @@
 import type { Result } from "../../../shared/domain/result.js";
 import type { CallId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
-import type { AgentToolName, ConversationBehavior } from "../application/contracts.js";
+import type {
+  AgentAudioConfiguration,
+  AgentConversationConfiguration,
+  AgentToolName,
+} from "../application/contracts.js";
 
 export interface AgentConfiguration {
+  schemaVersion: 2;
+  identity: {
+    instructions: string;
+    locale: string;
+  };
+  conversation: AgentConversationConfiguration;
+  audio: AgentAudioConfiguration;
+  enabledTools: AgentToolName[];
+}
+
+export interface AgentConfigurationV1 {
   schemaVersion: 1;
   instructions: string;
   locale: string;
   voice?: string;
   enabledTools: AgentToolName[];
-  conversation: ConversationBehavior;
+  conversation: LegacyConversationBehavior;
 }
 
 export interface LegacyAgentConfiguration {
@@ -17,10 +32,21 @@ export interface LegacyAgentConfiguration {
   locale: string;
   voice?: string;
   enabledTools: AgentToolName[];
-  conversation: ConversationBehavior;
+  conversation: LegacyConversationBehavior;
 }
 
-export type VersionedAgentConfiguration = AgentConfiguration | LegacyAgentConfiguration;
+export interface LegacyConversationBehavior {
+  model: string;
+  maxOutputTokens: number;
+  reasoningEffort: "minimal" | "low" | "medium" | "high";
+  turnDetection: {
+    threshold?: number;
+    prefixPaddingMs?: number;
+    silenceDurationMs?: number;
+  };
+}
+
+export type VersionedAgentConfiguration = AgentConfiguration | AgentConfigurationV1 | LegacyAgentConfiguration;
 
 export interface AgentConfigurationSource {
   getConfiguration(tenantId: TenantId): Promise<AgentConfiguration | null>;

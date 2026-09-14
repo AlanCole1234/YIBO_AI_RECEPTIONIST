@@ -32,3 +32,16 @@ documentos incompletos o que una actualización reemplazara opciones existentes.
 - Backend, dashboard y auditoría pueden identificar inequívocamente el esquema.
 - Fixtures y adaptadores en memoria ejercitan exactamente la misma actualización
   que SQLite.
+
+## Consecuencia aplicada — AGENT-004
+
+El 14 de septiembre de 2026 el esquema canónico avanzó a versión 2. El paso
+v1→v2 materializa `identity`, `conversation`, `audio` y `enabledTools`, conserva
+los valores históricos y asigna defaults explícitos para reducción de ruido,
+VAD, inactividad, tracing y truncación. Tanto documentos sin versión como v1 se
+reescriben a v2; aplicar el upgrader nuevamente no modifica el resultado.
+
+Los modos de turno son una unión discriminada (`server_vad`, `semantic_vad` o
+manual) para impedir combinaciones de campos inválidas. PCM mono a 24 kHz queda
+fuera del documento por ser una invariante del transporte. Tracing permanece
+deshabilitado por defecto como decisión de privacidad.

@@ -37,7 +37,14 @@ function fixture(inboundAudio: AsyncIterable<AudioFrame> = stream()) {
     instructions: "Help the caller safely.",
     locale: "es-MX",
     voice: "neutral",
-    conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal", turnDetection: {} },
+    conversation: {
+      model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal",
+      tracing: "disabled", truncation: { mode: "auto" },
+    },
+    audio: {
+      voice: "neutral", noiseReduction: "near_field",
+      turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
+    },
     tools: [{
       name: "check_availability",
       description: "Find available appointment times",
@@ -81,6 +88,7 @@ describe("ConversationService", () => {
         locale: value.agent.locale,
         voice: value.agent.voice,
         conversation: value.agent.conversation,
+        audio: value.agent.audio,
         tools: value.agent.tools,
       },
     }]);

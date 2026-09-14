@@ -19,7 +19,13 @@ liveIt("asks for availability through a real Realtime tool call", async () => {
         model: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1",
         maxOutputTokens: 160,
         reasoningEffort: "minimal",
-        turnDetection: {},
+        tracing: "disabled",
+        truncation: { mode: "auto" },
+      },
+      audio: {
+        voice: "marin",
+        noiseReduction: "near_field",
+        turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
       },
       tools: [{
         name: "check_availability",

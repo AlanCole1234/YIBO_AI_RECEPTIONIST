@@ -10,7 +10,9 @@ export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export {
   AGENT_CONFIGURATION_DEFAULTS_VERSION,
   DEFAULT_CONVERSATION_VOICE,
+  DEFAULT_IDLE_TIMEOUT_MS,
   DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_NOISE_REDUCTION,
   DEFAULT_REALTIME_MODEL,
   DEFAULT_VAD_SILENCE_DURATION_MS,
   createDefaultAgentConfiguration,
@@ -19,6 +21,9 @@ export type { DefaultAgentConfigurationInput } from "./application/agent-configu
 export { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./application/upgrade-agent-configuration.js";
 export type {
   AgentDefinition,
+  AgentAudioConfiguration,
+  AgentConversationConfiguration,
+  AgentTurnDetectionConfiguration,
   ConversationBehavior,
   AgentDefinitionError,
   AgentDefinitionFactory,
@@ -32,6 +37,7 @@ export type {
 } from "./application/contracts.js";
 export type {
   AgentConfiguration,
+  AgentConfigurationV1,
   AgentConfigurationSource,
   AgentConfigurationRepository,
   LegacyAgentConfiguration,

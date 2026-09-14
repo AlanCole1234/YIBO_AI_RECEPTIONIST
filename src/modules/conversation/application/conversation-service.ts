@@ -25,6 +25,7 @@ export class ConversationService implements ConversationServiceContract {
         ...(command.agent.voice ? { voice: command.agent.voice } : {}),
         tools: command.agent.tools,
         conversation: structuredClone(command.agent.conversation),
+        audio: structuredClone(command.agent.audio),
       },
     });
 
