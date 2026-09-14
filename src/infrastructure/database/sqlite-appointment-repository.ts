@@ -23,6 +23,16 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       .get(this.region, tenantId, key) as AppointmentRow | undefined);
   }
 
+  async findUpcomingByCustomer(query: {
+    tenantId: string; locationId: string; customerId: string; startsAtOrAfter: string;
+  }): Promise<Appointment[]> {
+    return this.database.prepare(`${SELECT_APPOINTMENT}
+      AND location_id = ? AND customer_id = ? AND status = 'CONFIRMED' AND start_at >= ?
+      ORDER BY start_at`
+    ).all(this.region, query.tenantId, query.locationId, query.customerId, query.startsAtOrAfter)
+      .map((row) => this.row(row as AppointmentRow)!);
+  }
+
   async hasProfessionalReferences(query: { tenantId: TenantId; professionalId: string; locationId?: string }) {
     const row = this.database.prepare(`SELECT 1 AS found FROM appointments
       WHERE region_id = ? AND tenant_id = ? AND employee_id = ?

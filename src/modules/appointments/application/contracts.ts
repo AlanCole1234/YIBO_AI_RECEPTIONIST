@@ -43,6 +43,12 @@ export interface GetAppointmentQuery {
   appointmentId: AppointmentId;
 }
 
+export interface ListUpcomingAppointmentsQuery {
+  tenantId: TenantId;
+  locationId: LocationId;
+  customerId: CustomerId;
+}
+
 export type CreateAppointmentError =
   | { code: "SLOT_NO_LONGER_AVAILABLE" }
   | { code: "CUSTOMER_NOT_FOUND" }
@@ -81,4 +87,5 @@ export interface AppointmentService {
   getAppointment(
     query: GetAppointmentQuery,
   ): Promise<Result<Appointment, AppointmentLookupError>>;
+  listUpcomingAppointments(query: ListUpcomingAppointmentsQuery): Promise<Appointment[]>;
 }

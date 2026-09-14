@@ -48,11 +48,13 @@ function fixture(businessProfiles: VersionedBusinessProfile[] = [business]) {
   const getAppointment = vi.fn(async () => success(confirmedAppointment));
   const cancelAppointment = vi.fn(async () => success({ ...confirmedAppointment, status: "CANCELLED" as const }));
   const rescheduleAppointment = vi.fn(async () => success({ ...confirmedAppointment, startAt: "2026-08-11T21:00:00.000Z", endAt: "2026-08-11T21:30:00.000Z" }));
+  const listUpcomingAppointments = vi.fn(async () => [confirmedAppointment]);
   const appointments = {
     createAppointment,
     getAppointment,
     cancelAppointment,
     rescheduleAppointment,
+    listUpcomingAppointments,
   } as unknown as AppointmentService;
   const transferToConfiguredDestination = vi.fn(async () => success(undefined));
   const transfer: HumanTransferPort = { transferToConfiguredDestination };
@@ -66,6 +68,7 @@ function fixture(businessProfiles: VersionedBusinessProfile[] = [business]) {
     rescheduleAppointment,
     findAvailableSlots,
     getAppointment,
+    listUpcomingAppointments,
     updateCustomer,
     transferToConfiguredDestination,
     executor: new ToolExecutorImpl(scheduling, appointments, transfer, businesses, undefined, customers),
@@ -84,6 +87,50 @@ const business: BusinessProfile = {
 };
 
 describe("ToolExecutorImpl", () => {
+  it("lists only public upcoming-appointment fields using trusted scope", async () => {
+    const { executor, listUpcomingAppointments } = fixture();
+
+    const result = await executor.execute(context, {
+      toolCallId: "list-upcoming",
+      name: "list_customer_appointments",
+      arguments: {},
+    });
+
+    expect(listUpcomingAppointments).toHaveBeenCalledWith({
+      tenantId: "tenant-a",
+      locationId: "default",
+      customerId: "customer-1",
+    });
+    expect(result).toEqual({
+      toolCallId: "list-upcoming",
+      ok: true,
+      data: { appointments: [{
+        reference: "upcoming-1",
+        service: "Consultation",
+        startAt: "2026-08-10T15:00:00.000Z",
+        endAt: "2026-08-10T15:30:00.000Z",
+        timezone: "America/Denver",
+        location: "YIBO Dental",
+        professional: "Dr. Alex",
+        price: { amountMinor: 0, currency: "USD", display: expect.any(String) },
+      }] },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("appointment-1");
+    expect(serialized).not.toContain("employee-1");
+    expect(serialized).not.toContain("service-1");
+  });
+
+  it("requires a verified customer before listing appointments", async () => {
+    const { executor, listUpcomingAppointments } = fixture();
+    const result = await executor.execute(
+      { tenantId: "tenant-a", locationId: "default", callId: "anonymous-call" },
+      { toolCallId: "list-anonymous", name: "list_customer_appointments", arguments: {} },
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "CUSTOMER_REQUIRED" } });
+    expect(listUpcomingAppointments).not.toHaveBeenCalled();
+  });
+
   it("returns public service, price, and branch information without internal IDs", async () => {
     const profile = structuredClone(DEVELOPMENT_BUSINESS);
     profile.tenantId = "tenant-a";

@@ -137,6 +137,7 @@ const AGENT_TOOL_ADDITIONS: Array<{ prerequisite: AgentToolName; tool: AgentTool
   { prerequisite: "create_appointment", tool: "update_customer" },
   { prerequisite: "create_appointment", tool: "reschedule_appointment" },
   { prerequisite: "check_availability", tool: "get_service_information" },
+  { prerequisite: "create_appointment", tool: "list_customer_appointments" },
 ];
 
 function addCompatibleAgentTools(configuration: AgentConfiguration): AgentConfiguration | null {

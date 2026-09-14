@@ -177,6 +177,38 @@ describe("AppointmentServiceImpl", () => {
     })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
   });
 
+  it("lists only confirmed upcoming appointments in the trusted tenant, customer, and location", async () => {
+    const { repository, service } = fixture();
+    const created = await service.createAppointment(command);
+    if (!created.ok) throw new Error("fixture appointment was not created");
+    await repository.save({
+      ...created.value, id: "appointment-earlier", idempotencyKey: "earlier",
+      startAt: "2026-08-05T15:00:00.000Z", endAt: "2026-08-05T15:30:00.000Z",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-other-customer", idempotencyKey: "other-customer",
+      customerId: "customer-2",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-other-location", idempotencyKey: "other-location",
+      locationId: "other-location",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-cancelled", idempotencyKey: "cancelled", status: "CANCELLED",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-past", idempotencyKey: "past",
+      startAt: "2026-07-31T15:00:00.000Z", endAt: "2026-07-31T15:30:00.000Z",
+    });
+
+    await expect(service.listUpcomingAppointments({
+      tenantId: "tenant-a", locationId: "default", customerId: "customer-1",
+    })).resolves.toMatchObject([
+      { id: "appointment-earlier", startAt: "2026-08-05T15:00:00.000Z" },
+      { id: "appointment-1", startAt: "2026-08-10T15:00:00.000Z" },
+    ]);
+  });
+
   it("serializes concurrent attempts so only one can claim a slot", async () => {
     let validations = 0;
     let activeValidations = 0;

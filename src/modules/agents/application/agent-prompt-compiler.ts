@@ -45,6 +45,9 @@ export class AgentPromptCompiler {
       has("get_service_information")
         ? "Use get_service_information as the sole source of service descriptions, prices, and branch availability; repeat only its patient-facing fields."
         : "Do not claim access to current service descriptions, prices, or branch offerings.",
+      has("list_customer_appointments")
+        ? "Use list_customer_appointments to identify the verified caller's upcoming appointments; refer to its opaque reference and never request or reveal an internal appointment ID."
+        : "Do not claim that you can inspect the caller's upcoming appointments.",
       has("check_availability")
         ? "Use check_availability as the sole source of appointment times. Never ask for service IDs or reveal why a time is busy."
         : "Do not claim calendar access because check_availability is not enabled.",

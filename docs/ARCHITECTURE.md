@@ -120,6 +120,11 @@ paso. La cancelación y reprogramación verifican propiedad del cliente en la
 frontera de tools. Al crear, la cita congela el nombre y `Money` de la oferta;
 reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 
+La lectura de próximas citas filtra en el repositorio por tenant, location,
+customer, estado confirmado e instante actual. El ejecutor del agente proyecta
+después una vista pública con referencias efímeras ligadas a la llamada; los IDs
+persistidos no cruzan la frontera del modelo.
+
 ## Persistencia e integraciones
 
 - SQLite se separa por región MX/US y todas las claves operativas incluyen

@@ -159,6 +159,7 @@ sólo entonces envía `parallel_tool_calls: true`.
 | Tool | Acción | Protección principal |
 |---|---|---|
 | `get_service_information` | Consulta servicios, descripción, duración, precio y sucursales | Sólo nombres públicos; omite IDs y ofertas inactivas |
+| `list_customer_appointments` | Lista citas futuras confirmadas del caller | Tenant, cliente y sucursal proceden de la llamada; usa referencias opacas |
 | `check_availability` | Consulta slots reales o una hora exacta | Servicio/empleado y zona se resuelven en backend |
 | `update_customer` | Guarda nombre completo y teléfono | Cliente procede de la llamada |
 | `create_appointment` | Crea y confirma una cita | Requiere slot consultado, ownership e idempotencia |
@@ -178,6 +179,13 @@ nombre y descripción del servicio, duración, nombre público de sucursal y pre
 en unidades menores, moneda ISO y texto localizado. No serializa IDs de servicio,
 sucursal o profesional. Al actualizar instalaciones existentes, la tool se
 habilita sólo en canales donde ya estaba habilitada `check_availability`.
+
+`list_customer_appointments` consulta únicamente citas `CONFIRMED` cuyo inicio
+no ha pasado, ordenadas cronológicamente y limitadas al tenant, cliente y
+sucursal confiables. La respuesta conserva el snapshot histórico de servicio y
+precio, añade zona y nombres públicos, y reemplaza el ID persistido por una
+referencia efímera `upcoming-N` ligada a la llamada. Ese mapa queda sólo en
+memoria para que cancelación y reprogramación lo consuman en `TOOL-003`.
 
 ## Calendario y citas
 

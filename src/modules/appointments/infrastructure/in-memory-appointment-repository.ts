@@ -18,6 +18,19 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
     return value ? { ...value } : null;
   }
 
+  async findUpcomingByCustomer(query: {
+    tenantId: string; locationId: string; customerId: string; startsAtOrAfter: string;
+  }): Promise<Appointment[]> {
+    return [...this.appointments.values()]
+      .filter((appointment) => appointment.tenantId === query.tenantId
+        && appointment.locationId === query.locationId
+        && appointment.customerId === query.customerId
+        && appointment.status === "CONFIRMED"
+        && appointment.startAt >= query.startsAtOrAfter)
+      .sort((left, right) => left.startAt.localeCompare(right.startAt))
+      .map((appointment) => ({ ...appointment }));
+  }
+
   async hasProfessionalReferences(query: { tenantId: TenantId; professionalId: string; locationId?: string }) {
     return [...this.appointments.values()].some((appointment) => appointment.tenantId === query.tenantId
       && appointment.employeeId === query.professionalId

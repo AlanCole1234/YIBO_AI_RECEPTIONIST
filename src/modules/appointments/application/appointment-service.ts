@@ -18,6 +18,7 @@ import type {
   CreateAppointmentCommand,
   CreateAppointmentError,
   GetAppointmentQuery,
+  ListUpcomingAppointmentsQuery,
   RescheduleAppointmentCommand,
   RescheduleAppointmentError,
 } from "./contracts.js";
@@ -232,6 +233,13 @@ export class AppointmentServiceImpl implements AppointmentService {
     return appointment && appointment.locationId === query.locationId
       ? success(appointment)
       : failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
+  }
+
+  listUpcomingAppointments(query: ListUpcomingAppointmentsQuery): Promise<Appointment[]> {
+    return this.repository.findUpcomingByCustomer({
+      ...query,
+      startsAtOrAfter: this.clock.now().toISOString(),
+    });
   }
 }
 

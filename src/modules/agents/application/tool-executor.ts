@@ -18,6 +18,7 @@ type ConfirmableAvailability = { requestedStartAt?: string; availableStartAts: s
 
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly confirmableAvailabilityByCall = new Map<string, ConfirmableAvailability>();
+  private readonly appointmentReferencesByCall = new Map<string, Map<string, string>>();
   private readonly testCustomersByCall = new Map<string, string>();
   private readonly testAppointmentsByCall = new Map<string, string[]>();
   private readonly enabledTestCalls = new Set<string>();
@@ -39,6 +40,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     switch (call.name) {
       case "get_service_information": return this.getServiceInformation(context, call);
+      case "list_customer_appointments": return this.listCustomerAppointments(context, call);
       case "check_availability": return this.checkAvailability(context, call);
       case "create_appointment": return this.createAppointment(context, call);
       case "update_customer": return this.updateCustomer(context, call);
@@ -86,6 +88,46 @@ export class ToolExecutorImpl implements ToolExecutor {
     return services.length > 0
       ? { toolCallId: call.toolCallId, ok: true as const, data: { services } }
       : toolError(call, "SERVICE_NOT_FOUND", "No active service with that name is available.", false);
+  }
+
+  private async listCustomerAppointments(context: ToolExecutionContext, call: AgentToolCall) {
+    const input = call.arguments as Input;
+    if (!exactKeys(input, [], [])) return invalid(call, "list_customer_appointments does not accept arguments");
+    if (!context.customerId) {
+      return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before listing appointments.", false);
+    }
+    const business = await this.businesses?.getLocation(context.tenantId, context.locationId);
+    if (!business?.ok) {
+      return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Upcoming appointments are unavailable right now.", false);
+    }
+    const appointments = await this.appointments.listUpcomingAppointments({
+      tenantId: context.tenantId,
+      locationId: context.locationId,
+      customerId: context.customerId,
+    });
+    const references = new Map<string, string>();
+    const publicAppointments = appointments.map((appointment, index) => {
+      const reference = `upcoming-${index + 1}`;
+      references.set(reference, appointment.id);
+      const professional = business.value.business.professionals
+        .find(({ id }) => id === appointment.employeeId)?.displayName;
+      return {
+        reference,
+        service: appointment.serviceNameSnapshot,
+        startAt: appointment.startAt,
+        endAt: appointment.endAt,
+        timezone: business.value.location.timezone,
+        location: business.value.location.name,
+        ...(professional ? { professional } : {}),
+        price: {
+          amountMinor: appointment.priceAmountMinor,
+          currency: appointment.priceCurrency,
+          display: formatMoney(appointment.priceAmountMinor, appointment.priceCurrency, business.value.location.locale),
+        },
+      };
+    });
+    this.appointmentReferencesByCall.set(context.callId, references);
+    return { toolCallId: call.toolCallId, ok: true as const, data: { appointments: publicAppointments } };
   }
 
   private async updateCustomer(context: ToolExecutionContext, call: AgentToolCall) {

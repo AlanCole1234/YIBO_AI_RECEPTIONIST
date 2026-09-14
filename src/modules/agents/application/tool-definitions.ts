@@ -15,6 +15,12 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     },
   },
   {
+    name: "list_customer_appointments",
+    description: "List upcoming confirmed appointments for the verified customer at the branch reached by this call. Returns opaque conversational references instead of internal appointment IDs.",
+    presentation: { title: "Upcoming appointments", help: "Reads the verified caller's upcoming appointments at this branch without exposing database IDs.", route: "Appointments", icon: "◷", kind: "consult" },
+    inputSchema: { type: "object", additionalProperties: false, required: [], properties: {} },
+  },
+  {
     name: "check_availability",
     description: "Find real clinic-calendar appointment slots. Use dateExpression for natural caller phrases. service is an optional patient-facing choice such as Cleaning or Consultation; omit it to use the clinic's configured default appointment type. Never ask for or expose an internal service ID. When the caller asks about an exact time, include requestedStartAt as an ISO datetime. Results are verified, privacy-safe, and sorted earliest first.",
     presentation: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕", kind: "consult" },

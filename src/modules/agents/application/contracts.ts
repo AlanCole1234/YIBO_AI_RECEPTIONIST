@@ -9,6 +9,7 @@ import type {
 
 export type AgentToolName =
   | "get_service_information"
+  | "list_customer_appointments"
   | "check_availability"
   | "create_appointment"
   | "update_customer"

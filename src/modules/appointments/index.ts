@@ -7,6 +7,7 @@ export type {
   CreateAppointmentCommand,
   CreateAppointmentError,
   GetAppointmentQuery,
+  ListUpcomingAppointmentsQuery,
   RescheduleAppointmentCommand,
   RescheduleAppointmentError,
 } from "./application/contracts.js";
