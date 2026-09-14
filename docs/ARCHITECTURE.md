@@ -230,7 +230,10 @@ conectar Google, consultar disponibilidad, crear/buscar citas y cambiar zona
 horaria. El editor del agente usa el esquema canónico v4 y construye sus controles
 de modelo/audio desde el registro de capacidades publicado por la API; no mantiene
 listas locales de modelos o voces. Los campos incompatibles se ocultan o muestran
-un error específico y bloquean el guardado. Las vistas se filtran por rol. No
+un error específico y bloquean el guardado. El mismo editor cubre comportamiento,
+silencios, políticas por canal, confirmaciones, límites, reintentos y escalamiento;
+helpers puros mantienen sincronizadas las dependencias entre tools y políticas.
+Las vistas se filtran por rol. No
 permite todavía administrar servicios, empleados, horarios, destinos ni
 calendarios por profesional.
 

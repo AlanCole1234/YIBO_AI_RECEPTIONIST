@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
-- Tarea activa: **UI-003 — comportamiento, tools y escalamiento**.
+- Tarea activa: **UI-004 — preview real y explícita mediante Voice Lab**.
 - Último checkpoint cerrado: Checkpoint 6; 261 pruebas aprobadas, 1 omitida y
   `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
@@ -53,6 +53,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   API y roles, y `pnpm build` aprobados el 14 de septiembre de 2026.
 - Última tarea verificada: UI-002; `pnpm typecheck`, 8 pruebas focales de registro
   y API, y `pnpm build` aprobados el 14 de septiembre de 2026.
+- Última tarea verificada: UI-003; `pnpm typecheck`, 21 pruebas focales de panel,
+  políticas, configuración y API, y `pnpm build` aprobados el 14 de septiembre
+  de 2026.
 
 ## Capacidades existentes
 
@@ -137,8 +140,8 @@ con `pnpm test` y `pnpm build`.
 | TOOL-008 | DONE | Tools internas sólo en Voice Lab autorizado; persistencia y calendario aislados |
 | UI-001 | DONE | Login/restauración/logout, expiración por 401/deadline y navegación según rol |
 | UI-002 | DONE | Esquema v4 y controles generados por modelo con visibilidad/errores por capacidad |
-| UI-003 | IN_PROGRESS | Edición de comportamiento, tools y escalamiento |
-| UI-004 | TODO | Preview real y explícita mediante Voice Lab |
+| UI-003 | DONE | Siete secciones editan comportamiento, silencios, canales, confirmación, límites y escalamiento |
+| UI-004 | IN_PROGRESS | Preview real y explícita mediante Voice Lab |
 | UI-005 | TODO | Administración de sucursales y políticas |
 | UI-006 | TODO | Administración de catálogos, precios y profesionales |
 | UI-007 | TODO | Mapeo de calendarios |

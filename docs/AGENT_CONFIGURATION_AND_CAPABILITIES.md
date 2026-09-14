@@ -163,6 +163,15 @@ del dominio o de la propia transferencia se convierte en
 `TOOL_EXECUTION_FAILED` genérico: el mensaje técnico original nunca llega al
 modelo.
 
+El panel expone estas políticas en secciones separadas: personalidad; turno y
+audio; saludo y silencio; tools; canales y confirmaciones; límites, reintentos y
+escalamiento; e instrucciones. Al deshabilitar una tool la elimina de ambos
+canales, límites particulares y confirmaciones. Al habilitar una mutación o
+acción externa desactiva paralelismo en ambos canales. La transferencia
+automática permanece deshabilitada en UI mientras `transfer_to_human` no esté
+presente en todos los canales activos; el backend vuelve a validar todo al
+guardar.
+
 El paralelismo también es una opción por canal, desactivada por default. La API
 rechaza activarlo si cualquier herramienta seleccionada es `mutate` o
 `external`, usando la clasificación del registro backend. Voice Lab incluye
