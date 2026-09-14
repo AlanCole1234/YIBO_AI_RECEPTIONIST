@@ -64,11 +64,12 @@ Los valores recomendados se construyen en una única fábrica versionada del
 módulo Agents. Bootstrap y el panel consumen esa fábrica; el adaptador Realtime
 usa siempre la definición ya resuelta y no sustituye modelo, voz o tokens.
 
-El documento canónico incluye `schemaVersion: 3` y separa `identity`,
-`conversation`, `audio`, `behavior` y `enabledTools`. Las configuraciones
-históricas sin versión, v1 o v2 se actualizan en memoria y SQLite, preservando
-sus valores y completando sólo campos ausentes. SQLite guarda la forma canónica
-al primer acceso y una versión futura desconocida se rechaza.
+El documento canónico incluye `schemaVersion: 4` y separa `identity`,
+`conversation`, `audio`, `behavior`, `toolPolicies` y `enabledTools`. Las
+configuraciones históricas sin versión, v1, v2 o v3 se actualizan en memoria y
+SQLite, preservando sus valores y completando sólo campos ausentes. SQLite
+guarda la forma canónica al primer acceso y una versión futura desconocida se
+rechaza.
 
 ## Controles Realtime editables
 
@@ -100,9 +101,8 @@ demás modos no se simula un timeout local ni se cancela una respuesta posterior
 
 El modo manual se representa y se envía como `turn_detection: null`; sólo debe
 activarse en un canal que tenga un gesto explícito para cerrar el turno. La
-telefonía continua no proporciona ese gesto, por lo que mantener `server_vad` o
-`semantic_vad` es el ajuste operativo seguro hasta que `AGENT-006` introduzca
-políticas por canal.
+telefonía continua no proporciona ese gesto: una definición de llamada con modo
+manual se rechaza de forma segura, mientras Voice Lab sí puede usarlo.
 
 El texto que edita un administrador es guía, no el prompt completo.
 `AgentPromptCompiler` lo delimita y compone después el contexto confiable de la
@@ -111,10 +111,26 @@ cliente ni destino; no inventa estado externo y sólo confirma mutaciones despu�
 de un resultado exitoso de la herramienta.
 
 PCM mono a 24 kHz sigue siendo una invariante del transporte, no una preferencia
-administrativa. `tool_choice` y la ejecución paralela permanecen pendientes de
-las políticas seguras de `AGENT-006` y `AGENT-007`. El panel actual edita el
+administrativa. `tool_choice` ya se configura por canal; la ejecución paralela
+permanece pendiente de la clasificación segura de `AGENT-007`. El panel actual edita el
 perfil `server_vad`; los modos avanzados ya están disponibles en el contrato y
 API, y su UI condicionada por capacidad corresponde a `UI-002/UI-003`.
+
+## Políticas de herramientas
+
+`toolPolicies` limita por separado telefonía y Voice Lab. Cada canal tiene una
+lista que debe ser subconjunto de `enabledTools` y un `toolChoice` enumerado
+(`auto`, `required` o `none`). La definición del agente resuelve el canal desde
+contexto del servidor; el modelo no puede aportarlo ni cambiarlo. Con `none`,
+las herramientas tampoco se anuncian en la sesión ni en el prompt compilado.
+
+Un ejecutor efímero por llamada aplica el máximo total y los máximos por
+herramienta. Sólo repite resultados que el dominio marcó `retryable`, entre una
+y tres tentativas totales y conservando el mismo tool-call/idempotency key. La
+transferencia automática puede activarse ante límite o fallo reintentable; usa
+`HumanTransferPort` y el destino configurado de la sucursal, nunca argumentos
+del modelo. Los defaults de la migración v3→v4 dejan un límite total de 20, una
+sola tentativa y transferencia automática desactivada.
 
 ## Herramientas implementadas
 

@@ -1,12 +1,14 @@
 import type { AgentConfiguration } from "../ports/agent-dependencies.js";
 import type {
   AgentBehaviorConfiguration,
+  AgentToolName,
+  AgentToolPoliciesConfiguration,
   AgentTurnDetectionConfiguration,
   ConversationBehavior,
 } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 
-export const AGENT_CONFIGURATION_DEFAULTS_VERSION = 3;
+export const AGENT_CONFIGURATION_DEFAULTS_VERSION = 4;
 export const DEFAULT_REALTIME_MODEL = "gpt-realtime-2.1";
 export const DEFAULT_CONVERSATION_VOICE = "marin";
 export const DEFAULT_MAX_OUTPUT_TOKENS = 512;
@@ -32,6 +34,18 @@ export function createDefaultAgentBehavior(locale: string): AgentBehaviorConfigu
   return behavior;
 }
 
+export function createDefaultToolPolicies(enabledTools: AgentToolName[]): AgentToolPoliciesConfiguration {
+  return {
+    channels: {
+      phone: { enabledTools: [...enabledTools], toolChoice: "auto" },
+      voice_lab: { enabledTools: [...enabledTools], toolChoice: "auto" },
+    },
+    limits: { totalPerCall: 20, perTool: {} },
+    externalRetryAttempts: 1,
+    automaticTransfer: { onLimitReached: false, onRetryableFailure: false },
+  };
+}
+
 export interface DefaultAgentConfigurationInput {
   locale: string;
   businessName: string;
@@ -46,8 +60,11 @@ export interface DefaultAgentConfigurationInput {
 export function createDefaultAgentConfiguration(
   input: DefaultAgentConfigurationInput,
 ): AgentConfiguration {
+  const enabledTools = AGENT_TOOL_DEFINITIONS
+    .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
+    .map(({ name }) => name);
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     identity: {
       instructions: [
         "Help callers complete supported receptionist tasks using the enabled tools.",
@@ -55,9 +72,7 @@ export function createDefaultAgentConfiguration(
       ].join(" "),
       locale: input.locale,
     },
-    enabledTools: AGENT_TOOL_DEFINITIONS
-      .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
-      .map(({ name }) => name),
+    enabledTools,
     conversation: {
       model: input.model?.trim() || DEFAULT_REALTIME_MODEL,
       maxOutputTokens: input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
@@ -71,6 +86,7 @@ export function createDefaultAgentConfiguration(
       turnDetection: resolveTurnDetection(input.turnDetection),
     },
     behavior: createDefaultAgentBehavior(input.locale),
+    toolPolicies: createDefaultToolPolicies(enabledTools),
   };
 }
 

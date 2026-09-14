@@ -29,6 +29,7 @@ liveIt("asks for availability through a real Realtime tool call", async () => {
         turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
       },
       behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
+      toolChoice: "auto",
       tools: [{
         name: "check_availability",
         description: "Find available appointment slots.",

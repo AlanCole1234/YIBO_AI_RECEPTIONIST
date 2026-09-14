@@ -5,14 +5,25 @@ import type {
   AgentBehaviorConfiguration,
   AgentConversationConfiguration,
   AgentToolName,
+  AgentToolPoliciesConfiguration,
 } from "../application/contracts.js";
 
 export interface AgentConfiguration {
-  schemaVersion: 3;
+  schemaVersion: 4;
   identity: {
     instructions: string;
     locale: string;
   };
+  conversation: AgentConversationConfiguration;
+  audio: AgentAudioConfiguration;
+  behavior: AgentBehaviorConfiguration;
+  toolPolicies: AgentToolPoliciesConfiguration;
+  enabledTools: AgentToolName[];
+}
+
+export interface AgentConfigurationV3 {
+  schemaVersion: 3;
+  identity: AgentConfiguration["identity"];
   conversation: AgentConversationConfiguration;
   audio: AgentAudioConfiguration;
   behavior: AgentBehaviorConfiguration;
@@ -59,7 +70,7 @@ export interface LegacyConversationBehavior {
   };
 }
 
-export type VersionedAgentConfiguration = AgentConfiguration | AgentConfigurationV2 | AgentConfigurationV1 | LegacyAgentConfiguration;
+export type VersionedAgentConfiguration = AgentConfiguration | AgentConfigurationV3 | AgentConfigurationV2 | AgentConfigurationV1 | LegacyAgentConfiguration;
 
 export interface AgentConfigurationSource {
   getConfiguration(tenantId: TenantId): Promise<AgentConfiguration | null>;

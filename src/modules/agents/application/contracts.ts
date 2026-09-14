@@ -66,6 +66,7 @@ export interface AgentDefinition {
   conversation: AgentConversationConfiguration;
   audio: AgentAudioConfiguration;
   behavior: AgentBehaviorConfiguration;
+  toolChoice: "auto" | "required" | "none";
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
   trustedContext: ToolExecutionContext;
@@ -103,6 +104,24 @@ export interface AgentBehaviorConfiguration {
 
 export type AgentDataCollectionField = "full_name" | "phone_number" | "service";
 
+export type AgentChannel = "phone" | "voice_lab";
+
+export interface AgentToolPoliciesConfiguration {
+  channels: Record<AgentChannel, {
+    enabledTools: AgentToolName[];
+    toolChoice: "auto" | "required" | "none";
+  }>;
+  limits: {
+    totalPerCall: number;
+    perTool: Partial<Record<AgentToolName, number>>;
+  };
+  externalRetryAttempts: number;
+  automaticTransfer: {
+    onLimitReached: boolean;
+    onRetryableFailure: boolean;
+  };
+}
+
 export type ConversationBehavior = AgentConversationConfiguration;
 
 export interface AgentAudioConfiguration {
@@ -130,7 +149,7 @@ export type AgentTurnDetectionConfiguration =
   | { type: "manual" };
 
 export type AgentDefinitionError = {
-  code: "CONFIGURATION_NOT_FOUND" | "BUSINESS_CONTEXT_NOT_FOUND";
+  code: "CONFIGURATION_NOT_FOUND" | "BUSINESS_CONTEXT_NOT_FOUND" | "CHANNEL_CONFIGURATION_INCOMPATIBLE";
 };
 
 export interface AgentDefinitionFactory {

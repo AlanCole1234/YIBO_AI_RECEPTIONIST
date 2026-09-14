@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentConfigurationService,
   createDefaultAgentBehavior,
+  createDefaultToolPolicies,
   InMemoryAgentConfigurationSource,
   upgradeAgentConfiguration,
 } from "../../src/modules/agents/index.js";
@@ -16,7 +17,7 @@ describe("AgentConfigurationService", () => {
       "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     expect(recommended).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       identity: { locale: "es-MX" },
       audio: {
         voice: "marin",
@@ -30,6 +31,7 @@ describe("AgentConfigurationService", () => {
         },
       },
       behavior: createDefaultAgentBehavior("es-MX"),
+      toolPolicies: createDefaultToolPolicies(recommended.enabledTools),
       conversation: {
         model: "gpt-realtime-2.1",
         maxOutputTokens: 512,
@@ -39,6 +41,8 @@ describe("AgentConfigurationService", () => {
       },
     });
     recommended.enabledTools = ["check_availability"];
+    recommended.toolPolicies.channels.phone.enabledTools = [...recommended.enabledTools];
+    recommended.toolPolicies.channels.voice_lab.enabledTools = [...recommended.enabledTools];
     const saved = await service.update("tenant-1", recommended);
 
     await expect(service.get("tenant-1")).resolves.toEqual(saved);
@@ -55,7 +59,7 @@ describe("AgentConfigurationService", () => {
     }]);
     const service = new AgentConfigurationService(repository);
     await expect(service.get("tenant-legacy")).resolves.toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       identity: { instructions: "Keep this prompt", locale: "es-MX" },
       enabledTools: ["check_availability"],
       conversation: {
@@ -70,6 +74,7 @@ describe("AgentConfigurationService", () => {
         },
       },
       behavior: createDefaultAgentBehavior("es-MX"),
+      toolPolicies: createDefaultToolPolicies(["check_availability"]),
     });
     await expect(service.update("tenant-legacy", {
       schemaVersion: 99,
@@ -97,7 +102,7 @@ describe("AgentConfigurationService", () => {
     });
 
     expect(upgraded).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       identity: { instructions: "Preserve these instructions", locale: "en-US" },
       conversation: {
         model: "gpt-realtime-2.1-mini",
@@ -126,8 +131,9 @@ describe("AgentConfigurationService", () => {
   it("upgrades v2 behavior defaults and validates structured behavior", async () => {
     const v2 = createV2Configuration();
     expect(upgradeAgentConfiguration(v2)).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       behavior: createDefaultAgentBehavior("es-MX"),
+      toolPolicies: createDefaultToolPolicies(["check_availability"]),
     });
 
     const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
@@ -143,6 +149,28 @@ describe("AgentConfigurationService", () => {
 
     configured.behavior.dataCollectionOrder = ["service", "service", "phone_number"];
     await expect(service.update("tenant-1", configured)).rejects.toThrow("dataCollectionOrder");
+  });
+
+  it("upgrades v3 tool policy defaults and rejects unsafe policies", async () => {
+    const current = upgradeAgentConfiguration(createV2Configuration());
+    const v3 = { ...current, schemaVersion: 3 as const } as Record<string, unknown>;
+    delete v3.toolPolicies;
+    const upgraded = upgradeAgentConfiguration(v3);
+    expect(upgraded).toMatchObject({
+      schemaVersion: 4,
+      toolPolicies: createDefaultToolPolicies(upgraded.enabledTools),
+    });
+
+    const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
+    upgraded.toolPolicies.channels.phone.enabledTools = ["check_availability"];
+    upgraded.toolPolicies.channels.voice_lab.enabledTools = ["check_availability"];
+    upgraded.toolPolicies.channels.phone.toolChoice = "required";
+    upgraded.toolPolicies.limits = { totalPerCall: 8, perTool: { check_availability: 3 } };
+    upgraded.toolPolicies.externalRetryAttempts = 2;
+    await expect(service.update("tenant-1", upgraded)).resolves.toEqual(upgraded);
+
+    upgraded.toolPolicies.channels.phone.enabledTools = ["transfer_to_human"];
+    await expect(service.update("tenant-1", upgraded)).rejects.toThrow("subset");
   });
 
   it("rejects unknown tools and unsafe output limits", async () => {

@@ -56,13 +56,14 @@ describe("AgentDefinitionService", () => {
         },
       },
       behavior: createDefaultAgentBehavior("es-MX"),
+      toolChoice: "auto",
       tools: expect.arrayContaining([
         expect.objectContaining({ name: "check_availability" }),
         expect.objectContaining({ name: "create_appointment" }),
         expect.objectContaining({ name: "cancel_appointment" }),
         expect.objectContaining({ name: "transfer_to_human" }),
       ]),
-      toolExecutor,
+      toolExecutor: expect.any(Object),
       trustedContext: {
         tenantId: "tenant-a",
         locationId: "default",
@@ -153,5 +154,67 @@ describe("AgentDefinitionService", () => {
     expect(result.value.instructions).toContain("patient-facing service; full name; phone number");
     expect(result.value.instructions.indexOf("# Structured conversation behavior"))
       .toBeGreaterThan(result.value.instructions.indexOf("Be extremely verbose"));
+  });
+
+  it("selects tools and tool choice from the server-resolved channel", async () => {
+    const source = new InMemoryAgentConfigurationSource([]);
+    const configured = new AgentConfigurationService(source).recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.toolPolicies.channels.phone = {
+      enabledTools: ["check_availability"],
+      toolChoice: "required",
+    };
+    configured.toolPolicies.channels.voice_lab = {
+      enabledTools: ["update_customer"],
+      toolChoice: "auto",
+    };
+    await source.saveConfiguration(DEVELOPMENT_BUSINESS.tenantId, configured);
+    const service = new AgentDefinitionService(source, { execute: vi.fn() }, businesses);
+
+    const phone = await service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-phone",
+    });
+    const lab = await service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId,
+      locationId: "default",
+      callId: "call-lab",
+      developerTestModeAuthorized: true,
+    });
+    expect(phone.ok && phone.value.toolChoice).toBe("required");
+    expect(phone.ok && phone.value.tools.map(({ name }) => name)).toEqual(["check_availability"]);
+    expect(lab.ok && lab.value.tools.map(({ name }) => name)).toEqual([
+      "update_customer", "enable_developer_test_mode", "delete_test_appointments",
+    ]);
+  });
+
+  it("rejects manual turns on continuous phone audio but allows them in Voice Lab", async () => {
+    const source = new InMemoryAgentConfigurationSource([]);
+    const configured = new AgentConfigurationService(source).recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.audio.turnDetection = { type: "manual" };
+    await source.saveConfiguration(DEVELOPMENT_BUSINESS.tenantId, configured);
+    const service = new AgentDefinitionService(source, { execute: vi.fn() }, businesses);
+
+    await expect(service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-phone",
+    })).resolves.toEqual({ ok: false, error: { code: "CHANNEL_CONFIGURATION_INCOMPATIBLE" } });
+    const lab = await service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId,
+      locationId: "default",
+      callId: "call-lab",
+      developerTestModeAuthorized: true,
+    });
+    expect(lab.ok && lab.value.audio.turnDetection).toEqual({ type: "manual" });
+  });
+
+  it("does not advertise tools when the channel tool choice is none", async () => {
+    const source = new InMemoryAgentConfigurationSource([]);
+    const configured = new AgentConfigurationService(source).recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.toolPolicies.channels.phone.toolChoice = "none";
+    await source.saveConfiguration(DEVELOPMENT_BUSINESS.tenantId, configured);
+    const service = new AgentDefinitionService(source, { execute: vi.fn() }, businesses);
+    const result = await service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-no-tools",
+    });
+    expect(result.ok && result.value.tools).toEqual([]);
+    expect(result.ok && result.value.toolChoice).toBe("none");
   });
 });

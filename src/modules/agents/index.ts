@@ -6,6 +6,7 @@ export type { AgentConfigurationServiceContract } from "./application/agent-conf
 export { RealtimeModelCapabilityRegistry } from "./application/model-capability-registry.js";
 export type { RealtimeModelCapability, ReasoningEffort } from "./application/model-capability-registry.js";
 export { ToolExecutorImpl } from "./application/tool-executor.js";
+export { PolicyEnforcingToolExecutor } from "./application/policy-enforcing-tool-executor.js";
 export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export {
   AGENT_CONFIGURATION_DEFAULTS_VERSION,
@@ -18,6 +19,7 @@ export {
   DEFAULT_VAD_SILENCE_DURATION_MS,
   createDefaultAgentConfiguration,
   createDefaultAgentBehavior,
+  createDefaultToolPolicies,
 } from "./application/agent-configuration-defaults.js";
 export type { DefaultAgentConfigurationInput } from "./application/agent-configuration-defaults.js";
 export { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./application/upgrade-agent-configuration.js";
@@ -25,6 +27,7 @@ export type {
   AgentDefinition,
   AgentAudioConfiguration,
   AgentBehaviorConfiguration,
+  AgentChannel,
   AgentConversationConfiguration,
   AgentTurnDetectionConfiguration,
   AgentDataCollectionField,
@@ -35,6 +38,7 @@ export type {
   AgentToolDefinition,
   AgentToolName,
   AgentToolResult,
+  AgentToolPoliciesConfiguration,
   PrepareAgentDefinitionCommand,
   ToolExecutionContext,
   ToolExecutor,
@@ -43,6 +47,7 @@ export type {
   AgentConfiguration,
   AgentConfigurationV1,
   AgentConfigurationV2,
+  AgentConfigurationV3,
   AgentConfigurationSource,
   AgentConfigurationRepository,
   LegacyAgentConfiguration,

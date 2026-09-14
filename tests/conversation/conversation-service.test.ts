@@ -46,6 +46,7 @@ function fixture(inboundAudio: AsyncIterable<AudioFrame> = stream()) {
       turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
     },
     behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
+    toolChoice: "auto",
     tools: [{
       name: "check_availability",
       description: "Find available appointment times",
@@ -91,6 +92,7 @@ describe("ConversationService", () => {
         conversation: value.agent.conversation,
         audio: value.agent.audio,
         behavior: value.agent.behavior,
+        toolChoice: value.agent.toolChoice,
         tools: value.agent.tools,
       },
     }]);

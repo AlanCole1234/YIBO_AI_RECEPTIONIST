@@ -3,6 +3,8 @@ import type {
   AgentBehaviorConfiguration,
   AgentConversationConfiguration,
   AgentTurnDetectionConfiguration,
+  AgentToolName,
+  AgentToolPoliciesConfiguration,
 } from "./contracts.js";
 import type { AgentConfiguration } from "../ports/agent-dependencies.js";
 import {
@@ -13,41 +15,54 @@ import {
   DEFAULT_REALTIME_MODEL,
   DEFAULT_VAD_SILENCE_DURATION_MS,
   createDefaultAgentBehavior,
+  createDefaultToolPolicies,
 } from "./agent-configuration-defaults.js";
 
-export const AGENT_CONFIGURATION_SCHEMA_VERSION = 3 as const;
+export const AGENT_CONFIGURATION_SCHEMA_VERSION = 4 as const;
 
 export const upgradeAgentConfiguration = (input: unknown): AgentConfiguration => {
   if (!isRecord(input)) throw new Error("agent configuration must be an object");
-  if (input.schemaVersion !== undefined && input.schemaVersion !== 1 && input.schemaVersion !== 2 && input.schemaVersion !== 3) {
+  if (input.schemaVersion !== undefined && ![1, 2, 3, 4].includes(input.schemaVersion as number)) {
     throw new Error(`unsupported agent configuration schemaVersion: ${String(input.schemaVersion)}`);
   }
-  if (input.schemaVersion === 3) return normalizeV3(input);
+  if (input.schemaVersion === 4) return normalizeV4(input);
+  if (input.schemaVersion === 3) return upgradeV3(input);
   if (input.schemaVersion === 2) return upgradeV2(input);
   return upgradeFlatConfiguration(input);
 };
 
-function normalizeV3(input: Record<string, unknown>): AgentConfiguration {
+function normalizeV4(input: Record<string, unknown>): AgentConfiguration {
   const identity = record(input.identity);
   const locale = stringOr(identity.locale, "");
+  const tools = enabledTools(input.enabledTools);
   return {
     schemaVersion: AGENT_CONFIGURATION_SCHEMA_VERSION,
     identity: {
       instructions: stringOr(identity.instructions, ""),
       locale,
     },
-    enabledTools: enabledTools(input.enabledTools),
+    enabledTools: tools,
     conversation: normalizeConversation(record(input.conversation)),
     audio: normalizeAudio(record(input.audio)),
     behavior: normalizeBehavior(input.behavior, locale),
+    toolPolicies: normalizeToolPolicies(input.toolPolicies, tools),
+  };
+}
+
+function upgradeV3(input: Record<string, unknown>): AgentConfiguration {
+  const tools = enabledTools(input.enabledTools);
+  return {
+    ...normalizeV4({ ...input, schemaVersion: 4 }),
+    toolPolicies: createDefaultToolPolicies(tools),
   };
 }
 
 function upgradeV2(input: Record<string, unknown>): AgentConfiguration {
   const locale = stringOr(record(input.identity).locale, "");
   return {
-    ...normalizeV3({ ...input, schemaVersion: 3 }),
+    ...normalizeV4({ ...input, schemaVersion: 4 }),
     behavior: createDefaultAgentBehavior(locale),
+    toolPolicies: createDefaultToolPolicies(enabledTools(input.enabledTools)),
   };
 }
 
@@ -55,13 +70,14 @@ function upgradeFlatConfiguration(input: Record<string, unknown>): AgentConfigur
   const conversation = record(input.conversation);
   const legacyTurnDetection = record(conversation.turnDetection);
   const locale = stringOr(input.locale, "");
+  const tools = enabledTools(input.enabledTools);
   return {
     schemaVersion: AGENT_CONFIGURATION_SCHEMA_VERSION,
     identity: {
       instructions: stringOr(input.instructions, ""),
       locale,
     },
-    enabledTools: enabledTools(input.enabledTools),
+    enabledTools: tools,
     conversation: {
       model: stringOr(conversation.model, DEFAULT_REALTIME_MODEL),
       maxOutputTokens: numberOr(conversation.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS),
@@ -90,7 +106,70 @@ function upgradeFlatConfiguration(input: Record<string, unknown>): AgentConfigur
       },
     },
     behavior: createDefaultAgentBehavior(locale),
+    toolPolicies: createDefaultToolPolicies(tools),
   };
+}
+
+function normalizeToolPolicies(value: unknown, enabled: AgentToolName[]): AgentToolPoliciesConfiguration {
+  const defaults = createDefaultToolPolicies(enabled);
+  const input = record(value);
+  const channels = record(input.channels);
+  const limits = record(input.limits);
+  const automaticTransfer = record(input.automaticTransfer);
+  return {
+    channels: {
+      phone: normalizeChannelPolicy(channels.phone, defaults.channels.phone),
+      voice_lab: normalizeChannelPolicy(channels.voice_lab, defaults.channels.voice_lab),
+    },
+    limits: {
+      totalPerCall: numberOr(limits.totalPerCall, defaults.limits.totalPerCall),
+      perTool: normalizePerToolLimits(limits.perTool),
+    },
+    externalRetryAttempts: numberOr(input.externalRetryAttempts, defaults.externalRetryAttempts),
+    automaticTransfer: {
+      onLimitReached: booleanOr(
+        automaticTransfer.onLimitReached,
+        defaults.automaticTransfer.onLimitReached,
+        "toolPolicies.automaticTransfer.onLimitReached",
+      ),
+      onRetryableFailure: booleanOr(
+        automaticTransfer.onRetryableFailure,
+        defaults.automaticTransfer.onRetryableFailure,
+        "toolPolicies.automaticTransfer.onRetryableFailure",
+      ),
+    },
+  };
+}
+
+function normalizeChannelPolicy(
+  value: unknown,
+  defaults: AgentToolPoliciesConfiguration["channels"]["phone"],
+): AgentToolPoliciesConfiguration["channels"]["phone"] {
+  const input = record(value);
+  return {
+    enabledTools: input.enabledTools === undefined ? [...defaults.enabledTools] : enabledTools(input.enabledTools),
+    toolChoice: enumOrDefault(
+      input.toolChoice,
+      ["auto", "required", "none"] as const,
+      defaults.toolChoice,
+      "toolPolicies.channels.toolChoice",
+    ),
+  };
+}
+
+function normalizePerToolLimits(value: unknown): AgentToolPoliciesConfiguration["limits"]["perTool"] {
+  if (value === undefined) return {};
+  if (!isRecord(value)) throw new Error("toolPolicies.limits.perTool must be an object");
+  const allowed: AgentToolName[] = [
+    "check_availability", "create_appointment", "update_customer", "cancel_appointment",
+    "reschedule_appointment", "transfer_to_human", "enable_developer_test_mode", "delete_test_appointments",
+  ];
+  for (const [tool, limit] of Object.entries(value)) {
+    if (!allowed.includes(tool as AgentToolName) || typeof limit !== "number") {
+      throw new Error("toolPolicies.limits.perTool contains an invalid tool or limit");
+    }
+  }
+  return { ...value } as AgentToolPoliciesConfiguration["limits"]["perTool"];
 }
 
 function normalizeBehavior(value: unknown, locale: string): AgentBehaviorConfiguration {

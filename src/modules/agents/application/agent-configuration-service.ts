@@ -1,6 +1,6 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentConfiguration, AgentConfigurationRepository, VersionedAgentConfiguration } from "../ports/agent-dependencies.js";
-import type { AgentDataCollectionField } from "./contracts.js";
+import type { AgentDataCollectionField, AgentToolName } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import {
   createDefaultAgentConfiguration,
@@ -73,7 +73,42 @@ function validateConfiguration(
   capabilityRegistry.validate(value);
   validateConversationControls(value);
   validateBehavior(value);
+  validateToolPolicies(value);
   return structuredClone(value);
+}
+
+function validateToolPolicies(value: AgentConfiguration): void {
+  const { toolPolicies } = value;
+  const enabled = new Set(value.enabledTools);
+  for (const [channel, policy] of Object.entries(toolPolicies.channels)) {
+    if (new Set(policy.enabledTools).size !== policy.enabledTools.length
+      || policy.enabledTools.some((tool) => !enabled.has(tool))) {
+      throw new Error(`toolPolicies.channels.${channel}.enabledTools must be a unique subset of enabledTools`);
+    }
+    if (policy.toolChoice === "required" && policy.enabledTools.length === 0) {
+      throw new Error(`toolPolicies.channels.${channel}.toolChoice cannot be required without tools`);
+    }
+  }
+  if (!Number.isInteger(toolPolicies.limits.totalPerCall)
+    || toolPolicies.limits.totalPerCall < 1
+    || toolPolicies.limits.totalPerCall > 100) {
+    throw new Error("toolPolicies.limits.totalPerCall must be an integer between 1 and 100");
+  }
+  for (const [tool, limit] of Object.entries(toolPolicies.limits.perTool)) {
+    if (!enabled.has(tool as AgentToolName) || !Number.isInteger(limit) || limit! < 1 || limit! > 100) {
+      throw new Error("toolPolicies.limits.perTool must reference enabled tools with limits between 1 and 100");
+    }
+  }
+  if (!Number.isInteger(toolPolicies.externalRetryAttempts)
+    || toolPolicies.externalRetryAttempts < 1
+    || toolPolicies.externalRetryAttempts > 3) {
+    throw new Error("toolPolicies.externalRetryAttempts must be an integer between 1 and 3");
+  }
+  if ((toolPolicies.automaticTransfer.onLimitReached || toolPolicies.automaticTransfer.onRetryableFailure)
+    && Object.values(toolPolicies.channels).some((channel) =>
+      channel.enabledTools.length > 0 && !channel.enabledTools.includes("transfer_to_human"))) {
+    throw new Error("automatic transfer requires transfer_to_human in every active channel");
+  }
 }
 
 function validateConversationControls(value: AgentConfiguration): void {

@@ -102,6 +102,10 @@ export class RealtimeModelCapabilityRegistry {
     if (!capability.controls.reasoningEfforts.includes(configuration.conversation.reasoningEffort)) {
       throw new Error(`conversation.reasoningEffort is not supported by ${capability.id}`);
     }
+    if (!capability.controls.toolChoice
+      && Object.values(configuration.toolPolicies.channels).some(({ toolChoice }) => toolChoice !== "auto")) {
+      throw new Error(`toolPolicies.channels.toolChoice is not supported by ${capability.id}`);
+    }
     const output = capability.limits.responseOutputTokens;
     if (!Number.isInteger(configuration.conversation.maxOutputTokens)
       || configuration.conversation.maxOutputTokens < output.minimum

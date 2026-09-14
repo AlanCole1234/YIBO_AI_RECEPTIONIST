@@ -10,6 +10,7 @@ import type {
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
+import { PolicyEnforcingToolExecutor } from "./policy-enforcing-tool-executor.js";
 
 export class AgentDefinitionService implements AgentDefinitionFactory {
   constructor(
@@ -27,10 +28,16 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     const location = await this.businesses.getLocation(command.tenantId, command.locationId);
     if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
 
+    const channel = command.developerTestModeAuthorized ? "voice_lab" : "phone";
+    if (channel === "phone" && configuration.audio.turnDetection.type === "manual") {
+      return failure<AgentDefinitionError>({ code: "CHANNEL_CONFIGURATION_INCOMPATIBLE" });
+    }
+    const channelPolicy = configuration.toolPolicies.channels[channel];
+    const channelTools = new Set(channelPolicy.toolChoice === "none" ? [] : channelPolicy.enabledTools);
     const tools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
       isDeveloperTestTool(tool.name)
         ? command.developerTestModeAuthorized
-        : configuration.enabledTools.includes(tool.name),
+        : configuration.enabledTools.includes(tool.name) && channelTools.has(tool.name),
     );
     const instructions = this.prompts.compile({
       editableInstructions: configuration.identity.instructions,
@@ -49,8 +56,13 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       conversation: structuredClone(configuration.conversation),
       audio: structuredClone(configuration.audio),
       behavior: structuredClone(configuration.behavior),
+      toolChoice: channelPolicy.toolChoice,
       tools,
-      toolExecutor: this.toolExecutor,
+      toolExecutor: new PolicyEnforcingToolExecutor(
+        this.toolExecutor,
+        tools.map(({ name }) => name),
+        configuration.toolPolicies,
+      ),
       trustedContext: { ...command },
     };
     return success(definition);

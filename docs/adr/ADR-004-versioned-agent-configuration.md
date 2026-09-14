@@ -59,3 +59,16 @@ El adaptador no contiene ya políticas conversacionales propias: recibe un promp
 compilado. Dos comportamientos necesitan control de runtime y no sólo una
 instrucción: el saludo automático inicia una respuesta explícita y las
 repreguntas por silencio se cancelan al alcanzar su límite configurado.
+
+## Consecuencia aplicada — AGENT-006
+
+El 14 de septiembre de 2026 el esquema avanzó a versión 4 para añadir
+`toolPolicies`. Telefonía y Voice Lab declaran herramientas y `toolChoice` por
+separado, siempre como subconjunto del catálogo habilitado. El canal se resuelve
+en servidor; no forma parte de los argumentos del modelo.
+
+Los límites y reintentos viven en un decorador efímero por llamada. Los reintentos
+requieren un error marcado `retryable` por el dominio y reutilizan la identidad
+de la invocación. La transferencia automática usa el mismo puerto y destino
+confiables que una transferencia solicitada. Sus defaults están desactivados o
+en una sola tentativa para conservar el comportamiento v3.

@@ -21,6 +21,7 @@ const agent = {
     },
   },
   behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
+  toolChoice: "auto" as const,
   tools: [{
     name: "check_availability" as const,
     description: "Find available times",
@@ -253,6 +254,18 @@ describe("OpenAIRealtimeAdapter", () => {
         interrupt_response: true,
         idle_timeout_ms: 6000,
       } } } },
+    });
+  });
+
+  it("maps the channel tool choice into the Realtime session", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-required-tool",
+      agent: { ...agent, toolChoice: "required" },
+    });
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: { tool_choice: "required" },
     });
   });
 
