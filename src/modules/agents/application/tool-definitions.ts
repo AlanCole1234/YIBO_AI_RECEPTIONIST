@@ -63,25 +63,25 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "cancel_appointment",
-    description: "Cancel an appointment owned by the verified customer in this call.",
-    presentation: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×", kind: "mutate" },
+    description: "Cancel an appointment owned by the verified customer using an opaque appointmentReference returned by list_customer_appointments in this call.",
+    presentation: { title: "Cancel appointments", help: "Uses a same-call public reference and rechecks that the appointment belongs to the verified customer.", route: "Appointments", icon: "×", kind: "mutate" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["appointmentId"],
-      properties: { appointmentId: { type: "string", minLength: 1 } },
+      required: ["appointmentReference"],
+      properties: { appointmentReference: { type: "string", minLength: 1, description: "Opaque reference returned by list_customer_appointments." } },
     },
   },
   {
     name: "reschedule_appointment",
-    description: "Reschedule an appointment owned by the verified customer in this call. Use a previously confirmed appointment ID and an exact verified available slot. Never reconstruct a local time as UTC.",
-    presentation: { title: "Reschedule appointments", help: "Checks the new time and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺", kind: "mutate" },
+    description: "Reschedule an appointment owned by the verified customer. Use an opaque appointmentReference returned by list_customer_appointments in this call and an exact verified available slot. Never reconstruct a local time as UTC.",
+    presentation: { title: "Reschedule appointments", help: "Uses a same-call public reference, checks the new time, and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺", kind: "mutate" },
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["appointmentId", "startAt"],
+      required: ["appointmentReference", "startAt"],
       properties: {
-        appointmentId: { type: "string", minLength: 1 },
+        appointmentReference: { type: "string", minLength: 1, description: "Opaque reference returned by list_customer_appointments." },
         startAt: { type: "string", format: "date-time", description: "Copy the accepted availability slot startAt unchanged." },
       },
     },

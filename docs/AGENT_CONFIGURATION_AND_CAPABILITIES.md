@@ -163,8 +163,8 @@ sólo entonces envía `parallel_tool_calls: true`.
 | `check_availability` | Consulta slots reales o una hora exacta | Servicio/empleado y zona se resuelven en backend |
 | `update_customer` | Guarda nombre completo y teléfono | Cliente procede de la llamada |
 | `create_appointment` | Crea y confirma una cita | Requiere slot consultado, ownership e idempotencia |
-| `cancel_appointment` | Cancela cita y evento | Verifica cliente propietario |
-| `reschedule_appointment` | Valida nuevo slot y sustituye evento | Verifica cliente y compensa fallo externo |
+| `cancel_appointment` | Cancela cita y evento | Exige referencia listada en la misma llamada y verifica ownership |
+| `reschedule_appointment` | Valida nuevo slot y sustituye evento | Exige referencia listada, verifica cliente y compensa fallo externo |
 | `transfer_to_human` | Solicita destino configurado | El modelo no proporciona el destino |
 | `enable_developer_test_mode` | Activa fixtures aislados | Sólo sesión local autorizada |
 | `delete_test_appointments` | Limpia citas de esa prueba | Sólo citas de la sesión de prueba |
@@ -185,7 +185,10 @@ no ha pasado, ordenadas cronológicamente y limitadas al tenant, cliente y
 sucursal confiables. La respuesta conserva el snapshot histórico de servicio y
 precio, añade zona y nombres públicos, y reemplaza el ID persistido por una
 referencia efímera `upcoming-N` ligada a la llamada. Ese mapa queda sólo en
-memoria para que cancelación y reprogramación lo consuman en `TOOL-003`.
+memoria y es la única entrada aceptada por cancelación y reprogramación. Ambas
+operaciones resuelven el ID internamente y vuelven a comprobar tenant, sucursal
+y ownership; un ID persistido, una referencia inventada o una emitida en otra
+llamada se rechazan. Sus resultados tampoco devuelven el ID interno.
 
 ## Calendario y citas
 

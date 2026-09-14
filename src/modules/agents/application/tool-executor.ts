@@ -100,7 +100,10 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!business?.ok) {
       return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Upcoming appointments are unavailable right now.", false);
     }
-    const appointments = await this.appointments.listUpcomingAppointments({
+    const appointmentService = this.enabledTestCalls.has(context.callId)
+      ? this.developerTest?.appointments ?? this.appointments
+      : this.appointments;
+    const appointments = await appointmentService.listUpcomingAppointments({
       tenantId: context.tenantId,
       locationId: context.locationId,
       customerId: context.customerId,
@@ -385,13 +388,15 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before cancelling an appointment.", false);
     const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["appointmentId"], ["appointmentId"]) || !text(input.appointmentId)) {
-      return invalid(call, "appointmentId is required");
+    if (!exactKeys(input, ["appointmentReference"], ["appointmentReference"]) || !text(input.appointmentReference)) {
+      return invalid(call, "appointmentReference from list_customer_appointments is required");
     }
+    const appointmentId = this.appointmentReferencesByCall.get(context.callId)?.get(input.appointmentReference);
+    if (!appointmentId) return toolError(call, "APPOINTMENT_REFERENCE_NOT_FOUND", "List upcoming appointments again and use one of the returned references.", false);
     const lookup = await appointments.getAppointment({
       tenantId: context.tenantId,
       locationId: context.locationId,
-      appointmentId: input.appointmentId,
+      appointmentId,
     });
     if (!lookup.ok || lookup.value.customerId !== customerId) {
       return toolError(call, "APPOINTMENT_NOT_FOUND", "No cancellable appointment was found for this verified caller.", false);
@@ -399,13 +404,14 @@ export class ToolExecutorImpl implements ToolExecutor {
     const result = await appointments.cancelAppointment({
       tenantId: context.tenantId,
       locationId: context.locationId,
-      appointmentId: input.appointmentId,
+      appointmentId,
     });
     if (!result.ok) {
       const retryable = result.error.code === "CALENDAR_SYNC_FAILED" && result.error.retryable;
       return toolError(call, result.error.code, "The appointment could not be cancelled. Do not claim it was cancelled.", retryable);
     }
-    return { toolCallId: call.toolCallId, ok: true as const, data: { appointment: result.value } };
+    this.appointmentReferencesByCall.get(context.callId)?.delete(input.appointmentReference);
+    return { toolCallId: call.toolCallId, ok: true as const, data: { cancelled: true, reference: input.appointmentReference } };
   }
 
   private async rescheduleAppointment(context: ToolExecutionContext, call: AgentToolCall) {
@@ -414,11 +420,13 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before rescheduling an appointment.", false);
     const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["appointmentId", "startAt"], ["appointmentId", "startAt"])
-      || !text(input.appointmentId) || !dateTime(input.startAt)) {
-      return invalid(call, "appointmentId and a valid startAt are required");
+    if (!exactKeys(input, ["appointmentReference", "startAt"], ["appointmentReference", "startAt"])
+      || !text(input.appointmentReference) || !dateTime(input.startAt)) {
+      return invalid(call, "appointmentReference and a valid startAt are required");
     }
-    const lookup = await appointments.getAppointment({ tenantId: context.tenantId, locationId: context.locationId, appointmentId: input.appointmentId });
+    const appointmentId = this.appointmentReferencesByCall.get(context.callId)?.get(input.appointmentReference);
+    if (!appointmentId) return toolError(call, "APPOINTMENT_REFERENCE_NOT_FOUND", "List upcoming appointments again and use one of the returned references.", false);
+    const lookup = await appointments.getAppointment({ tenantId: context.tenantId, locationId: context.locationId, appointmentId });
     if (!lookup.ok || lookup.value.customerId !== customerId) {
       return toolError(call, "APPOINTMENT_NOT_FOUND", "No reschedulable appointment was found for this verified caller.", false);
     }
@@ -427,7 +435,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     calendarLog("calendar.appointment.reschedule_requested", {
       tenantId: context.tenantId,
       locationId: context.locationId,
-      appointmentId: input.appointmentId,
+      appointmentId,
       bookingStartAtReceived: input.startAt,
       clinicTimezone: normalizedStartAt.timeZone,
       normalizedLocalDateTime: normalizedStartAt.dateTime,
@@ -435,7 +443,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     const result = await appointments.rescheduleAppointment({
       tenantId: context.tenantId,
       locationId: context.locationId,
-      appointmentId: input.appointmentId,
+      appointmentId,
       startAt: normalizedStartAt.instant,
     });
     if (!result.ok) {
@@ -448,7 +456,16 @@ export class ToolExecutorImpl implements ToolExecutor {
     calendarLog("calendar.appointment.reschedule_completed", {
       tenantId: context.tenantId, appointmentId: result.value.id, startAt: result.value.startAt,
     });
-    return { toolCallId: call.toolCallId, ok: true as const, data: { appointment: result.value } };
+    return {
+      toolCallId: call.toolCallId,
+      ok: true as const,
+      data: {
+        rescheduled: true,
+        reference: input.appointmentReference,
+        startAt: result.value.startAt,
+        endAt: result.value.endAt,
+      },
+    };
   }
 
   private async transferToHuman(context: ToolExecutionContext, call: AgentToolCall) {

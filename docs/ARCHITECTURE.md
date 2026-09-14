@@ -123,7 +123,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 La lectura de próximas citas filtra en el repositorio por tenant, location,
 customer, estado confirmado e instante actual. El ejecutor del agente proyecta
 después una vista pública con referencias efímeras ligadas a la llamada; los IDs
-persistidos no cruzan la frontera del modelo.
+persistidos no cruzan la frontera del modelo. Cancelación y reprogramación sólo
+aceptan esas referencias en la misma llamada, las resuelven en memoria y repiten
+la comprobación de ownership antes de invocar el dominio.
 
 ## Persistencia e integraciones
 

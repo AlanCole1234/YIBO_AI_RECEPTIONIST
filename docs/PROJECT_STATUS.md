@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 6 — Capacidades y confirmaciones seguras**.
-- Tarea activa: **TOOL-003 — cancelación y reprogramación mediante referencias**.
+- Tarea activa: **TOOL-004 — ConfirmationGate para mutaciones**.
 - Último checkpoint cerrado: Checkpoint 5; 243 pruebas aprobadas, 1 omitida y
   `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
@@ -31,6 +31,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   de 2026.
 - Última tarea verificada: TOOL-002; `pnpm typecheck` y 55 pruebas focales de
   dominio, tools, configuración, API y SQLite aprobadas el 14 de septiembre de
+  2026.
+- Última tarea verificada: TOOL-003; `pnpm typecheck` y 37 pruebas focales de
+  tools, definición, API y payload Realtime aprobadas el 14 de septiembre de
   2026.
 
 ## Capacidades existentes
@@ -108,8 +111,8 @@ con `pnpm test` y `pnpm build`.
 | AGENT-009 | DONE | Constructor único valida capacidades; contratos completos fijados para ambos modelos |
 | TOOL-001 | DONE | Consulta pública tenant-scoped de servicios, precios localizados y sucursales sin IDs |
 | TOOL-002 | DONE | Consulta tenant/customer/location-scoped con referencias efímeras y snapshots históricos |
-| TOOL-003 | IN_PROGRESS | Cancelación/reprogramación sin IDs expuestos |
-| TOOL-004 | TODO | ConfirmationGate ligado a acción y turno |
+| TOOL-003 | DONE | Mutaciones aceptan sólo referencias efímeras same-call y no devuelven IDs internos |
+| TOOL-004 | IN_PROGRESS | ConfirmationGate ligado a acción y turno |
 | TOOL-005 | TODO | Confirmación expirable y de un solo uso |
 | TOOL-006 | TODO | Límites de tools y escalamiento seguro |
 | TOOL-007 | TODO | Descriptores e instrucciones de capacidades completas |

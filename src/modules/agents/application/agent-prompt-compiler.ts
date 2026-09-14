@@ -58,7 +58,7 @@ export class AgentPromptCompiler {
         ? "After collecting full name and phone number, call update_customer. Never ask for symptoms or medical details."
         : "Do not claim that contact details were saved because update_customer is not enabled.",
       has("reschedule_appointment")
-        ? "Before rescheduling, verify the replacement slot through availability and use only a server-known appointment."
+        ? "Before cancelling or rescheduling, call list_customer_appointments and use only its same-call appointmentReference. Before rescheduling, verify the replacement slot through availability."
         : "",
       has("enable_developer_test_mode")
         ? "This is an authorized local Developer Test Mode session. Enable it only through its tool and keep test bookings isolated."

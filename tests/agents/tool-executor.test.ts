@@ -388,11 +388,14 @@ describe("ToolExecutorImpl", () => {
 
   it("verifies appointment ownership before cancellation", async () => {
     const { cancelAppointment, executor, getAppointment } = fixture();
+    await executor.execute(context, {
+      toolCallId: "list-before-cancel", name: "list_customer_appointments", arguments: {},
+    });
     getAppointment.mockResolvedValueOnce(success({ ...confirmedAppointment, customerId: "customer-2" }));
     const result = await executor.execute(context, {
       toolCallId: "tool-1",
       name: "cancel_appointment",
-      arguments: { appointmentId: "appointment-1" },
+      arguments: { appointmentReference: "upcoming-1" },
     });
 
     expect(result).toMatchObject({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
@@ -401,15 +404,48 @@ describe("ToolExecutorImpl", () => {
 
   it("reschedules only an appointment owned by the verified caller using the clinic timezone", async () => {
     const { executor, rescheduleAppointment } = fixture();
+    await executor.execute(context, {
+      toolCallId: "list-before-reschedule", name: "list_customer_appointments", arguments: {},
+    });
     const result = await executor.execute(context, {
       toolCallId: "tool-reschedule", name: "reschedule_appointment",
-      arguments: { appointmentId: "appointment-1", startAt: "2026-08-11T15:00" },
+      arguments: { appointmentReference: "upcoming-1", startAt: "2026-08-11T15:00" },
     });
 
     expect(rescheduleAppointment).toHaveBeenCalledWith({
       tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1", startAt: "2026-08-11T21:00:00.000Z",
     });
-    expect(result).toMatchObject({ ok: true, data: { appointment: { id: "appointment-1", startAt: "2026-08-11T21:00:00.000Z" } } });
+    expect(result).toEqual({
+      toolCallId: "tool-reschedule",
+      ok: true,
+      data: {
+        rescheduled: true,
+        reference: "upcoming-1",
+        startAt: "2026-08-11T21:00:00.000Z",
+        endAt: "2026-08-11T21:30:00.000Z",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("appointment-1");
+  });
+
+  it("rejects internal IDs and references issued to another call", async () => {
+    const { cancelAppointment, executor } = fixture();
+    await executor.execute(context, {
+      toolCallId: "list-reference", name: "list_customer_appointments", arguments: {},
+    });
+
+    const internalId = await executor.execute(context, {
+      toolCallId: "cancel-internal-id", name: "cancel_appointment",
+      arguments: { appointmentId: "appointment-1" },
+    });
+    const otherCall = await executor.execute({ ...context, callId: "call-2" }, {
+      toolCallId: "cancel-other-call", name: "cancel_appointment",
+      arguments: { appointmentReference: "upcoming-1" },
+    });
+
+    expect(internalId).toMatchObject({ ok: false, error: { code: "INVALID_TOOL_ARGUMENTS" } });
+    expect(otherCall).toMatchObject({ ok: false, error: { code: "APPOINTMENT_REFERENCE_NOT_FOUND" } });
+    expect(cancelAppointment).not.toHaveBeenCalled();
   });
 
   it("maps a patient-facing service and saves contact details without returning them", async () => {
