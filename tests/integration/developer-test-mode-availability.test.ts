@@ -26,7 +26,7 @@ describe("Developer Test Mode availability", () => {
       name: "create_appointment",
       arguments: { employeeId: earliest.employeeId, startAt: earliest.startAt },
     });
-    expect(booking).toMatchObject({ ok: true, data: { appointment: { status: "CONFIRMED", startAt: earliest.startAt } } });
+    expect(booking).toMatchObject({ ok: true, data: { confirmed: true, startAt: earliest.startAt } });
   });
 
   it("returns the next deterministic slot when 7:00 AM is booked", async () => {
@@ -55,7 +55,7 @@ describe("Developer Test Mode availability", () => {
       name: "create_appointment",
       arguments: { employeeId: earliest.employeeId, startAt: earliest.startAt },
     });
-    expect(booking).toMatchObject({ ok: true, data: { appointment: { startAt: earliest.startAt } } });
+    expect(booking).toMatchObject({ ok: true, data: { confirmed: true, startAt: earliest.startAt } });
   });
 
   it("leaves regular availability on the normal calendar/business-hours path", async () => {

@@ -33,6 +33,21 @@ describe("agent configuration API", () => {
         kind: expect.stringMatching(/^(consult|mutate|external)$/),
       }));
     }
+    const create = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "create_appointment")!;
+    const cancel = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "cancel_appointment")!;
+    const reschedule = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "reschedule_appointment")!;
+    expect(create.description).toContain("successful public result");
+    expect(create.inputSchema).toMatchObject({ properties: {
+      employeeId: { description: expect.stringContaining("opaque professional reference") },
+    } });
+    expect(cancel.inputSchema).toMatchObject({
+      required: ["appointmentReference"], properties: { appointmentReference: expect.any(Object) },
+    });
+    expect(reschedule.inputSchema).toMatchObject({
+      required: ["appointmentReference", "startAt"], properties: { appointmentReference: expect.any(Object) },
+    });
+    expect(JSON.stringify(cancel.inputSchema)).not.toContain("appointmentId");
+    expect(JSON.stringify(reschedule.inputSchema)).not.toContain("appointmentId");
   });
 
   it("reads the tenant configuration and applies updates to the shared agent service", async () => {

@@ -283,6 +283,23 @@ describe("ToolExecutorImpl", () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result).toEqual({
+      toolCallId: "tool-42",
+      ok: true,
+      data: {
+        confirmed: true,
+        service: "Consultation",
+        startAt: "2026-08-10T15:00:00.000Z",
+        endAt: "2026-08-10T15:30:00.000Z",
+        timezone: "America/Denver",
+        location: "YIBO Dental",
+        price: { amountMinor: 0, currency: "USD", display: expect.any(String) },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("appointment-1");
+    expect(JSON.stringify(result)).not.toContain("customer-1");
+    expect(JSON.stringify(result)).not.toContain("employee-1");
+    expect(JSON.stringify(result)).not.toContain("service-1");
     expect(createAppointment).toHaveBeenCalledWith({
       tenantId: "tenant-a",
       locationId: "default",

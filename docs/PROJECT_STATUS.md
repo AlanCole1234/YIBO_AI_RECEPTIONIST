@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 6 — Capacidades y confirmaciones seguras**.
-- Tarea activa: **TOOL-007 — descriptores e instrucciones completas**.
+- Tarea activa: **TOOL-008 — aislamiento permanente de herramientas de prueba**.
 - Último checkpoint cerrado: Checkpoint 5; 243 pruebas aprobadas, 1 omitida y
   `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
@@ -44,6 +44,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Última tarea verificada: TOOL-006; `pnpm typecheck` y 34 pruebas focales de
   límites, excepciones, confirmación y conversación aprobadas el 14 de septiembre
   de 2026.
+- Última tarea verificada: TOOL-007; `pnpm typecheck` y 40 pruebas focales de
+  prompt, tools, API, modo de prueba y flujo E2E en memoria aprobadas el 14 de
+  septiembre de 2026.
 
 ## Capacidades existentes
 
@@ -124,8 +127,8 @@ con `pnpm test` y `pnpm build`.
 | TOOL-004 | DONE | ADR-007, política mutable y token opaco ligado a call/tool/args/turn sin ejecutar |
 | TOOL-005 | DONE | Segundo intento exige turno nuevo y mismos args dentro de 2 minutos; token single-use |
 | TOOL-006 | DONE | Límites globales/por tool, reintentos, transferencia y excepciones con errores seguros |
-| TOOL-007 | IN_PROGRESS | Descriptores e instrucciones de capacidades completas |
-| TOOL-008 | TODO | Aislamiento permanente de herramientas de prueba |
+| TOOL-007 | DONE | Prompt efectivo por capacidad y resultados de mutación públicos sin autoridad directa |
+| TOOL-008 | IN_PROGRESS | Aislamiento permanente de herramientas de prueba |
 | UI-001 | TODO | Shell de autenticación y permisos |
 | UI-002 | TODO | Panel generado desde capacidades del modelo |
 | UI-003 | TODO | Edición de comportamiento, tools y escalamiento |

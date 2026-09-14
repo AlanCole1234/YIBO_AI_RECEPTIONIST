@@ -7,6 +7,7 @@ export interface AgentPromptInput {
   locationName: string;
   locationTimezone: string;
   enabledTools: AgentToolName[];
+  confirmationRequiredFor: AgentToolName[];
   behavior: AgentBehaviorConfiguration;
 }
 
@@ -42,6 +43,7 @@ export class AgentPromptCompiler {
       "# Enabled capabilities",
       capabilities,
       "A tool request is only a request. Backend validation and the tool result determine whether an action happened.",
+      confirmationInstruction(input.confirmationRequiredFor),
       has("get_service_information")
         ? "Use get_service_information as the sole source of service descriptions, prices, and branch availability; repeat only its patient-facing fields."
         : "Do not claim access to current service descriptions, prices, or branch offerings.",
@@ -52,14 +54,20 @@ export class AgentPromptCompiler {
         ? "Use check_availability as the sole source of appointment times. Never ask for service IDs or reveal why a time is busy."
         : "Do not claim calendar access because check_availability is not enabled.",
       has("create_appointment")
-        ? "Create an appointment only after the caller accepts a verified slot; confirm it only after the tool succeeds."
+        ? "Use create_appointment only after the caller accepts a verified slot. Treat its public confirmation, service, time, and historical price as authoritative; never claim the booking exists before success."
         : "Do not claim that you can create appointments because create_appointment is not enabled.",
       has("update_customer")
-        ? "After collecting full name and phone number, call update_customer. Never ask for symptoms or medical details."
+        ? "After collecting full name and phone number, use update_customer to request saving them. Never ask for symptoms or medical details, and claim the contact was saved only after success."
         : "Do not claim that contact details were saved because update_customer is not enabled.",
+      has("cancel_appointment")
+        ? "To cancel, first use list_customer_appointments, select its same-call appointmentReference with the caller, and use cancel_appointment. State that it is cancelled only after success."
+        : "Do not claim that you can cancel appointments because cancel_appointment is not enabled.",
       has("reschedule_appointment")
-        ? "Before cancelling or rescheduling, call list_customer_appointments and use only its same-call appointmentReference. Before rescheduling, verify the replacement slot through availability."
-        : "",
+        ? "To reschedule, first use list_customer_appointments, use only its same-call appointmentReference, verify the replacement through check_availability, and use reschedule_appointment. State the new time only after success."
+        : "Do not claim that you can reschedule appointments because reschedule_appointment is not enabled.",
+      has("transfer_to_human")
+        ? "Use transfer_to_human when the caller asks for a person or an active escalation policy requires it. The backend owns the destination; claim transfer only after success and continue assisting if it fails."
+        : "Do not claim that you can transfer the call because transfer_to_human is not enabled.",
       has("enable_developer_test_mode")
         ? "This is an authorized local Developer Test Mode session. Enable it only through its tool and keep test bookings isolated."
         : "",
@@ -73,6 +81,16 @@ export class AgentPromptCompiler {
       "- Use only the enabled tools and their declared schemas; lack of a tool never grants direct authority.",
     ].join("\n");
   }
+}
+
+function confirmationInstruction(tools: AgentToolName[]): string {
+  if (tools.length === 0) {
+    return "No additional backend confirmation gate is active. Still obtain the caller's ordinary agreement before requesting a mutation.";
+  }
+  return [
+    `Backend confirmation is required for: ${tools.join(", ")}.`,
+    "The first request returns an opaque token without executing the action. Describe the exact proposed action and ask the caller to confirm. Retry only after a new caller turn, with identical action arguments and that token. Never fabricate, expose, reuse, or alter a confirmation token.",
+  ].join(" ");
 }
 
 function greetingInstruction(greeting: AgentBehaviorConfiguration["greeting"]): string {

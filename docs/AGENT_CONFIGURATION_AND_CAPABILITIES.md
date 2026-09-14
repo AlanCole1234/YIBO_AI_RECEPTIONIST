@@ -108,7 +108,12 @@ El texto que edita un administrador es guía, no el prompt completo.
 `AgentPromptCompiler` lo delimita y compone después el contexto confiable de la
 sucursal y reglas que no son editables: el modelo no elige tenant, sucursal,
 cliente ni destino; no inventa estado externo y sólo confirma mutaciones después
-de un resultado exitoso de la herramienta.
+de un resultado exitoso de la herramienta. El compilador describe por separado
+cada capacidad realmente habilitada —informar servicios/precios, consultar,
+crear, cancelar, reprogramar, guardar contacto y transferir— y niega autoridad
+sobre las deshabilitadas. También incorpora la lista efectiva de mutaciones con
+confirmación obligatoria y el protocolo de dos turnos; el texto editable no
+puede omitirlo ni relajarlo.
 
 PCM16 little-endian mono a 24 kHz es una invariante del transporte, no una
 preferencia administrativa. Una sola constante compartida define codec, tasa,
@@ -191,6 +196,13 @@ otra vez es necesario iniciar una confirmación nueva.
 `tenantId`, `callId`, `customerId` e idempotencia son contexto confiable y se
 rechazan si aparecen en argumentos del modelo. Deshabilitar una herramienta
 impide que sea registrada en la sesión.
+
+Las mutaciones entregan proyecciones públicas, no entidades persistidas.
+`create_appointment` devuelve únicamente confirmación, servicio, inicio/fin,
+sucursal/zona y el precio histórico localizado; nunca serializa IDs de cita,
+tenant, sucursal, cliente, servicio, profesional, evento externo ni la llave de
+idempotencia. Cancelación y reprogramación responden de la misma forma segura a
+partir de una referencia opaca creada durante la llamada.
 
 `get_service_information` consulta el catálogo completo del tenant usando el
 tenant confiable de la llamada. Devuelve únicamente servicios y ofertas activas:

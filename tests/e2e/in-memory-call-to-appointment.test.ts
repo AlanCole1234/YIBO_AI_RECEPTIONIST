@@ -72,7 +72,21 @@ describe("in-memory call to appointment", () => {
 
     const creation = await waitForToolResult(runtimeSession.receivedToolResults, CREATE_TOOL_CALL_ID);
     if (!creation.ok) throw new Error(`Appointment creation failed: ${creation.error.code}`);
-    const createdAppointment = appointmentFrom(creation.data);
+    expect(creation.data).toMatchObject({
+      confirmed: true,
+      service: "Consulta",
+      startAt: selected.startAt,
+      price: { amountMinor: 0, currency: "MXN" },
+    });
+    expect(JSON.stringify(creation.data)).not.toContain(APPOINTMENT_ID);
+
+    const persisted = await app.appointments.getAppointment({
+      tenantId: TENANT_ID,
+      locationId: "default",
+      appointmentId: APPOINTMENT_ID,
+    });
+    if (!persisted.ok) throw new Error(`Persisted appointment unavailable: ${persisted.error.code}`);
+    const createdAppointment = persisted.value;
 
     expect(createdAppointment).toMatchObject({
       id: APPOINTMENT_ID,
@@ -86,11 +100,6 @@ describe("in-memory call to appointment", () => {
     });
     expect(createdAppointment.externalCalendarEventId).toBeTruthy();
 
-    const persisted = await app.appointments.getAppointment({
-      tenantId: TENANT_ID,
-      locationId: "default",
-      appointmentId: APPOINTMENT_ID,
-    });
     expect(persisted).toEqual({ ok: true, value: createdAppointment });
 
     const customer = await app.customers.findOrCreateByPhone({
@@ -148,13 +157,6 @@ function firstSlot(value: unknown): { employeeId: string; startAt: string; endAt
     throw new Error("Availability tool returned an invalid slot");
   }
   return { employeeId: slot.employeeId, startAt: slot.startAt, endAt: slot.endAt };
-}
-
-function appointmentFrom(value: unknown): Record<string, unknown> {
-  if (!isRecord(value) || !isRecord(value.appointment)) {
-    throw new Error("Create appointment tool did not return an appointment");
-  }
-  return value.appointment;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

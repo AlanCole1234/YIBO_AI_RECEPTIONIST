@@ -355,7 +355,27 @@ export class ToolExecutorImpl implements ToolExecutor {
       return toolError(call, "APPOINTMENT_NOT_CONFIRMED", "The appointment is not confirmed. Do not present it as booked.", false);
     }
     if (testMode) this.testAppointmentsByCall.set(context.callId, [...(this.testAppointmentsByCall.get(context.callId) ?? []), result.value.id]);
-    return { toolCallId: call.toolCallId, ok: true as const, data: { appointment: result.value } };
+    const business = await this.businesses?.getLocation(context.tenantId, context.locationId);
+    const locale = business?.ok ? business.value.location.locale : "en";
+    return {
+      toolCallId: call.toolCallId,
+      ok: true as const,
+      data: {
+        confirmed: true,
+        service: result.value.serviceNameSnapshot,
+        startAt: result.value.startAt,
+        endAt: result.value.endAt,
+        ...(business?.ok ? {
+          timezone: business.value.location.timezone,
+          location: business.value.location.name,
+        } : {}),
+        price: {
+          amountMinor: result.value.priceAmountMinor,
+          currency: result.value.priceCurrency,
+          display: formatMoney(result.value.priceAmountMinor, result.value.priceCurrency, locale),
+        },
+      },
+    };
   }
 
   private async enableDeveloperTestMode(context: ToolExecutionContext, call: AgentToolCall) {

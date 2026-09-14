@@ -30,7 +30,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
       required: [],
       properties: {
         service: { type: "string", minLength: 1, description: "Optional patient-facing service choice, for example Cleaning or Consultation." },
-        employeeId: { type: "string", minLength: 1 },
+        employeeId: { type: "string", minLength: 1, description: "Optional opaque professional reference supplied by verified business or availability data. Copy it unchanged; never invent or speak it." },
         dateExpression: { type: "string", minLength: 1, description: "A supported natural date phrase from the caller." },
         rangeStart: { type: "string", format: "date-time" },
         rangeEnd: { type: "string", format: "date-time" },
@@ -40,7 +40,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "create_appointment",
-    description: "Create an appointment for the verified customer in this call. Use the patient-facing service name, not an internal service ID.",
+    description: "Request creation of an appointment for the verified customer in this call. Use a verified slot and patient-facing service name. Backend validation and any configured confirmation gate retain authority; only a successful public result confirms the booking.",
     presentation: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+", kind: "mutate" },
     inputSchema: {
       type: "object",
@@ -48,7 +48,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
       required: ["employeeId", "startAt"],
       properties: {
         service: { type: "string", minLength: 1, description: "Patient-facing service choice: Cleaning or Consultation. Omit only when the clinic default was already selected." },
-        employeeId: { type: "string", minLength: 1 },
+        employeeId: { type: "string", minLength: 1, description: "Optional opaque professional reference supplied by verified business or availability data. Copy it unchanged; never invent or speak it." },
         startAt: { type: "string", format: "date-time", description: "Copy the accepted calendar slot's startAt exactly. Never reconstruct it as UTC or use the server timezone." },
         confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
       },
@@ -56,7 +56,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "update_customer",
-    description: "Save the verified caller's first and last name and best callback phone number. Use only after collecting both values one question at a time.",
+    description: "Request saving the verified caller's first and last name and best callback phone number. Use only after collecting both values one question at a time; success is the only authority that they were saved.",
     presentation: { title: "Update customer", help: "Saves the verified caller's name and callback number without returning personal data to the model.", route: "Customers", icon: "✎", kind: "mutate" },
     inputSchema: { type: "object", additionalProperties: false, required: ["name", "phone"], properties: {
       name: { type: "string", minLength: 3 }, phone: { type: "string", minLength: 7 },
@@ -65,7 +65,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "cancel_appointment",
-    description: "Cancel an appointment owned by the verified customer using an opaque appointmentReference returned by list_customer_appointments in this call.",
+    description: "Request cancellation of an appointment owned by the verified customer using an opaque appointmentReference returned by list_customer_appointments in this call. Only success authorizes saying it was cancelled.",
     presentation: { title: "Cancel appointments", help: "Uses a same-call public reference and rechecks that the appointment belongs to the verified customer.", route: "Appointments", icon: "×", kind: "mutate" },
     inputSchema: {
       type: "object",
@@ -79,7 +79,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "reschedule_appointment",
-    description: "Reschedule an appointment owned by the verified customer. Use an opaque appointmentReference returned by list_customer_appointments in this call and an exact verified available slot. Never reconstruct a local time as UTC.",
+    description: "Request rescheduling an appointment owned by the verified customer. Use an opaque appointmentReference returned in this call and an exact verified slot. Backend success is authoritative; never reconstruct a local time as UTC.",
     presentation: { title: "Reschedule appointments", help: "Uses a same-call public reference, checks the new time, and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺", kind: "mutate" },
     inputSchema: {
       type: "object",
@@ -94,7 +94,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "transfer_to_human",
-    description: "Transfer this call to the business's configured human destination.",
+    description: "Request transfer of this call to the business's server-configured human destination. The model cannot choose the destination and may claim transfer only after success.",
     presentation: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗", kind: "external" },
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },

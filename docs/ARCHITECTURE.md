@@ -162,9 +162,13 @@ la comprobación de ownership antes de invocar el dominio.
   convierten la forma histórica sin versión a la forma canónica v1 y SQLite la
   reescribe al primer acceso; versiones futuras desconocidas fallan cerradas.
 - `AgentPromptCompiler` convierte la guía editable en una sección delimitada y
-  añade identidad, locale, zona de la sucursal, tools habilitadas y reglas
-  inmutables. `AgentDefinitionService` falla si no puede obtener ese contexto
-  usando el tenant/location confiable de la llamada.
+  añade identidad, locale, zona de la sucursal, tools habilitadas, confirmaciones
+  efectivas y reglas inmutables. Describe sólo capacidades disponibles y mantiene
+  al backend como autoridad de toda mutación. `AgentDefinitionService` falla si
+  no puede obtener ese contexto usando el tenant/location confiable de la llamada.
+- Los resultados de tools son DTO públicos. En particular, crear una cita sólo
+  devuelve confirmación, servicio, horario y precio histórico presentable; la
+  entidad con IDs confiables permanece dentro de Appointments.
 - `buildRealtimeSessionUpdate` es la única frontera que traduce una definición
   validada al contrato `session.update`; valida de nuevo capacidades antes de
   que el adaptador abra una conexión con el proveedor.

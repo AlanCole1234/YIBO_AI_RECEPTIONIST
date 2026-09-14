@@ -47,6 +47,8 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       locationName: location.value.location.name,
       locationTimezone: location.value.location.timezone,
       enabledTools: tools.map(({ name }) => name),
+      confirmationRequiredFor: configuration.toolPolicies.confirmations.requiredFor
+        .filter((name) => tools.some((tool) => tool.name === name)),
       behavior: configuration.behavior,
     });
 
