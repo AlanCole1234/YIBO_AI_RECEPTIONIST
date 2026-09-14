@@ -48,8 +48,8 @@ describe("agent configuration API", () => {
       current: Record<string, unknown>;
     }>();
     expect(body).toMatchObject({
-      current: { schemaVersion: 2, identity: { locale: "es-MX" }, conversation: { model: "gpt-realtime-2.1" } },
-      recommended: { schemaVersion: 2, identity: { locale: "es-MX" } },
+      current: { schemaVersion: 3, identity: { locale: "es-MX" }, conversation: { model: "gpt-realtime-2.1" } },
+      recommended: { schemaVersion: 3, identity: { locale: "es-MX" } },
       secrets: { apiKeyConfigured: false },
     });
     expect(body.modelCapabilities).toEqual(expect.arrayContaining([
@@ -81,7 +81,7 @@ describe("agent configuration API", () => {
     await expect(app.adminAudit.listByTenant(app.tenantId)).resolves.toMatchObject([{
       entityType: "agent_configuration",
       action: "update",
-      entityVersion: "2",
+      entityVersion: "3",
       diff: { audio: {
         before: expect.objectContaining({ voice: "marin" }),
         after: expect.objectContaining({ voice: "cedar" }),

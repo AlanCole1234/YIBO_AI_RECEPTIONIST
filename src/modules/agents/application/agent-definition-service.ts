@@ -27,13 +27,19 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     const location = await this.businesses.getLocation(command.tenantId, command.locationId);
     if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
 
+    const tools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
+      isDeveloperTestTool(tool.name)
+        ? command.developerTestModeAuthorized
+        : configuration.enabledTools.includes(tool.name),
+    );
     const instructions = this.prompts.compile({
       editableInstructions: configuration.identity.instructions,
       locale: configuration.identity.locale,
       businessName: location.value.business.name,
       locationName: location.value.location.name,
       locationTimezone: location.value.location.timezone,
-      enabledTools: configuration.enabledTools,
+      enabledTools: tools.map(({ name }) => name),
+      behavior: configuration.behavior,
     });
 
     const definition: AgentDefinition = {
@@ -42,11 +48,8 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       voice: configuration.audio.voice,
       conversation: structuredClone(configuration.conversation),
       audio: structuredClone(configuration.audio),
-      tools: AGENT_TOOL_DEFINITIONS.filter((tool) =>
-        isDeveloperTestTool(tool.name)
-          ? command.developerTestModeAuthorized
-          : configuration.enabledTools.includes(tool.name),
-      ),
+      behavior: structuredClone(configuration.behavior),
+      tools,
       toolExecutor: this.toolExecutor,
       trustedContext: { ...command },
     };

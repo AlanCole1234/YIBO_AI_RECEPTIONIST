@@ -65,6 +65,7 @@ export interface AgentDefinition {
   voice?: string;
   conversation: AgentConversationConfiguration;
   audio: AgentAudioConfiguration;
+  behavior: AgentBehaviorConfiguration;
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
   trustedContext: ToolExecutionContext;
@@ -79,6 +80,28 @@ export interface AgentConversationConfiguration {
     | { mode: "auto" | "disabled" }
     | { mode: "retention_ratio"; retentionRatio: number; postInstructionsTokens?: number };
 }
+
+export interface AgentBehaviorConfiguration {
+  greeting:
+    | { mode: "wait_for_caller" }
+    | { mode: "automatic"; message: string };
+  responseStyle: {
+    brevity: "brief" | "balanced" | "detailed";
+    tone: "warm" | "professional" | "direct";
+    pace: "slow" | "balanced" | "fast";
+  };
+  silence: {
+    message: string;
+    maxPrompts: number;
+  };
+  slotOffering: {
+    maximumOptions: number;
+    strategy: "earliest_first" | "spread_across_day" | "match_requested_time";
+  };
+  dataCollectionOrder: AgentDataCollectionField[];
+}
+
+export type AgentDataCollectionField = "full_name" | "phone_number" | "service";
 
 export type ConversationBehavior = AgentConversationConfiguration;
 

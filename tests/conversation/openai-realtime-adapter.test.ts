@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_AGENT_BEHAVIOR } from "../../src/modules/agents/index.js";
 import {
   OpenAIRealtimeAdapter,
   type RealtimeConnection,
@@ -19,6 +20,7 @@ const agent = {
       idleTimeoutMs: 6_000, silenceDurationMs: 800,
     },
   },
+  behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
   tools: [{
     name: "check_availability" as const,
     description: "Find available times",
@@ -82,13 +84,7 @@ describe("OpenAIRealtimeAdapter", () => {
         type: "realtime",
         model: "gpt-realtime-2.1",
         output_modalities: ["text"],
-        instructions: [
-          "Help the caller schedule an appointment.",
-          "Keep responses concise, but always finish the current sentence naturally.",
-          "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
-          "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
-        ].join("\n"),
+        instructions: "Help the caller schedule an appointment.",
         tools: [{
           type: "function",
           name: "check_availability",
@@ -258,6 +254,58 @@ describe("OpenAIRealtimeAdapter", () => {
         idle_timeout_ms: 6000,
       } } } },
     });
+  });
+
+  it("starts an explicitly configured greeting and enforces the consecutive silence limit", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-greeting",
+      agent: {
+        ...agent,
+        behavior: {
+          ...structuredClone(DEFAULT_AGENT_BEHAVIOR),
+          greeting: { mode: "automatic", message: "Gracias por llamar a YIBO." },
+          silence: { message: "¿Sigue en la línea?", maxPrompts: 1 },
+        },
+      },
+    });
+
+    expect(value.connection.sent[1]).toEqual({
+      type: "response.create",
+      response: {
+        instructions: 'Say exactly this greeting and add nothing else: "Gracias por llamar a YIBO.".',
+      },
+    });
+
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "silence-1" } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.cancel" });
+    value.connection.emit({ type: "response.done", response: { id: "silence-1", status: "completed" } });
+
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "silence-2" } });
+    expect(value.connection.sent).toContainEqual({ type: "response.cancel" });
+  });
+
+  it("does not apply the silence-response limit when automatic VAD responses are disabled", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-manual-silence",
+      agent: {
+        ...agent,
+        audio: {
+          ...agent.audio,
+          turnDetection: { type: "server_vad", createResponse: false, interruptResponse: true },
+        },
+        behavior: {
+          ...structuredClone(DEFAULT_AGENT_BEHAVIOR),
+          silence: { message: "Wait", maxPrompts: 0 },
+        },
+      },
+    });
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "unrelated-response" } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.cancel" });
   });
 
   it("maps semantic VAD, far-field noise reduction, tracing and retention truncation", async () => {

@@ -91,21 +91,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
         type: "realtime",
         model,
         output_modalities: [this.mode],
-        instructions: [
-          input.agent.instructions,
-          "Keep responses concise, but always finish the current sentence naturally.",
-          "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
-          input.agent.tools.some((tool) => tool.name === "check_availability")
-            ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details."
-            : "Do not claim calendar access when a calendar tool is not provided.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
-          input.agent.tools.some((tool) => tool.name === "update_customer")
-            ? "After the caller accepts a verified time, ask exactly one question at a time: first 'What's your first and last name?', then 'What's the best phone number to reach you?', then 'Is this for a cleaning or a consultation?'. After name and phone are collected, call update_customer. Use the caller's Cleaning or Consultation answer as the service argument for create_appointment; never expose IDs. Do not ask for symptoms or medical details."
-            : "",
-          input.agent.tools.some((tool) => tool.name === "enable_developer_test_mode")
-            ? "This is an authorized local Developer Test Mode session. When the developer says 'test mode', call enable_developer_test_mode and say it is enabled only after success. In Test Mode, use the normal check_availability and create_appointment tools, but skip patient questions. For an available slot, create it as the supplied test customer and state the exact time only after success. Use delete_test_appointments only when asked to remove this session's test bookings."
-            : "",
-        ].filter(Boolean).join("\n"),
+        instructions: input.agent.instructions,
         ...(this.mode === "audio" ? {
           audio: {
             input: {
@@ -135,6 +121,15 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
         truncation: buildTruncationPayload(input.agent.conversation.truncation),
       },
     });
+    if (input.agent.behavior.greeting.mode === "automatic") {
+      connection.send({
+        type: "response.create",
+        response: {
+          instructions: `Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
+        },
+      });
+      this.logger.info?.("OpenAI Realtime automatic greeting requested");
+    }
     this.logger.info?.("OpenAI Realtime session.update sent", {
       model,
       mode: this.mode,
@@ -159,6 +154,10 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private toolResponsePending = false;
   private inputAudioFrames = 0;
   private callerIsSpeaking = false;
+  private readonly behavior: OpenConversationInput["agent"]["behavior"];
+  private readonly automaticSilenceResponse: boolean;
+  private silencePromptCount = 0;
+  private suppressNextSilenceResponse = false;
 
   constructor(
     private readonly connection: RealtimeConnection,
@@ -167,6 +166,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     private readonly mode: "text" | "audio",
   ) {
     this.allowedTools = new Set(input.agent.tools.map((tool) => tool.name));
+    this.behavior = structuredClone(input.agent.behavior);
+    this.automaticSilenceResponse = input.agent.audio.turnDetection.type === "server_vad"
+      && input.agent.audio.turnDetection.createResponse;
     connection.onEvent((event) => this.handleEvent(event));
     connection.onError((error) => this.handleError(error));
     connection.onClose((reason) => this.finish(reason));
@@ -287,6 +289,15 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       case "input_audio_buffer.timeout_triggered":
         this.logger.info?.("OpenAI Realtime idle timeout triggered", eventLogDetails(value));
         this.queue.push({ type: "silence.timeout" });
+        if (!this.automaticSilenceResponse) return;
+        if (this.silencePromptCount >= this.behavior.silence.maxPrompts) {
+          this.suppressNextSilenceResponse = true;
+          this.logger.info?.("OpenAI Realtime silence prompt limit reached", {
+            maxPrompts: this.behavior.silence.maxPrompts,
+          });
+        } else {
+          this.silencePromptCount += 1;
+        }
         return;
       case "response.output_text.delta":
         if (typeof value.delta === "string") {
@@ -336,6 +347,8 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       case "input_audio_buffer.speech_started":
         this.logger.info?.("OpenAI Realtime speech started", eventLogDetails(value));
         this.callerIsSpeaking = true;
+        this.silencePromptCount = 0;
+        this.suppressNextSilenceResponse = false;
         this.setState("user_speaking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_started" });
         return;
@@ -348,6 +361,13 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       case "response.created":
         this.logger.info?.("OpenAI Realtime response created", eventLogDetails(value));
         this.activeResponseId = responseId(value);
+        if (this.suppressNextSilenceResponse) {
+          this.suppressNextSilenceResponse = false;
+          this.connection.send({ type: "response.cancel" });
+          this.logger.info?.("OpenAI Realtime silence response cancelled", {
+            maxPrompts: this.behavior.silence.maxPrompts,
+          });
+        }
         this.setState("thinking", { ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
         this.queue.push({ type: "assistant.response_created", ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
         return;

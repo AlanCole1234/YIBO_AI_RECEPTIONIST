@@ -45,3 +45,17 @@ Los modos de turno son una unión discriminada (`server_vad`, `semantic_vad` o
 manual) para impedir combinaciones de campos inválidas. PCM mono a 24 kHz queda
 fuera del documento por ser una invariante del transporte. Tracing permanece
 deshabilitado por defecto como decisión de privacidad.
+
+## Consecuencia aplicada — AGENT-005
+
+El 14 de septiembre de 2026 el esquema avanzó a versión 3 para añadir
+`behavior`. La migración v2→v3 asigna defaults conservadores y localizados sin
+reinterpretar la guía editable. Saludo, estilo de respuesta, silencios, oferta
+de slots y orden de recopilación son campos enumerados y validados; el prompt
+libre no puede sustituirlos porque el compilador los coloca después de la guía
+administrativa.
+
+El adaptador no contiene ya políticas conversacionales propias: recibe un prompt
+compilado. Dos comportamientos necesitan control de runtime y no sólo una
+instrucción: el saludo automático inicia una respuesta explícita y las
+repreguntas por silencio se cancelan al alcanzar su límite configurado.

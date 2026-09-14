@@ -14,8 +14,8 @@ describe("SQLite agent configuration and usage", () => {
     };
 
     expect(result.configuration.audio.voice).toBe("marin");
-    expect(result.configuration.schemaVersion).toBe(2);
-    expect(result.persistedSchemaVersion).toBe(2);
+    expect(result.configuration.schemaVersion).toBe(3);
+    expect(result.persistedSchemaVersion).toBe(3);
     expect(result.configuration.enabledTools).toHaveLength(6);
     expect(result.usage).toEqual({
       inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,

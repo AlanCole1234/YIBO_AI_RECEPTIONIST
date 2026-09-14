@@ -1,17 +1,36 @@
 import type { AgentConfiguration } from "../ports/agent-dependencies.js";
 import type {
+  AgentBehaviorConfiguration,
   AgentTurnDetectionConfiguration,
   ConversationBehavior,
 } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 
-export const AGENT_CONFIGURATION_DEFAULTS_VERSION = 2;
+export const AGENT_CONFIGURATION_DEFAULTS_VERSION = 3;
 export const DEFAULT_REALTIME_MODEL = "gpt-realtime-2.1";
 export const DEFAULT_CONVERSATION_VOICE = "marin";
 export const DEFAULT_MAX_OUTPUT_TOKENS = 512;
 export const DEFAULT_VAD_SILENCE_DURATION_MS = 800;
 export const DEFAULT_IDLE_TIMEOUT_MS = 6_000;
 export const DEFAULT_NOISE_REDUCTION = "near_field" as const;
+export const DEFAULT_AGENT_BEHAVIOR: AgentBehaviorConfiguration = {
+  greeting: { mode: "wait_for_caller" },
+  responseStyle: { brevity: "brief", tone: "warm", pace: "balanced" },
+  silence: {
+    message: "I am still here. How may I help you?",
+    maxPrompts: 1,
+  },
+  slotOffering: { maximumOptions: 1, strategy: "earliest_first" },
+  dataCollectionOrder: ["full_name", "phone_number", "service"],
+};
+
+export function createDefaultAgentBehavior(locale: string): AgentBehaviorConfiguration {
+  const behavior = structuredClone(DEFAULT_AGENT_BEHAVIOR);
+  if (locale.toLowerCase().startsWith("es")) {
+    behavior.silence.message = "¿Sigue en la línea? Puedo ayudarle cuando esté listo.";
+  }
+  return behavior;
+}
 
 export interface DefaultAgentConfigurationInput {
   locale: string;
@@ -28,12 +47,11 @@ export function createDefaultAgentConfiguration(
   input: DefaultAgentConfigurationInput,
 ): AgentConfiguration {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     identity: {
       instructions: [
-        "Speak warmly and naturally, using complete sentences and a conversational rhythm.",
-        "Be concise, but never cut off a sentence or end abruptly.",
-        "For a new booking, ask only: 'What day would you like to come in?' Wait for the answer before asking anything else. Resolve supported day phrases with check_availability, offer only the earliest available time first, and keep each reply to one or two short sentences. After the caller accepts an available time, collect the required contact details one question at a time, then create the appointment and confirm it only when the booking succeeds.",
+        "Help callers complete supported receptionist tasks using the enabled tools.",
+        "Ask only for information required by the selected task.",
       ].join(" "),
       locale: input.locale,
     },
@@ -52,6 +70,7 @@ export function createDefaultAgentConfiguration(
       noiseReduction: DEFAULT_NOISE_REDUCTION,
       turnDetection: resolveTurnDetection(input.turnDetection),
     },
+    behavior: createDefaultAgentBehavior(input.locale),
   };
 }
 

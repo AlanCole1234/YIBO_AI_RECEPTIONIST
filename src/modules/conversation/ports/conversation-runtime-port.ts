@@ -15,7 +15,7 @@ export interface AssistantPlaybackPosition {
 
 export interface OpenConversationInput {
   conversationId: string;
-  agent: Pick<AgentDefinition, "instructions" | "locale" | "voice" | "tools" | "conversation" | "audio">;
+  agent: Pick<AgentDefinition, "instructions" | "locale" | "voice" | "tools" | "conversation" | "audio" | "behavior">;
 }
 
 export type ToolResultEnvelope =

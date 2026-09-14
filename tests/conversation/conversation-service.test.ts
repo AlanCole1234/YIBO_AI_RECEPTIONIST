@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentDefinition, AgentToolResult, ToolExecutor } from "../../src/modules/agents/index.js";
+import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
   ConversationService,
   ScriptedConversationRuntime,
@@ -45,6 +45,7 @@ function fixture(inboundAudio: AsyncIterable<AudioFrame> = stream()) {
       voice: "neutral", noiseReduction: "near_field",
       turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
     },
+    behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
     tools: [{
       name: "check_availability",
       description: "Find available appointment times",
@@ -89,6 +90,7 @@ describe("ConversationService", () => {
         voice: value.agent.voice,
         conversation: value.agent.conversation,
         audio: value.agent.audio,
+        behavior: value.agent.behavior,
         tools: value.agent.tools,
       },
     }]);

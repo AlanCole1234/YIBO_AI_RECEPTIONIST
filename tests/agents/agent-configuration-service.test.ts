@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentConfigurationService,
+  createDefaultAgentBehavior,
   InMemoryAgentConfigurationSource,
   upgradeAgentConfiguration,
 } from "../../src/modules/agents/index.js";
@@ -15,7 +16,7 @@ describe("AgentConfigurationService", () => {
       "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     expect(recommended).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       identity: { locale: "es-MX" },
       audio: {
         voice: "marin",
@@ -28,6 +29,7 @@ describe("AgentConfigurationService", () => {
           interruptResponse: true,
         },
       },
+      behavior: createDefaultAgentBehavior("es-MX"),
       conversation: {
         model: "gpt-realtime-2.1",
         maxOutputTokens: 512,
@@ -53,7 +55,7 @@ describe("AgentConfigurationService", () => {
     }]);
     const service = new AgentConfigurationService(repository);
     await expect(service.get("tenant-legacy")).resolves.toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       identity: { instructions: "Keep this prompt", locale: "es-MX" },
       enabledTools: ["check_availability"],
       conversation: {
@@ -67,6 +69,7 @@ describe("AgentConfigurationService", () => {
           silenceDurationMs: 800,
         },
       },
+      behavior: createDefaultAgentBehavior("es-MX"),
     });
     await expect(service.update("tenant-legacy", {
       schemaVersion: 99,
@@ -74,7 +77,7 @@ describe("AgentConfigurationService", () => {
     } as never)).rejects.toThrow("unsupported agent configuration schemaVersion");
   });
 
-  it("upgrades an explicit v1 document to v2 idempotently", () => {
+  it("upgrades an explicit v1 document to v3 idempotently", () => {
     const upgraded = upgradeAgentConfiguration({
       schemaVersion: 1,
       instructions: "Preserve these instructions",
@@ -94,7 +97,7 @@ describe("AgentConfigurationService", () => {
     });
 
     expect(upgraded).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       identity: { instructions: "Preserve these instructions", locale: "en-US" },
       conversation: {
         model: "gpt-realtime-2.1-mini",
@@ -118,6 +121,28 @@ describe("AgentConfigurationService", () => {
       },
     });
     expect(upgradeAgentConfiguration(upgraded)).toEqual(upgraded);
+  });
+
+  it("upgrades v2 behavior defaults and validates structured behavior", async () => {
+    const v2 = createV2Configuration();
+    expect(upgradeAgentConfiguration(v2)).toMatchObject({
+      schemaVersion: 3,
+      behavior: createDefaultAgentBehavior("es-MX"),
+    });
+
+    const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
+    const configured = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.behavior = {
+      greeting: { mode: "automatic", message: "Gracias por llamar a YIBO." },
+      responseStyle: { brevity: "balanced", tone: "professional", pace: "slow" },
+      silence: { message: "¿Sigue en la línea?", maxPrompts: 2 },
+      slotOffering: { maximumOptions: 3, strategy: "spread_across_day" },
+      dataCollectionOrder: ["service", "full_name", "phone_number"],
+    };
+    await expect(service.update("tenant-1", configured)).resolves.toEqual(configured);
+
+    configured.behavior.dataCollectionOrder = ["service", "service", "phone_number"];
+    await expect(service.update("tenant-1", configured)).rejects.toThrow("dataCollectionOrder");
   });
 
   it("rejects unknown tools and unsafe output limits", async () => {
@@ -175,3 +200,22 @@ describe("AgentConfigurationService", () => {
     await expect(service.update("tenant-1", invalidRetention)).rejects.toThrow("retentionRatio");
   });
 });
+
+function createV2Configuration() {
+  return {
+    schemaVersion: 2 as const,
+    identity: { instructions: "Keep v2 guidance", locale: "es-MX" },
+    enabledTools: ["check_availability" as const],
+    conversation: {
+      model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const,
+      tracing: "disabled" as const, truncation: { mode: "auto" as const },
+    },
+    audio: {
+      voice: "marin", noiseReduction: "near_field" as const,
+      turnDetection: {
+        type: "server_vad" as const, createResponse: true, interruptResponse: true,
+        idleTimeoutMs: 6000, silenceDurationMs: 800,
+      },
+    },
+  };
+}

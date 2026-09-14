@@ -9,6 +9,7 @@ export { ToolExecutorImpl } from "./application/tool-executor.js";
 export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export {
   AGENT_CONFIGURATION_DEFAULTS_VERSION,
+  DEFAULT_AGENT_BEHAVIOR,
   DEFAULT_CONVERSATION_VOICE,
   DEFAULT_IDLE_TIMEOUT_MS,
   DEFAULT_MAX_OUTPUT_TOKENS,
@@ -16,14 +17,17 @@ export {
   DEFAULT_REALTIME_MODEL,
   DEFAULT_VAD_SILENCE_DURATION_MS,
   createDefaultAgentConfiguration,
+  createDefaultAgentBehavior,
 } from "./application/agent-configuration-defaults.js";
 export type { DefaultAgentConfigurationInput } from "./application/agent-configuration-defaults.js";
 export { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./application/upgrade-agent-configuration.js";
 export type {
   AgentDefinition,
   AgentAudioConfiguration,
+  AgentBehaviorConfiguration,
   AgentConversationConfiguration,
   AgentTurnDetectionConfiguration,
+  AgentDataCollectionField,
   ConversationBehavior,
   AgentDefinitionError,
   AgentDefinitionFactory,
@@ -38,6 +42,7 @@ export type {
 export type {
   AgentConfiguration,
   AgentConfigurationV1,
+  AgentConfigurationV2,
   AgentConfigurationSource,
   AgentConfigurationRepository,
   LegacyAgentConfiguration,

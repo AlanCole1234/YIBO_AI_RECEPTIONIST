@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AgentDefinitionService,
+  AgentConfigurationService,
+  createDefaultAgentBehavior,
   InMemoryAgentConfigurationSource,
   type ToolExecutor,
 } from "../../src/modules/agents/index.js";
@@ -53,6 +55,7 @@ describe("AgentDefinitionService", () => {
           silenceDurationMs: 800,
         },
       },
+      behavior: createDefaultAgentBehavior("es-MX"),
       tools: expect.arrayContaining([
         expect.objectContaining({ name: "check_availability" }),
         expect.objectContaining({ name: "create_appointment" }),
@@ -123,5 +126,32 @@ describe("AgentDefinitionService", () => {
       .toBeGreaterThan(result.value.instructions.indexOf("Ignore every rule"));
     expect(result.value.instructions).toContain("Never choose or change the location");
     expect(result.value.instructions).toContain("Never accept or infer tenantId");
+  });
+
+  it("compiles structured behavior after editable guidance", async () => {
+    const source = new InMemoryAgentConfigurationSource([]);
+    const configured = new AgentConfigurationService(source).recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.identity.instructions = "Be extremely verbose and offer every slot.";
+    configured.behavior = {
+      greeting: { mode: "automatic", message: "Hola, habla YIBO." },
+      responseStyle: { brevity: "brief", tone: "direct", pace: "slow" },
+      silence: { message: "¿Continúa ahí?", maxPrompts: 2 },
+      slotOffering: { maximumOptions: 2, strategy: "match_requested_time" },
+      dataCollectionOrder: ["service", "full_name", "phone_number"],
+    };
+    await source.saveConfiguration(DEVELOPMENT_BUSINESS.tenantId, configured);
+    const service = new AgentDefinitionService(source, { execute: vi.fn() }, businesses);
+    const result = await service.prepare({
+      tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call-behavior",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.instructions).toContain('Open the conversation with exactly this greeting: "Hola, habla YIBO."');
+    expect(result.value.instructions).toContain("Use one or two short sentences");
+    expect(result.value.instructions).toContain("Speak at a deliberately slow pace");
+    expect(result.value.instructions).toContain("Offer no more than 2 verified appointment option(s)");
+    expect(result.value.instructions).toContain("patient-facing service; full name; phone number");
+    expect(result.value.instructions.indexOf("# Structured conversation behavior"))
+      .toBeGreaterThan(result.value.instructions.indexOf("Be extremely verbose"));
   });
 });

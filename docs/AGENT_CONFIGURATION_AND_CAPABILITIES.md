@@ -64,11 +64,11 @@ Los valores recomendados se construyen en una única fábrica versionada del
 módulo Agents. Bootstrap y el panel consumen esa fábrica; el adaptador Realtime
 usa siempre la definición ya resuelta y no sustituye modelo, voz o tokens.
 
-El documento canónico incluye `schemaVersion: 2` y separa `identity`,
-`conversation`, `audio` y `enabledTools`. Las configuraciones históricas sin
-versión o con versión 1 se actualizan en memoria y SQLite, preservando sus
-valores y completando sólo campos ausentes. SQLite guarda la forma canónica al
-primer acceso y una versión futura desconocida se rechaza.
+El documento canónico incluye `schemaVersion: 3` y separa `identity`,
+`conversation`, `audio`, `behavior` y `enabledTools`. Las configuraciones
+históricas sin versión, v1 o v2 se actualizan en memoria y SQLite, preservando
+sus valores y completando sólo campos ausentes. SQLite guarda la forma canónica
+al primer acceso y una versión futura desconocida se rechaza.
 
 ## Controles Realtime editables
 
@@ -83,6 +83,20 @@ primer acceso y una versión futura desconocida se rechaza.
 | `server_vad` | threshold, padding, silencio e inactividad | VAD histórico, 6 s inactivo |
 | `semantic_vad` | eagerness | `auto` |
 | ambos VAD | respuesta e interrupción automáticas | activadas |
+
+`behavior` estructura decisiones que antes estaban duplicadas en prompts:
+saludo automático o espera del caller; brevedad, tono y ritmo; mensaje y máximo
+de repreguntas por silencio; número y estrategia de horarios ofrecidos; y orden
+de nombre, teléfono y servicio. `AgentPromptCompiler` transforma esos campos en
+instrucciones después de la guía editable, y el adaptador Realtime consume sólo
+el prompt compilado. El runtime inicia el saludo únicamente cuando se configuró
+como automático y cancela respuestas de silencio que excedan el límite. Los
+defaults v2→v3 conservan el comportamiento anterior y localizan el mensaje de
+silencio para español.
+
+El mensaje y su límite sólo producen respuestas automáticas cuando se usa
+`server_vad` con `createResponse` activado e `idleTimeoutMs` configurado. En los
+demás modos no se simula un timeout local ni se cancela una respuesta posterior.
 
 El modo manual se representa y se envía como `turn_detection: null`; sólo debe
 activarse en un canal que tenga un gesto explícito para cerrar el turno. La

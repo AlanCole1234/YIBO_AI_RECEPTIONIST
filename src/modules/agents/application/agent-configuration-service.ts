@@ -1,5 +1,6 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentConfiguration, AgentConfigurationRepository, VersionedAgentConfiguration } from "../ports/agent-dependencies.js";
+import type { AgentDataCollectionField } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import {
   createDefaultAgentConfiguration,
@@ -71,6 +72,7 @@ function validateConfiguration(
   }
   capabilityRegistry.validate(value);
   validateConversationControls(value);
+  validateBehavior(value);
   return structuredClone(value);
 }
 
@@ -93,5 +95,29 @@ function validateConversationControls(value: AgentConfiguration): void {
         || truncation.postInstructionsTokens > 127_999)) {
       throw new Error("conversation.truncation.postInstructionsTokens must be between 1 and 127999");
     }
+  }
+}
+
+function validateBehavior(value: AgentConfiguration): void {
+  const { behavior } = value;
+  if (behavior.greeting.mode === "automatic" && !behavior.greeting.message.trim()) {
+    throw new Error("behavior.greeting.message is required for an automatic greeting");
+  }
+  if (!behavior.silence.message.trim()) throw new Error("behavior.silence.message is required");
+  if (!Number.isInteger(behavior.silence.maxPrompts)
+    || behavior.silence.maxPrompts < 0
+    || behavior.silence.maxPrompts > 3) {
+    throw new Error("behavior.silence.maxPrompts must be an integer between 0 and 3");
+  }
+  if (!Number.isInteger(behavior.slotOffering.maximumOptions)
+    || behavior.slotOffering.maximumOptions < 1
+    || behavior.slotOffering.maximumOptions > 5) {
+    throw new Error("behavior.slotOffering.maximumOptions must be an integer between 1 and 5");
+  }
+  const requiredFields: AgentDataCollectionField[] = ["full_name", "phone_number", "service"];
+  if (behavior.dataCollectionOrder.length !== requiredFields.length
+    || new Set(behavior.dataCollectionOrder).size !== requiredFields.length
+    || requiredFields.some((field) => !behavior.dataCollectionOrder.includes(field))) {
+    throw new Error("behavior.dataCollectionOrder must contain full_name, phone_number and service exactly once");
   }
 }

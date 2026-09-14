@@ -1,4 +1,5 @@
 import { it, expect } from "vitest";
+import { DEFAULT_AGENT_BEHAVIOR } from "../../src/modules/agents/index.js";
 import { OpenAIRealtimeAdapter } from "../../src/modules/conversation/index.js";
 
 const liveIt = process.env.OPENAI_API_KEY ? it : it.skip;
@@ -27,6 +28,7 @@ liveIt("asks for availability through a real Realtime tool call", async () => {
         noiseReduction: "near_field",
         turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
       },
+      behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
       tools: [{
         name: "check_availability",
         description: "Find available appointment slots.",

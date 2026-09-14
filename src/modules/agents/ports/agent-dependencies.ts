@@ -2,11 +2,24 @@ import type { Result } from "../../../shared/domain/result.js";
 import type { CallId, LocationId, TenantId } from "../../../shared/types/identifiers.js";
 import type {
   AgentAudioConfiguration,
+  AgentBehaviorConfiguration,
   AgentConversationConfiguration,
   AgentToolName,
 } from "../application/contracts.js";
 
 export interface AgentConfiguration {
+  schemaVersion: 3;
+  identity: {
+    instructions: string;
+    locale: string;
+  };
+  conversation: AgentConversationConfiguration;
+  audio: AgentAudioConfiguration;
+  behavior: AgentBehaviorConfiguration;
+  enabledTools: AgentToolName[];
+}
+
+export interface AgentConfigurationV2 {
   schemaVersion: 2;
   identity: {
     instructions: string;
@@ -46,7 +59,7 @@ export interface LegacyConversationBehavior {
   };
 }
 
-export type VersionedAgentConfiguration = AgentConfiguration | AgentConfigurationV1 | LegacyAgentConfiguration;
+export type VersionedAgentConfiguration = AgentConfiguration | AgentConfigurationV2 | AgentConfigurationV1 | LegacyAgentConfiguration;
 
 export interface AgentConfigurationSource {
   getConfiguration(tenantId: TenantId): Promise<AgentConfiguration | null>;

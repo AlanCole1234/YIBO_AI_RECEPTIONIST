@@ -1,5 +1,6 @@
 import type {
   AgentAudioConfiguration,
+  AgentBehaviorConfiguration,
   AgentConversationConfiguration,
   AgentTurnDetectionConfiguration,
 } from "./contracts.js";
@@ -11,40 +12,54 @@ import {
   DEFAULT_NOISE_REDUCTION,
   DEFAULT_REALTIME_MODEL,
   DEFAULT_VAD_SILENCE_DURATION_MS,
+  createDefaultAgentBehavior,
 } from "./agent-configuration-defaults.js";
 
-export const AGENT_CONFIGURATION_SCHEMA_VERSION = 2 as const;
+export const AGENT_CONFIGURATION_SCHEMA_VERSION = 3 as const;
 
 export const upgradeAgentConfiguration = (input: unknown): AgentConfiguration => {
   if (!isRecord(input)) throw new Error("agent configuration must be an object");
-  if (input.schemaVersion !== undefined && input.schemaVersion !== 1 && input.schemaVersion !== 2) {
+  if (input.schemaVersion !== undefined && input.schemaVersion !== 1 && input.schemaVersion !== 2 && input.schemaVersion !== 3) {
     throw new Error(`unsupported agent configuration schemaVersion: ${String(input.schemaVersion)}`);
   }
-  return input.schemaVersion === 2 ? normalizeV2(input) : upgradeFlatConfiguration(input);
+  if (input.schemaVersion === 3) return normalizeV3(input);
+  if (input.schemaVersion === 2) return upgradeV2(input);
+  return upgradeFlatConfiguration(input);
 };
 
-function normalizeV2(input: Record<string, unknown>): AgentConfiguration {
+function normalizeV3(input: Record<string, unknown>): AgentConfiguration {
   const identity = record(input.identity);
+  const locale = stringOr(identity.locale, "");
   return {
     schemaVersion: AGENT_CONFIGURATION_SCHEMA_VERSION,
     identity: {
       instructions: stringOr(identity.instructions, ""),
-      locale: stringOr(identity.locale, ""),
+      locale,
     },
     enabledTools: enabledTools(input.enabledTools),
     conversation: normalizeConversation(record(input.conversation)),
     audio: normalizeAudio(record(input.audio)),
+    behavior: normalizeBehavior(input.behavior, locale),
+  };
+}
+
+function upgradeV2(input: Record<string, unknown>): AgentConfiguration {
+  const locale = stringOr(record(input.identity).locale, "");
+  return {
+    ...normalizeV3({ ...input, schemaVersion: 3 }),
+    behavior: createDefaultAgentBehavior(locale),
   };
 }
 
 function upgradeFlatConfiguration(input: Record<string, unknown>): AgentConfiguration {
   const conversation = record(input.conversation);
   const legacyTurnDetection = record(conversation.turnDetection);
+  const locale = stringOr(input.locale, "");
   return {
     schemaVersion: AGENT_CONFIGURATION_SCHEMA_VERSION,
     identity: {
       instructions: stringOr(input.instructions, ""),
-      locale: stringOr(input.locale, ""),
+      locale,
     },
     enabledTools: enabledTools(input.enabledTools),
     conversation: {
@@ -74,6 +89,67 @@ function upgradeFlatConfiguration(input: Record<string, unknown>): AgentConfigur
           : { silenceDurationMs: DEFAULT_VAD_SILENCE_DURATION_MS }),
       },
     },
+    behavior: createDefaultAgentBehavior(locale),
+  };
+}
+
+function normalizeBehavior(value: unknown, locale: string): AgentBehaviorConfiguration {
+  const defaults = createDefaultAgentBehavior(locale);
+  const input = record(value);
+  const greeting = record(input.greeting);
+  const greetingMode = enumOrDefault(
+    greeting.mode,
+    ["wait_for_caller", "automatic"] as const,
+    defaults.greeting.mode,
+    "behavior.greeting.mode",
+  );
+  const responseStyle = record(input.responseStyle);
+  const silence = record(input.silence);
+  const slotOffering = record(input.slotOffering);
+  return {
+    greeting: greetingMode === "automatic"
+      ? { mode: "automatic", message: stringOr(greeting.message, "") }
+      : { mode: "wait_for_caller" },
+    responseStyle: {
+      brevity: enumOrDefault(
+        responseStyle.brevity,
+        ["brief", "balanced", "detailed"] as const,
+        defaults.responseStyle.brevity,
+        "behavior.responseStyle.brevity",
+      ),
+      tone: enumOrDefault(
+        responseStyle.tone,
+        ["warm", "professional", "direct"] as const,
+        defaults.responseStyle.tone,
+        "behavior.responseStyle.tone",
+      ),
+      pace: enumOrDefault(
+        responseStyle.pace,
+        ["slow", "balanced", "fast"] as const,
+        defaults.responseStyle.pace,
+        "behavior.responseStyle.pace",
+      ),
+    },
+    silence: {
+      message: stringOr(silence.message, defaults.silence.message),
+      maxPrompts: numberOr(silence.maxPrompts, defaults.silence.maxPrompts),
+    },
+    slotOffering: {
+      maximumOptions: numberOr(
+        slotOffering.maximumOptions,
+        defaults.slotOffering.maximumOptions,
+      ),
+      strategy: enumOrDefault(
+        slotOffering.strategy,
+        ["earliest_first", "spread_across_day", "match_requested_time"] as const,
+        defaults.slotOffering.strategy,
+        "behavior.slotOffering.strategy",
+      ),
+    },
+    dataCollectionOrder: Array.isArray(input.dataCollectionOrder)
+      ? input.dataCollectionOrder.filter((field): field is AgentBehaviorConfiguration["dataCollectionOrder"][number] =>
+        typeof field === "string" && ["full_name", "phone_number", "service"].includes(field))
+      : [...defaults.dataCollectionOrder],
   };
 }
 
