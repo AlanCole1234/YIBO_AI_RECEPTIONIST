@@ -278,6 +278,29 @@ describe("OpenAIRealtimeAdapter", () => {
     });
   });
 
+  it("rejects unsupported runtime options before opening a provider connection", async () => {
+    let connectionAttempts = 0;
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      connectionFactory: {
+        connect: async () => {
+          connectionAttempts += 1;
+          return new FakeRealtimeConnection();
+        },
+      },
+    });
+
+    await expect(adapter.openSession({
+      conversationId: "conversation-invalid-model",
+      agent: {
+        ...agent,
+        channel: "phone",
+        conversation: { ...agent.conversation, model: "unsupported-model" },
+      },
+    })).rejects.toThrow("conversation.model is not supported: unsupported-model");
+    expect(connectionAttempts).toBe(0);
+  });
+
   it("maps the channel tool choice into the Realtime session", async () => {
     const value = fixture();
     await value.adapter.openSession({

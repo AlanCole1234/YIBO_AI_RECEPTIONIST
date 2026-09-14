@@ -9,10 +9,10 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 5 — Esquema avanzado del agente y Realtime**.
-- Tarea activa: **AGENT-009 — payload Realtime validado por modelo**.
-- Último checkpoint cerrado: Checkpoint 4; `pnpm typecheck`, 215 pruebas
-  aprobadas, 1 omitida y `pnpm build` aprobados.
+- Checkpoint activo: **Checkpoint 6 — Capacidades y confirmaciones seguras**.
+- Tarea activa: **TOOL-001 — información segura de servicios y precios**.
+- Último checkpoint cerrado: Checkpoint 5; 243 pruebas aprobadas, 1 omitida y
+  `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-005; `pnpm typecheck`, 227 pruebas aprobadas y
@@ -23,6 +23,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   1 omitida el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-008; `pnpm typecheck` y pruebas focales de
   agente, conversación, Realtime y PCM aprobadas el 14 de septiembre de 2026.
+- Última tarea verificada: AGENT-009; payloads de ambos modelos y rechazo previo
+  a conexión aprobados; suite completa 243/243, 1 omitida y build aprobados el
+  14 de septiembre de 2026.
 
 ## Capacidades existentes
 
@@ -96,8 +99,8 @@ con `pnpm test` y `pnpm build`.
 | AGENT-006 | DONE | Canal confiable, tool_choice, límites, reintentos y transferencia automática en schema v4 |
 | AGENT-007 | DONE | Paralelismo por canal rechazado ante cualquier tool mutable o externa |
 | AGENT-008 | DONE | Canal confiable fuerza audio; PCM16 mono 24 kHz vive en una constante compartida |
-| AGENT-009 | IN_PROGRESS | Payload Realtime validado y probado por modelo |
-| TOOL-001 | TODO | Información segura de servicios y precios |
+| AGENT-009 | DONE | Constructor único valida capacidades; contratos completos fijados para ambos modelos |
+| TOOL-001 | IN_PROGRESS | Información segura de servicios y precios |
 | TOOL-002 | TODO | Listado de próximas citas del cliente |
 | TOOL-003 | TODO | Cancelación/reprogramación sin IDs expuestos |
 | TOOL-004 | TODO | ConfirmationGate ligado a acción y turno |

@@ -1,5 +1,12 @@
 import type { AgentConfiguration } from "../ports/agent-dependencies.js";
-import type { ConversationBehavior } from "./contracts.js";
+import type {
+  AgentAudioConfiguration,
+  AgentChannel,
+  AgentConversationConfiguration,
+  AgentToolDefinition,
+  ConversationBehavior,
+} from "./contracts.js";
+import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 
 export type ReasoningEffort = ConversationBehavior["reasoningEffort"];
 
@@ -32,6 +39,15 @@ export interface RealtimeModelCapability {
     tracing: boolean;
     truncation: boolean;
   };
+}
+
+export interface RealtimeRuntimeOptions {
+  conversation: AgentConversationConfiguration;
+  audio: AgentAudioConfiguration;
+  channel?: AgentChannel;
+  toolChoice: "auto" | "required" | "none";
+  parallelToolCalls: boolean;
+  tools: Array<Pick<AgentToolDefinition, "name" | "presentation">>;
 }
 
 const BUILT_IN_REALTIME_VOICES = [
@@ -96,12 +112,7 @@ export class RealtimeModelCapabilityRegistry {
   validate(configuration: AgentConfiguration): void {
     const capability = this.get(configuration.conversation.model);
     if (!capability) throw new Error(`conversation.model is not supported: ${configuration.conversation.model}`);
-    if (!configuration.audio.voice || !capability.voices.includes(configuration.audio.voice)) {
-      throw new Error(`voice is not supported by ${capability.id}`);
-    }
-    if (!capability.controls.reasoningEfforts.includes(configuration.conversation.reasoningEffort)) {
-      throw new Error(`conversation.reasoningEffort is not supported by ${capability.id}`);
-    }
+    validateModelOptions(capability, configuration.conversation, configuration.audio);
     if (!capability.controls.toolChoice
       && Object.values(configuration.toolPolicies.channels).some(({ toolChoice }) => toolChoice !== "auto")) {
       throw new Error(`toolPolicies.channels.toolChoice is not supported by ${capability.id}`);
@@ -110,30 +121,90 @@ export class RealtimeModelCapabilityRegistry {
       && Object.values(configuration.toolPolicies.channels).some(({ parallelToolCalls }) => parallelToolCalls)) {
       throw new Error(`toolPolicies.channels.parallelToolCalls is not supported by ${capability.id}`);
     }
-    const output = capability.limits.responseOutputTokens;
-    if (!Number.isInteger(configuration.conversation.maxOutputTokens)
-      || configuration.conversation.maxOutputTokens < output.minimum
-      || configuration.conversation.maxOutputTokens > output.maximum) {
-      throw new Error(
-        `conversation.maxOutputTokens must be an integer between ${output.minimum} and ${output.maximum} for ${capability.id}`,
-      );
+  }
+
+  validateRuntimeOptions(options: RealtimeRuntimeOptions): void {
+    const capability = this.get(options.conversation.model);
+    if (!capability) throw new Error(`conversation.model is not supported: ${options.conversation.model}`);
+    validateModelOptions(capability, options.conversation, options.audio);
+    if (!capability.controls.toolChoice && options.toolChoice !== "auto") {
+      throw new Error(`toolChoice is not supported by ${capability.id}`);
     }
-    if (!capability.controls.noiseReductionModes.includes(configuration.audio.noiseReduction)) {
-      throw new Error(`audio.noiseReduction is not supported by ${capability.id}`);
+    if (!capability.controls.parallelToolCalls && options.parallelToolCalls) {
+      throw new Error(`parallelToolCalls is not supported by ${capability.id}`);
     }
-    const turn = configuration.audio.turnDetection;
-    if (!capability.controls.turnDetectionModes.includes(turn.type)) {
-      throw new Error(`audio.turnDetection.type is not supported by ${capability.id}`);
+    if (options.toolChoice === "required" && options.tools.length === 0) {
+      throw new Error("toolChoice cannot be required without tools");
     }
-    if (turn.type === "semantic_vad" && !capability.controls.semanticVadEagerness.includes(turn.eagerness)) {
-      throw new Error(`audio.turnDetection.eagerness is not supported by ${capability.id}`);
+    if (options.toolChoice === "none" && options.tools.length > 0) {
+      throw new Error("tools must be empty when toolChoice is none");
     }
-    if (turn.type === "server_vad") {
-      const vad = capability.controls.serverVad;
-      validateOptionalRange("threshold", turn.threshold, vad.threshold, false);
-      validateOptionalRange("prefixPaddingMs", turn.prefixPaddingMs, vad.prefixPaddingMs, true);
-      validateOptionalRange("silenceDurationMs", turn.silenceDurationMs, vad.silenceDurationMs, true);
+    if (new Set(options.tools.map(({ name }) => name)).size !== options.tools.length) {
+      throw new Error("tools contains duplicate names");
     }
+    if (options.tools.some(({ name }) => !AGENT_TOOL_DEFINITIONS.some((definition) => definition.name === name))) {
+      throw new Error("tools contains an unknown tool");
+    }
+    if (options.parallelToolCalls
+      && options.tools.some(({ name, presentation }) =>
+        (presentation ?? AGENT_TOOL_DEFINITIONS.find((definition) => definition.name === name)?.presentation)?.kind !== "consult")) {
+      throw new Error("parallelToolCalls requires read-only tools only");
+    }
+    if (options.channel === "phone" && options.audio.turnDetection.type === "manual") {
+      throw new Error("manual turn detection is not supported by the phone channel");
+    }
+  }
+}
+
+function validateModelOptions(
+  capability: RealtimeModelCapability,
+  conversation: AgentConversationConfiguration,
+  audio: AgentAudioConfiguration,
+): void {
+  if (!audio.voice || !capability.voices.includes(audio.voice)) {
+    throw new Error(`voice is not supported by ${capability.id}`);
+  }
+  if (!capability.controls.reasoningEfforts.includes(conversation.reasoningEffort)) {
+    throw new Error(`conversation.reasoningEffort is not supported by ${capability.id}`);
+  }
+  const output = capability.limits.responseOutputTokens;
+  if (!Number.isInteger(conversation.maxOutputTokens)
+    || conversation.maxOutputTokens < output.minimum
+    || conversation.maxOutputTokens > output.maximum) {
+    throw new Error(
+      `conversation.maxOutputTokens must be an integer between ${output.minimum} and ${output.maximum} for ${capability.id}`,
+    );
+  }
+  if (conversation.tracing === "auto" && !capability.controls.tracing) {
+    throw new Error(`conversation.tracing is not supported by ${capability.id}`);
+  }
+  if (conversation.truncation.mode !== "auto" && !capability.controls.truncation) {
+    throw new Error(`conversation.truncation is not supported by ${capability.id}`);
+  }
+  if (!capability.controls.noiseReductionModes.includes(audio.noiseReduction)) {
+    throw new Error(`audio.noiseReduction is not supported by ${capability.id}`);
+  }
+  const turn = audio.turnDetection;
+  if (!capability.controls.turnDetectionModes.includes(turn.type)) {
+    throw new Error(`audio.turnDetection.type is not supported by ${capability.id}`);
+  }
+  if (turn.type === "semantic_vad" && !capability.controls.semanticVadEagerness.includes(turn.eagerness)) {
+    throw new Error(`audio.turnDetection.eagerness is not supported by ${capability.id}`);
+  }
+  if (turn.type !== "manual") {
+    if (turn.createResponse && !capability.controls.automaticResponse) {
+      throw new Error(`audio.turnDetection.createResponse is not supported by ${capability.id}`);
+    }
+    if (turn.interruptResponse && !capability.controls.responseInterruption) {
+      throw new Error(`audio.turnDetection.interruptResponse is not supported by ${capability.id}`);
+    }
+  }
+  if (turn.type === "server_vad") {
+    const vad = capability.controls.serverVad;
+    validateOptionalRange("threshold", turn.threshold, vad.threshold, false);
+    validateOptionalRange("prefixPaddingMs", turn.prefixPaddingMs, vad.prefixPaddingMs, true);
+    validateOptionalRange("silenceDurationMs", turn.silenceDurationMs, vad.silenceDurationMs, true);
+    validateOptionalRange("idleTimeoutMs", turn.idleTimeoutMs ?? undefined, capability.controls.idleTimeoutMs, true);
   }
 }
 

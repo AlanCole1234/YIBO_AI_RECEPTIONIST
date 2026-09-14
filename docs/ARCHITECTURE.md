@@ -155,6 +155,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
   añade identidad, locale, zona de la sucursal, tools habilitadas y reglas
   inmutables. `AgentDefinitionService` falla si no puede obtener ese contexto
   usando el tenant/location confiable de la llamada.
+- `buildRealtimeSessionUpdate` es la única frontera que traduce una definición
+  validada al contrato `session.update`; valida de nuevo capacidades antes de
+  que el adaptador abra una conexión con el proveedor.
 
 ## Invariantes
 

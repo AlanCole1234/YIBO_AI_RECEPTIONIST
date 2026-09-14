@@ -89,3 +89,12 @@ ambos fuerzan modalidad de audio. PCM16 little-endian mono a 24 kHz y el formato
 correspondiente del proveedor viven en una constante compartida por Voice y el
 adaptador Realtime. El fallback de texto sólo conserva pruebas directas sin
 canal; no es persistible ni administrable.
+
+## Consecuencia aplicada — AGENT-009
+
+El 14 de septiembre de 2026 la construcción de `session.update` se extrajo a una
+función pura y tipada con el contrato del SDK. La función valida modelo, voz,
+límites, razonamiento, VAD, ruido, tracing, truncación y política de tools contra
+el registro de capacidades antes de producir datos o abrir el WebSocket. Los dos
+modelos admitidos tienen pruebas de contrato completas; un modelo u opción no
+registrados fallan cerrados.

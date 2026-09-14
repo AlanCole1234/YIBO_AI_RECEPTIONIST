@@ -10,11 +10,8 @@ import type {
   ToolResultEnvelope,
 } from "../ports/conversation-runtime-port.js";
 import type { AudioFrame } from "../ports/conversation-runtime-port.js";
-import type {
-  AgentTurnDetectionConfiguration,
-  AgentConversationConfiguration,
-} from "../../agents/index.js";
 import { REALTIME_AUDIO_TRANSPORT } from "../domain/realtime-transport-profile.js";
+import { buildRealtimeSessionUpdate } from "./realtime-session-payload.js";
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
@@ -69,12 +66,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
   async openSession(input: OpenConversationInput): Promise<ConversationRuntimeSession> {
     const model = input.agent.conversation.model;
     const mode = input.agent.channel ? REALTIME_AUDIO_TRANSPORT.modality : this.fallbackMode;
-    const maxOutputTokens = input.agent.conversation.maxOutputTokens;
-    if (!model.trim()) throw new Error("Realtime conversation model is required");
-    if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4096) {
-      throw new Error("Realtime maxOutputTokens must be an integer between 1 and 4096");
-    }
-    const turnDetection = buildTurnDetectionPayload(input.agent.audio.turnDetection);
+    const sessionUpdate = buildRealtimeSessionUpdate(input.agent, mode);
     let connection: RealtimeConnection;
     this.logger.info?.("OpenAI Realtime connection starting", { model, mode });
     try {
@@ -88,42 +80,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
     }
     this.logger.info?.("OpenAI Realtime connection established", { model, mode });
     const session = new OpenAIRealtimeSession(connection, input, this.logger, mode);
-    connection.send({
-      type: "session.update",
-      session: {
-        type: "realtime",
-        model,
-        output_modalities: [mode],
-        instructions: input.agent.instructions,
-        ...(mode === "audio" ? {
-          audio: {
-            input: {
-              format: REALTIME_AUDIO_TRANSPORT.providerFormat,
-              noise_reduction: input.agent.audio.noiseReduction === "disabled"
-                ? null
-                : { type: input.agent.audio.noiseReduction },
-              turn_detection: turnDetection,
-            },
-            output: {
-              format: REALTIME_AUDIO_TRANSPORT.providerFormat,
-              voice: input.agent.audio.voice,
-            },
-          },
-        } : {}),
-        tools: input.agent.tools.map((tool) => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-        })),
-        tool_choice: input.agent.toolChoice,
-        parallel_tool_calls: input.agent.parallelToolCalls,
-        max_output_tokens: maxOutputTokens,
-        reasoning: { effort: input.agent.conversation.reasoningEffort },
-        tracing: input.agent.conversation.tracing === "auto" ? "auto" : null,
-        truncation: buildTruncationPayload(input.agent.conversation.truncation),
-      },
-    });
+    connection.send(sessionUpdate);
     if (input.agent.behavior.greeting.mode === "automatic") {
       connection.send({
         type: "response.create",
@@ -646,35 +603,3 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const number = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-
-function buildTurnDetectionPayload(configuration: AgentTurnDetectionConfiguration): object | null {
-  if (configuration.type === "manual") return null;
-  if (configuration.type === "semantic_vad") {
-    return {
-      type: "semantic_vad",
-      eagerness: configuration.eagerness,
-      create_response: configuration.createResponse,
-      interrupt_response: configuration.interruptResponse,
-    };
-  }
-  return {
-    type: "server_vad",
-    create_response: configuration.createResponse,
-    interrupt_response: configuration.interruptResponse,
-    ...(configuration.idleTimeoutMs === undefined ? {} : { idle_timeout_ms: configuration.idleTimeoutMs }),
-    ...(configuration.threshold === undefined ? {} : { threshold: configuration.threshold }),
-    ...(configuration.prefixPaddingMs === undefined ? {} : { prefix_padding_ms: configuration.prefixPaddingMs }),
-    ...(configuration.silenceDurationMs === undefined ? {} : { silence_duration_ms: configuration.silenceDurationMs }),
-  };
-}
-
-function buildTruncationPayload(configuration: AgentConversationConfiguration["truncation"]): object | string {
-  if (configuration.mode !== "retention_ratio") return configuration.mode;
-  return {
-    type: "retention_ratio",
-    retention_ratio: configuration.retentionRatio,
-    ...(configuration.postInstructionsTokens === undefined
-      ? {}
-      : { token_limits: { post_instructions: configuration.postInstructionsTokens } }),
-  };
-}

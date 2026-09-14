@@ -124,6 +124,13 @@ actual edita el perfil `server_vad`; los modos avanzados ya están disponibles e
 el contrato y API, y su UI condicionada por capacidad corresponde a
 `UI-002/UI-003`.
 
+La frontera con OpenAI no arma objetos `session.update` de forma ad hoc. El
+constructor puro `buildRealtimeSessionUpdate` recibe únicamente la definición
+resuelta, vuelve a validarla contra `RealtimeModelCapabilityRegistry` y devuelve
+el contrato tipado del SDK. Una opción incompatible falla antes de abrir el
+WebSocket. Los payloads completos de `gpt-realtime-2.1` y
+`gpt-realtime-2.1-mini` están fijados por pruebas de contrato.
+
 ## Políticas de herramientas
 
 `toolPolicies` limita por separado telefonía y Voice Lab. Cada canal tiene una
