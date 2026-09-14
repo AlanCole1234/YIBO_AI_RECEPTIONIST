@@ -29,6 +29,7 @@ export class ConversationService implements ConversationServiceContract {
         behavior: structuredClone(command.agent.behavior),
         toolChoice: command.agent.toolChoice,
         parallelToolCalls: command.agent.parallelToolCalls,
+        channel: command.agent.channel,
       },
     });
 

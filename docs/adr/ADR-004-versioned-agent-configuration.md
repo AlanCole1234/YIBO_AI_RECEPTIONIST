@@ -80,3 +80,12 @@ default `false`. Sólo puede activarse si todas las herramientas efectivas del
 canal están clasificadas como consultas. La validación rechaza cualquier
 mutación, integración externa o tool de prueba; el payload Realtime no infiere
 esta propiedad por su cuenta.
+
+## Consecuencia aplicada — AGENT-008
+
+El 14 de septiembre de 2026 se hizo explícita la frontera entre configuración y
+transporte. `phone` y `voice_lab` son canales confiables resueltos en servidor y
+ambos fuerzan modalidad de audio. PCM16 little-endian mono a 24 kHz y el formato
+correspondiente del proveedor viven en una constante compartida por Voice y el
+adaptador Realtime. El fallback de texto sólo conserva pruebas directas sin
+canal; no es persistible ni administrable.

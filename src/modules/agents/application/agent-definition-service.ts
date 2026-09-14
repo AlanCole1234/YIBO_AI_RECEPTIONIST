@@ -58,6 +58,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       behavior: structuredClone(configuration.behavior),
       toolChoice: channelPolicy.toolChoice,
       parallelToolCalls: channelPolicy.parallelToolCalls,
+      channel,
       tools,
       toolExecutor: new PolicyEnforcingToolExecutor(
         this.toolExecutor,

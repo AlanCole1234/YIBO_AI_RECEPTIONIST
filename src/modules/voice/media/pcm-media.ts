@@ -1,7 +1,7 @@
-import type { AudioFrame } from "../../conversation/index.js";
+import { REALTIME_AUDIO_TRANSPORT, type AudioFrame } from "../../conversation/index.js";
 
-export const REALTIME_SAMPLE_RATE = 24_000;
-export const REALTIME_CODEC = "pcm_s16le";
+export const REALTIME_SAMPLE_RATE = REALTIME_AUDIO_TRANSPORT.sampleRate;
+export const REALTIME_CODEC = REALTIME_AUDIO_TRANSPORT.codec;
 
 export interface FloatAudioChunk {
   samples: Float32Array;

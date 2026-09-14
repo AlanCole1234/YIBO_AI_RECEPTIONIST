@@ -14,6 +14,7 @@ import type {
   AgentTurnDetectionConfiguration,
   AgentConversationConfiguration,
 } from "../../agents/index.js";
+import { REALTIME_AUDIO_TRANSPORT } from "../domain/realtime-transport-profile.js";
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
@@ -21,6 +22,7 @@ export interface OpenAIRealtimeAdapterOptions {
   model?: string;
   /** @deprecated Session output limit comes from AgentConfiguration. */
   maxOutputTokens?: number;
+  /** @deprecated Test-only fallback. Product channels resolve their modality from trusted server context. */
   mode?: "text" | "audio";
   /** @deprecated Session VAD comes from AgentConfiguration. */
   turnDetection?: ServerTurnDetectionOptions;
@@ -53,19 +55,20 @@ export interface RealtimeConnection {
 }
 
 export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
-  private readonly mode: "text" | "audio";
+  private readonly fallbackMode: "text" | "audio";
   private readonly logger: RealtimeErrorLogger;
   private readonly connectionFactory: RealtimeConnectionFactory;
 
   constructor(private readonly options: OpenAIRealtimeAdapterOptions) {
     if (!options.apiKey.trim()) throw new Error("OpenAIRealtimeAdapter requires an API key");
-    this.mode = options.mode ?? "audio";
+    this.fallbackMode = options.mode ?? "audio";
     this.logger = options.logger ?? consoleLogger;
     this.connectionFactory = options.connectionFactory ?? sdkConnectionFactory;
   }
 
   async openSession(input: OpenConversationInput): Promise<ConversationRuntimeSession> {
     const model = input.agent.conversation.model;
+    const mode = input.agent.channel ? REALTIME_AUDIO_TRANSPORT.modality : this.fallbackMode;
     const maxOutputTokens = input.agent.conversation.maxOutputTokens;
     if (!model.trim()) throw new Error("Realtime conversation model is required");
     if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4096) {
@@ -73,7 +76,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
     }
     const turnDetection = buildTurnDetectionPayload(input.agent.audio.turnDetection);
     let connection: RealtimeConnection;
-    this.logger.info?.("OpenAI Realtime connection starting", { model, mode: this.mode });
+    this.logger.info?.("OpenAI Realtime connection starting", { model, mode });
     try {
       connection = await this.connectionFactory.connect({
         apiKey: this.options.apiKey,
@@ -83,26 +86,26 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
       this.logger.error("OpenAI Realtime WebSocket connection failed", connectionErrorDetails(error));
       throw error;
     }
-    this.logger.info?.("OpenAI Realtime connection established", { model, mode: this.mode });
-    const session = new OpenAIRealtimeSession(connection, input, this.logger, this.mode);
+    this.logger.info?.("OpenAI Realtime connection established", { model, mode });
+    const session = new OpenAIRealtimeSession(connection, input, this.logger, mode);
     connection.send({
       type: "session.update",
       session: {
         type: "realtime",
         model,
-        output_modalities: [this.mode],
+        output_modalities: [mode],
         instructions: input.agent.instructions,
-        ...(this.mode === "audio" ? {
+        ...(mode === "audio" ? {
           audio: {
             input: {
-              format: { type: "audio/pcm", rate: 24_000 },
+              format: REALTIME_AUDIO_TRANSPORT.providerFormat,
               noise_reduction: input.agent.audio.noiseReduction === "disabled"
                 ? null
                 : { type: input.agent.audio.noiseReduction },
               turn_detection: turnDetection,
             },
             output: {
-              format: { type: "audio/pcm", rate: 24_000 },
+              format: REALTIME_AUDIO_TRANSPORT.providerFormat,
               voice: input.agent.audio.voice,
             },
           },
@@ -132,10 +135,12 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
     }
     this.logger.info?.("OpenAI Realtime session.update sent", {
       model,
-      mode: this.mode,
-      outputAudioFormat: this.mode === "audio" ? "pcm_s16le/24000/mono" : undefined,
-      turnDetection: this.mode === "audio" ? input.agent.audio.turnDetection : undefined,
-      noiseReduction: this.mode === "audio" ? input.agent.audio.noiseReduction : undefined,
+      mode,
+      outputAudioFormat: mode === "audio"
+        ? `${REALTIME_AUDIO_TRANSPORT.codec}/${REALTIME_AUDIO_TRANSPORT.sampleRate}/mono`
+        : undefined,
+      turnDetection: mode === "audio" ? input.agent.audio.turnDetection : undefined,
+      noiseReduction: mode === "audio" ? input.agent.audio.noiseReduction : undefined,
       tracing: input.agent.conversation.tracing,
       truncation: input.agent.conversation.truncation.mode,
     });
@@ -196,7 +201,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     if (this.mode !== "audio") {
       throw new Error("OpenAIRealtimeAdapter is configured for text-only input and output");
     }
-    if (frame.codec !== "pcm_s16le" || frame.sampleRate !== 24_000 || frame.channels !== 1) {
+    if (frame.codec !== REALTIME_AUDIO_TRANSPORT.codec
+      || frame.sampleRate !== REALTIME_AUDIO_TRANSPORT.sampleRate
+      || frame.channels !== REALTIME_AUDIO_TRANSPORT.channels) {
       throw new Error("OpenAI Realtime audio requires mono pcm_s16le at 24000 Hz");
     }
     this.connection.send({
@@ -319,9 +326,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
             assistantTurnId: value.item_id,
             frame: {
               data: Buffer.from(value.delta, "base64"),
-              codec: "pcm_s16le",
-              sampleRate: 24_000,
-              channels: 1,
+              codec: REALTIME_AUDIO_TRANSPORT.codec,
+              sampleRate: REALTIME_AUDIO_TRANSPORT.sampleRate,
+              channels: REALTIME_AUDIO_TRANSPORT.channels,
             },
           });
           this.setState("assistant_speaking", { assistantTurnId: value.item_id });

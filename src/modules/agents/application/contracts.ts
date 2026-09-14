@@ -68,6 +68,7 @@ export interface AgentDefinition {
   behavior: AgentBehaviorConfiguration;
   toolChoice: "auto" | "required" | "none";
   parallelToolCalls: boolean;
+  channel: AgentChannel;
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
   trustedContext: ToolExecutionContext;

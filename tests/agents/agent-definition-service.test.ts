@@ -58,6 +58,7 @@ describe("AgentDefinitionService", () => {
       behavior: createDefaultAgentBehavior("es-MX"),
       toolChoice: "auto",
       parallelToolCalls: false,
+      channel: "phone",
       tools: expect.arrayContaining([
         expect.objectContaining({ name: "check_availability" }),
         expect.objectContaining({ name: "create_appointment" }),

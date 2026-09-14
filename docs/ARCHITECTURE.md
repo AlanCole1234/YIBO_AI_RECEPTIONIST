@@ -158,6 +158,9 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 
 ## Invariantes
 
+- Las sesiones de producto (`phone` y `voice_lab`) usan modalidad de audio y
+  PCM16 little-endian mono a 24 kHz. Codec, tasa, canales y formato proveedor
+  proceden de una sola constante de transporte y no son configuración admin.
 - El modelo no elige `tenantId`, `locationId`, `callId`, `customerId` ni
   idempotency key.
 - Campos confiables enviados por una tool son rechazados.

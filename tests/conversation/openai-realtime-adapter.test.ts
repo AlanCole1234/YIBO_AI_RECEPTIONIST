@@ -258,6 +258,26 @@ describe("OpenAIRealtimeAdapter", () => {
     });
   });
 
+  it("enforces the audio transport for trusted product channels despite the legacy fallback", async () => {
+    const value = fixture();
+
+    await value.adapter.openSession({
+      conversationId: "conversation-1",
+      agent: { ...agent, channel: "phone" },
+    });
+
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: {
+        output_modalities: ["audio"],
+        audio: {
+          input: { format: { type: "audio/pcm", rate: 24_000 } },
+          output: { format: { type: "audio/pcm", rate: 24_000 } },
+        },
+      },
+    });
+  });
+
   it("maps the channel tool choice into the Realtime session", async () => {
     const value = fixture();
     await value.adapter.openSession({

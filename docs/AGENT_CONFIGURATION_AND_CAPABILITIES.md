@@ -110,11 +110,19 @@ sucursal y reglas que no son editables: el modelo no elige tenant, sucursal,
 cliente ni destino; no inventa estado externo y sólo confirma mutaciones después
 de un resultado exitoso de la herramienta.
 
-PCM mono a 24 kHz sigue siendo una invariante del transporte, no una preferencia
-administrativa. `tool_choice` ya se configura por canal; la ejecución paralela
-permanece pendiente de la clasificación segura de `AGENT-007`. El panel actual edita el
-perfil `server_vad`; los modos avanzados ya están disponibles en el contrato y
-API, y su UI condicionada por capacidad corresponde a `UI-002/UI-003`.
+PCM16 little-endian mono a 24 kHz es una invariante del transporte, no una
+preferencia administrativa. Una sola constante compartida define codec, tasa,
+canales y el formato enviado a Realtime. `AgentDefinitionService` deriva el canal
+desde contexto confiable y tanto `phone` como `voice_lab` producen sesiones de
+audio. El fallback de texto del adaptador queda únicamente para pruebas directas
+sin canal y está marcado como obsoleto; ninguna configuración persistida puede
+cambiar modalidad, codec, tasa o canales.
+
+`tool_choice` y la ejecución paralela ya se configuran por canal. Esta última se
+acepta sólo cuando todas las herramientas efectivas son consultas. El panel
+actual edita el perfil `server_vad`; los modos avanzados ya están disponibles en
+el contrato y API, y su UI condicionada por capacidad corresponde a
+`UI-002/UI-003`.
 
 ## Políticas de herramientas
 
