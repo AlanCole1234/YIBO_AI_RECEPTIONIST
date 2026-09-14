@@ -24,7 +24,12 @@ describe("admin authentication API", () => {
       payload: { email: "admin@yibo.example", password: "a-secure-password" },
     });
     expect(login.statusCode).toBe(200);
-    expect(login.json()).toMatchObject({ principal: { tenantId: app.tenantId, roles: ["tenant_admin"] } });
+    expect(login.json()).toMatchObject({ principal: {
+      tenantId: app.tenantId,
+      roles: ["tenant_admin"],
+      issuedAt: expect.any(String),
+      expiresAt: expect.any(String),
+    } });
     const cookie = login.headers["set-cookie"];
     expect(cookie).toContain("yibo_admin_session=");
     expect(cookie).toContain("HttpOnly");
@@ -32,7 +37,11 @@ describe("admin authentication API", () => {
 
     const me = await server.inject({ method: "GET", url: "/api/auth/me", headers: { cookie } });
     expect(me.statusCode).toBe(200);
-    expect(me.json()).toMatchObject({ principal: { tenantId: app.tenantId } });
+    expect(me.json()).toMatchObject({ principal: {
+      tenantId: app.tenantId,
+      issuedAt: expect.any(String),
+      expiresAt: expect.any(String),
+    } });
 
     const logout = await server.inject({
       method: "POST", url: "/api/auth/logout",

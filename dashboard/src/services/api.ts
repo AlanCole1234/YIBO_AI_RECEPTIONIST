@@ -33,6 +33,14 @@ export interface Appointment {
   externalCalendarEventId?: string;
 }
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean }
+export type AdminRole = "tenant_admin" | "operator";
+export interface AdminPrincipal {
+  subject: string;
+  tenantId: string;
+  roles: AdminRole[];
+  issuedAt: string;
+  expiresAt: string;
+}
 
 export type AgentToolName = "get_service_information" | "list_customer_appointments" | "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human";
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
@@ -76,14 +84,25 @@ export class ApiError extends Error {
   }
 }
 
+const authenticationFailureHandlers = new Set<() => void>();
+
+export function onAuthenticationFailure(handler: () => void): () => void {
+  authenticationFailureHandlers.add(handler);
+  return () => authenticationFailureHandlers.delete(handler);
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
+    credentials: "same-origin",
     headers: { "content-type": "application/json", ...options?.headers },
   });
   const body: unknown = await response.json();
   if (!response.ok) {
     const code = errorCode(body);
+    if (response.status === 401 && url !== "/api/auth/login") {
+      for (const handler of authenticationFailureHandlers) handler();
+    }
     throw new ApiError(code, response.status);
   }
   return body as T;
@@ -97,6 +116,12 @@ function errorCode(body: unknown): string {
 }
 
 export const api = {
+  login: (credentials: { email: string; password: string }) => request<{ principal: AdminPrincipal }>(
+    "/api/auth/login",
+    { method: "POST", body: JSON.stringify(credentials) },
+  ),
+  logout: () => request<{ loggedOut: true }>("/api/auth/logout", { method: "POST" }),
+  me: () => request<{ principal: AdminPrincipal }>("/api/auth/me"),
   health: () => request<{ status: string }>("/api/health"),
   business: () => request<Business>("/api/business"),
   updateBusinessTimezone: (timezone: string) => request<Business>("/api/business/timezone", {

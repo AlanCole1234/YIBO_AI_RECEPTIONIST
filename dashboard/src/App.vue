@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
+import { createAdminSession } from "./services/admin-session";
 import { messages, type MessageKey } from "./i18n";
 import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
+import AdminLogin from "./components/AdminLogin.vue";
 
 type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings";
 const timezones = [
@@ -15,6 +17,8 @@ const timezones = [
 ];
 
 const section = ref<Section>("overview");
+const adminSession = createAdminSession();
+const auth = adminSession.state;
 const business = ref<Business>();
 const apiOnline = ref(false);
 const googleCalendar = ref<GoogleCalendarStatus>({ configured: false, connected: false });
@@ -40,16 +44,27 @@ const eligibleEmployees = computed(() => business.value?.employees.filter(
 // The dashboard is intentionally English even if an older business profile has a Spanish locale.
 const locale = computed(() => "en-US" as const);
 const copy = computed(() => messages[locale.value]);
-const navItems = computed(() => [
+const navItems = computed(() => ([
   ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
   ["availability", copy.value.availability], ["appointments", copy.value.appointments], ["settings", "Settings"],
-] as Array<[Section, string]>);
+] as Array<[Section, string]>).filter(([candidate]) => canAccessSection(candidate)));
 const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
 const t = (key: MessageKey): string => copy.value[key];
 
 onMounted(async () => {
+  await adminSession.restore();
+  if (auth.phase === "authenticated") await loadWorkspace();
+});
+
+onUnmounted(() => adminSession.dispose());
+
+async function loadWorkspace(): Promise<void> {
   try {
-    const [health, profile, calendarStatus] = await Promise.all([api.health(), api.business(), api.googleCalendarStatus()]);
+    const [health, profile, calendarStatus] = await Promise.all([
+      api.health(),
+      api.business(),
+      adminSession.can("tenant_admin") ? api.googleCalendarStatus() : Promise.resolve({ configured: false, connected: false }),
+    ]);
     apiOnline.value = health.status === "ok";
     business.value = profile;
     googleCalendar.value = calendarStatus;
@@ -60,9 +75,25 @@ onMounted(async () => {
   } catch (error) {
     globalError.value = messageFor(error);
   }
-});
+}
+
+async function login(credentials: { email: string; password: string }): Promise<void> {
+  if (await adminSession.login(credentials)) await loadWorkspace();
+}
+
+async function logout(): Promise<void> {
+  await adminSession.logout();
+  section.value = "overview";
+  business.value = undefined;
+  customer.value = undefined;
+}
+
+function canAccessSection(candidate: Section): boolean {
+  return !["agent", "settings"].includes(candidate) || adminSession.can("tenant_admin");
+}
 
 function chooseSection(value: Section): void {
+  if (!canAccessSection(value)) return;
   section.value = value;
   globalError.value = "";
 }
@@ -186,7 +217,11 @@ function statusLabel(status: string): string {
 </script>
 
 <template>
-  <div class="shell">
+  <main v-if="auth.phase === 'loading'" class="auth-shell" aria-live="polite">
+    <section class="auth-card auth-loading"><span class="brand-mark">Y</span><h1>Opening your workspace…</h1></section>
+  </main>
+  <AdminLogin v-else-if="auth.phase === 'anonymous'" :busy="auth.busy" :error="auth.error" @submit="login" />
+  <div v-else class="shell">
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">Y</span><div><strong>YIBO</strong><small>Welcome studio</small></div></div>
       <nav aria-label="Main navigation">
@@ -195,6 +230,10 @@ function statusLabel(status: string): string {
           <span class="nav-dot"></span>{{ item[1] }}
         </button>
       </nav>
+      <div class="sidebar-account">
+        <div><strong>{{ auth.principal?.subject }}</strong><small>{{ auth.principal?.roles.includes('tenant_admin') ? 'Tenant admin' : 'Operator' }}</small></div>
+        <button type="button" :disabled="auth.busy" @click="logout">Sign out</button>
+      </div>
       <div class="sidebar-status"><span :class="['status-dot', { online: apiOnline }]"></span>{{ apiOnline ? t('apiConnected') : t('apiOffline') }}</div>
     </aside>
 

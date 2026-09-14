@@ -25,15 +25,16 @@ export async function registerAuthRoutes(server: FastifyInstance, app: YiboAppli
     }
     if (!identity) return reply.code(401).send({ error: { code: "INVALID_CREDENTIALS" } });
     const now = new Date();
+    const expiresAt = new Date(now.valueOf() + SESSION_DURATION_MS);
     const token = await app.adminAuth.sessions.issue({
       subject: identity.subject,
       tenantId: identity.tenantId,
       roles: identity.roles,
       now,
-      expiresAt: new Date(now.valueOf() + SESSION_DURATION_MS),
+      expiresAt,
     });
     reply.header("set-cookie", adminSessionCookie(token, request, SESSION_DURATION_MS / 1000));
-    return { principal: publicPrincipal(identity) };
+    return { principal: publicPrincipal({ ...identity, issuedAt: now.toISOString(), expiresAt: expiresAt.toISOString() }) };
   });
 
   server.get("/api/auth/me", async (request, reply) => {
@@ -54,8 +55,16 @@ export async function registerAuthRoutes(server: FastifyInstance, app: YiboAppli
   });
 }
 
-const publicPrincipal = (identity: { subject: string; tenantId: string; roles: string[] }) => ({
+const publicPrincipal = (identity: {
+  subject: string;
+  tenantId: string;
+  roles: string[];
+  issuedAt?: string;
+  expiresAt?: string;
+}) => ({
   subject: identity.subject,
   tenantId: identity.tenantId,
   roles: [...identity.roles],
+  ...(identity.issuedAt ? { issuedAt: identity.issuedAt } : {}),
+  ...(identity.expiresAt ? { expiresAt: identity.expiresAt } : {}),
 });

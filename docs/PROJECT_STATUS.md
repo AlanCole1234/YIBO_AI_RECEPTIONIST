@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
-- Tarea activa: **UI-001 — shell de autenticación y permisos**.
+- Tarea activa: **UI-002 — panel generado desde capacidades del modelo**.
 - Último checkpoint cerrado: Checkpoint 6; 261 pruebas aprobadas, 1 omitida y
   `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
@@ -49,6 +49,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   septiembre de 2026.
 - Última tarea verificada: TOOL-008; 53 pruebas focales aprobadas; suite completa
   261/261, 1 omitida y build aprobados el 14 de septiembre de 2026.
+- Última tarea verificada: UI-001; `pnpm typecheck`, 10 pruebas focales de sesión,
+  API y roles, y `pnpm build` aprobados el 14 de septiembre de 2026.
 
 ## Capacidades existentes
 
@@ -131,8 +133,8 @@ con `pnpm test` y `pnpm build`.
 | TOOL-006 | DONE | Límites globales/por tool, reintentos, transferencia y excepciones con errores seguros |
 | TOOL-007 | DONE | Prompt efectivo por capacidad y resultados de mutación públicos sin autoridad directa |
 | TOOL-008 | DONE | Tools internas sólo en Voice Lab autorizado; persistencia y calendario aislados |
-| UI-001 | IN_PROGRESS | Shell de autenticación y permisos |
-| UI-002 | TODO | Panel generado desde capacidades del modelo |
+| UI-001 | DONE | Login/restauración/logout, expiración por 401/deadline y navegación según rol |
+| UI-002 | IN_PROGRESS | Panel generado desde capacidades del modelo |
 | UI-003 | TODO | Edición de comportamiento, tools y escalamiento |
 | UI-004 | TODO | Preview real y explícita mediante Voice Lab |
 | UI-005 | TODO | Administración de sucursales y políticas |

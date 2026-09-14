@@ -22,6 +22,16 @@ desactualizado o se registra un ADR que cambie la decisión.
 
 Un checkpoint exige además `pnpm test` y `pnpm build`.
 
+## Acceso al dashboard local
+
+Antes de abrir el dashboard debe existir un usuario administrativo. Créalo con
+`pnpm admin:create`; el comando solicita tenant, email, contraseña y rol sin
+guardar la contraseña en argumentos de proceso. El frontend inicia en login,
+restaura la sesión con `/api/auth/me` y usa únicamente la cookie HttpOnly. Un
+`tenant_admin` ve configuración y operación; un `operator` sólo ve inicio,
+clientes, disponibilidad y citas. Para probar expiración o revocación, cualquier
+respuesta `401` debe devolver la UI al login sin conservar datos de la sesión.
+
 ## Reglas de diseño
 
 - Los módulos se consumen mediante su `index.ts`; infraestructura implementa

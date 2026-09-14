@@ -202,6 +202,12 @@ exigen el `Origin` configurado y ningún endpoint acepta tenant o región desde
 datos no confiables. Cada mutación administrativa actual registra sujeto,
 tenant, entidad, acción, versión, instante y diff; credenciales, PII e
 instrucciones se sustituyen por marcadores o huellas antes de persistir.
+El dashboard restaura la sesión exclusivamente mediante `/api/auth/me`; nunca
+lee la cookie ni guarda credenciales. Login y logout usan la misma cookie
+HttpOnly. El shell programa la expiración local con el `expiresAt` público y
+regresa al login ante cualquier `401`. La navegación elimina vistas de agente,
+negocio y Calendar para `operator`, y evita incluso sus lecturas iniciales; el
+backend sigue siendo la autoridad final y devuelve `403` si se evade la UI.
 La configuración multi-sucursal completa se lee y reemplaza mediante
 `/api/admin/business-configuration`; `PUT` exige `If-Match`, incrementa la
 versión atómicamente y responde `409 CONFIGURATION_VERSION_CONFLICT` si otro
@@ -219,10 +225,10 @@ negativas y una moneda ISO 4217. El precio sigue siendo informativo, sin pagos.
 
 ## Superficie y brechas activas
 
-El dashboard permite probar voz, configurar agente/tools, conectar Google,
-consultar disponibilidad, crear/buscar citas y cambiar zona horaria. No permite
-todavía administrar servicios, empleados, horarios, destinos ni calendarios por
-profesional.
+Tras autenticarse, el dashboard permite probar voz, configurar agente/tools,
+conectar Google, consultar disponibilidad, crear/buscar citas y cambiar zona
+horaria. Las vistas se filtran por rol. No permite todavía administrar servicios,
+empleados, horarios, destinos ni calendarios por profesional.
 
 Las brechas, orden y evidencia actual se mantienen exclusivamente en
 `PROJECT_STATUS.md` para evitar que este documento vuelva a convertirse en un
