@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 6 — Capacidades y confirmaciones seguras**.
-- Tarea activa: **TOOL-005 — confirmación expirable y de un solo uso**.
+- Tarea activa: **TOOL-006 — límites y escalamiento seguro**.
 - Último checkpoint cerrado: Checkpoint 5; 243 pruebas aprobadas, 1 omitida y
   `pnpm build` aprobado el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
@@ -37,6 +37,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   2026.
 - Última tarea verificada: TOOL-004; `pnpm typecheck` y 38 pruebas focales de
   configuración, gate, secuencia de conversación y políticas aprobadas el 14 de
+  septiembre de 2026.
+- Última tarea verificada: TOOL-005; `pnpm typecheck` y 30 pruebas focales de
+  expiración, turno nuevo, replay, fallos y conversación aprobadas el 14 de
   septiembre de 2026.
 
 ## Capacidades existentes
@@ -116,8 +119,8 @@ con `pnpm test` y `pnpm build`.
 | TOOL-002 | DONE | Consulta tenant/customer/location-scoped con referencias efímeras y snapshots históricos |
 | TOOL-003 | DONE | Mutaciones aceptan sólo referencias efímeras same-call y no devuelven IDs internos |
 | TOOL-004 | DONE | ADR-007, política mutable y token opaco ligado a call/tool/args/turn sin ejecutar |
-| TOOL-005 | IN_PROGRESS | Confirmación expirable y de un solo uso |
-| TOOL-006 | TODO | Límites de tools y escalamiento seguro |
+| TOOL-005 | DONE | Segundo intento exige turno nuevo y mismos args dentro de 2 minutos; token single-use |
+| TOOL-006 | IN_PROGRESS | Límites de tools y escalamiento seguro |
 | TOOL-007 | TODO | Descriptores e instrucciones de capacidades completas |
 | TOOL-008 | TODO | Aislamiento permanente de herramientas de prueba |
 | UI-001 | TODO | Shell de autenticación y permisos |

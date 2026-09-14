@@ -12,7 +12,10 @@ type PendingConfirmation = {
   tool: AgentToolName;
   argumentsFingerprint: string;
   issuedAtTurn: number;
+  issuedAtMs: number;
 };
+
+const CONFIRMATION_TTL_MS = 2 * 60_000;
 
 export class ConfirmationGateToolExecutor implements ToolExecutor {
   private readonly pending = new Map<string, PendingConfirmation>();
@@ -22,6 +25,7 @@ export class ConfirmationGateToolExecutor implements ToolExecutor {
     private readonly delegate: ToolExecutor,
     requiredFor: AgentToolName[],
     private readonly createToken: () => string = () => randomBytes(24).toString("base64url"),
+    private readonly now: () => number = () => Date.now(),
   ) {
     this.requiredFor = new Set(requiredFor);
   }
@@ -37,6 +41,7 @@ export class ConfirmationGateToolExecutor implements ToolExecutor {
         tool: call.name,
         argumentsFingerprint: stableJson(actionArguments),
         issuedAtTurn: context.turnSequence,
+        issuedAtMs: this.now(),
       });
       return confirmationRequired(call, token);
     }
@@ -50,11 +55,19 @@ export class ConfirmationGateToolExecutor implements ToolExecutor {
       || pending.argumentsFingerprint !== stableJson(actionArguments)) {
       return failure(call, "CONFIRMATION_MISMATCH", "The confirmation does not match this action. Start confirmation again.");
     }
-    return failure(
-      call,
-      "CONFIRMATION_PENDING_NEW_TURN",
-      `Ask the caller to confirm the action in a new turn, then retry with confirmation token ${confirmationToken}.`,
-    );
+    if (this.now() - pending.issuedAtMs > CONFIRMATION_TTL_MS) {
+      this.pending.delete(confirmationToken);
+      return failure(call, "CONFIRMATION_EXPIRED", "The confirmation expired. Describe the action and ask the caller to confirm again.");
+    }
+    if (context.turnSequence <= pending.issuedAtTurn) {
+      return failure(
+        call,
+        "CONFIRMATION_PENDING_NEW_TURN",
+        `Ask the caller to confirm the action in a new turn, then retry with confirmation token ${confirmationToken}.`,
+      );
+    }
+    this.pending.delete(confirmationToken);
+    return this.delegate.execute(context, { ...call, arguments: actionArguments });
   }
 }
 

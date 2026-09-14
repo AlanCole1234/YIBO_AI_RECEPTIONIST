@@ -161,8 +161,9 @@ existente. En el primer intento el gate no ejecuta: devuelve un token opaco liga
 a llamada, acción, argumentos canónicos y secuencia confiable del turno. Voice y
 texto reciben esa secuencia desde `ConversationService`, nunca desde argumentos
 del modelo. La aceptación tras un turno nuevo, expiración a dos minutos y consumo
-único corresponden a `TOOL-005`; hasta entonces una política activada falla
-cerrada después de solicitar confirmación.
+único ya se aplican en backend. El token se elimina antes de delegar, de modo que
+ni un éxito ni un fallo del dominio permiten repetir la mutación; para intentar
+otra vez es necesario iniciar una confirmación nueva.
 
 ## Herramientas implementadas
 

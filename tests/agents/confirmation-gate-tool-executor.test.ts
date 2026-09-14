@@ -19,7 +19,9 @@ const create = {
 
 describe("ConfirmationGateToolExecutor", () => {
   it("issues an opaque token bound to call, action, arguments, and issuing turn without executing", async () => {
-    const execute = vi.fn<ToolExecutor["execute"]>();
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({
+      toolCallId: call.toolCallId, ok: true, data: { confirmed: true },
+    }));
     const gate = new ConfirmationGateToolExecutor({ execute }, ["create_appointment"], () => "opaque-token");
 
     await expect(gate.execute(context, create)).resolves.toEqual({
@@ -40,6 +42,19 @@ describe("ConfirmationGateToolExecutor", () => {
       arguments: { ...create.arguments, confirmationToken: "opaque-token" },
     })).resolves.toMatchObject({ ok: false, error: { code: "CONFIRMATION_PENDING_NEW_TURN" } });
     expect(execute).not.toHaveBeenCalled();
+
+    await expect(gate.execute({ ...context, turnSequence: 5 }, {
+      ...create,
+      toolCallId: "create-confirmed-new-turn",
+      arguments: { ...create.arguments, confirmationToken: "opaque-token" },
+    })).resolves.toEqual({
+      toolCallId: "create-confirmed-new-turn", ok: true, data: { confirmed: true },
+    });
+    expect(execute).toHaveBeenCalledWith({ ...context, turnSequence: 5 }, {
+      ...create,
+      toolCallId: "create-confirmed-new-turn",
+      arguments: create.arguments,
+    });
   });
 
   it("rejects a token replayed with different arguments, action, or call", async () => {
@@ -74,5 +89,59 @@ describe("ConfirmationGateToolExecutor", () => {
 
     await expect(gate.execute(context, call)).resolves.toMatchObject({ ok: true });
     expect(execute).toHaveBeenCalledWith(context, call);
+  });
+
+  it("expires after two minutes and consumes a valid token exactly once", async () => {
+    let now = 1_000;
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({
+      toolCallId: call.toolCallId, ok: true, data: { confirmed: true },
+    }));
+    let tokenSequence = 0;
+    const gate = new ConfirmationGateToolExecutor(
+      { execute },
+      ["create_appointment"],
+      () => `token-${++tokenSequence}`,
+      () => now,
+    );
+    await gate.execute(context, create);
+    now += 120_001;
+    await expect(gate.execute({ ...context, turnSequence: 5 }, {
+      ...create, arguments: { ...create.arguments, confirmationToken: "token-1" },
+    })).resolves.toMatchObject({ ok: false, error: { code: "CONFIRMATION_EXPIRED" } });
+    expect(execute).not.toHaveBeenCalled();
+
+    now = 500_000;
+    await gate.execute(context, { ...create, toolCallId: "issue-token-2" });
+    now += 120_000;
+    const confirmedCall = {
+      ...create,
+      toolCallId: "consume-token-2",
+      arguments: { ...create.arguments, confirmationToken: "token-2" },
+    };
+    await expect(gate.execute({ ...context, turnSequence: 5 }, confirmedCall))
+      .resolves.toMatchObject({ ok: true });
+    await expect(gate.execute({ ...context, turnSequence: 6 }, { ...confirmedCall, toolCallId: "replay-token-2" }))
+      .resolves.toMatchObject({ ok: false, error: { code: "CONFIRMATION_MISMATCH" } });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("consumes the token before delegation even when the mutation fails", async () => {
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({
+      toolCallId: call.toolCallId,
+      ok: false,
+      error: { code: "SLOT_NO_LONGER_AVAILABLE", messageForAgent: "Choose another slot.", retryable: false },
+    }));
+    const gate = new ConfirmationGateToolExecutor({ execute }, ["create_appointment"], () => "failure-token");
+    await gate.execute(context, create);
+    const confirmed = {
+      ...create,
+      arguments: { ...create.arguments, confirmationToken: "failure-token" },
+    };
+
+    await expect(gate.execute({ ...context, turnSequence: 5 }, confirmed))
+      .resolves.toMatchObject({ ok: false, error: { code: "SLOT_NO_LONGER_AVAILABLE" } });
+    await expect(gate.execute({ ...context, turnSequence: 6 }, confirmed))
+      .resolves.toMatchObject({ ok: false, error: { code: "CONFIRMATION_MISMATCH" } });
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
