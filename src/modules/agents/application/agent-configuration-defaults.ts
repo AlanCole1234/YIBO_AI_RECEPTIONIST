@@ -37,8 +37,8 @@ export function createDefaultAgentBehavior(locale: string): AgentBehaviorConfigu
 export function createDefaultToolPolicies(enabledTools: AgentToolName[]): AgentToolPoliciesConfiguration {
   return {
     channels: {
-      phone: { enabledTools: [...enabledTools], toolChoice: "auto" },
-      voice_lab: { enabledTools: [...enabledTools], toolChoice: "auto" },
+      phone: { enabledTools: [...enabledTools], toolChoice: "auto", parallelToolCalls: false },
+      voice_lab: { enabledTools: [...enabledTools], toolChoice: "auto", parallelToolCalls: false },
     },
     limits: { totalPerCall: 20, perTool: {} },
     externalRetryAttempts: 1,

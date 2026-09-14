@@ -154,6 +154,11 @@ function normalizeChannelPolicy(
       defaults.toolChoice,
       "toolPolicies.channels.toolChoice",
     ),
+    parallelToolCalls: booleanOr(
+      input.parallelToolCalls,
+      defaults.parallelToolCalls,
+      "toolPolicies.channels.parallelToolCalls",
+    ),
   };
 }
 

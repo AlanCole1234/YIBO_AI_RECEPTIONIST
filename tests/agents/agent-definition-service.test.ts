@@ -57,6 +57,7 @@ describe("AgentDefinitionService", () => {
       },
       behavior: createDefaultAgentBehavior("es-MX"),
       toolChoice: "auto",
+      parallelToolCalls: false,
       tools: expect.arrayContaining([
         expect.objectContaining({ name: "check_availability" }),
         expect.objectContaining({ name: "create_appointment" }),
@@ -162,10 +163,12 @@ describe("AgentDefinitionService", () => {
     configured.toolPolicies.channels.phone = {
       enabledTools: ["check_availability"],
       toolChoice: "required",
+      parallelToolCalls: true,
     };
     configured.toolPolicies.channels.voice_lab = {
       enabledTools: ["update_customer"],
       toolChoice: "auto",
+      parallelToolCalls: false,
     };
     await source.saveConfiguration(DEVELOPMENT_BUSINESS.tenantId, configured);
     const service = new AgentDefinitionService(source, { execute: vi.fn() }, businesses);
@@ -180,6 +183,7 @@ describe("AgentDefinitionService", () => {
       developerTestModeAuthorized: true,
     });
     expect(phone.ok && phone.value.toolChoice).toBe("required");
+    expect(phone.ok && phone.value.parallelToolCalls).toBe(true);
     expect(phone.ok && phone.value.tools.map(({ name }) => name)).toEqual(["check_availability"]);
     expect(lab.ok && lab.value.tools.map(({ name }) => name)).toEqual([
       "update_customer", "enable_developer_test_mode", "delete_test_appointments",

@@ -106,6 +106,10 @@ export class RealtimeModelCapabilityRegistry {
       && Object.values(configuration.toolPolicies.channels).some(({ toolChoice }) => toolChoice !== "auto")) {
       throw new Error(`toolPolicies.channels.toolChoice is not supported by ${capability.id}`);
     }
+    if (!capability.controls.parallelToolCalls
+      && Object.values(configuration.toolPolicies.channels).some(({ parallelToolCalls }) => parallelToolCalls)) {
+      throw new Error(`toolPolicies.channels.parallelToolCalls is not supported by ${capability.id}`);
+    }
     const output = capability.limits.responseOutputTokens;
     if (!Number.isInteger(configuration.conversation.maxOutputTokens)
       || configuration.conversation.maxOutputTokens < output.minimum

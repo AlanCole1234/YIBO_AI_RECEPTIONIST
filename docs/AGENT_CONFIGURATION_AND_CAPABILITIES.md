@@ -132,6 +132,13 @@ transferencia automática puede activarse ante límite o fallo reintentable; usa
 del modelo. Los defaults de la migración v3→v4 dejan un límite total de 20, una
 sola tentativa y transferencia automática desactivada.
 
+El paralelismo también es una opción por canal, desactivada por default. La API
+rechaza activarlo si cualquier herramienta seleccionada es `mutate` o
+`external`, usando la clasificación del registro backend. Voice Lab incluye
+tools de prueba mutables, por lo que no admite paralelismo mientras estén
+disponibles. La definición vuelve a evaluar las tools efectivas y el adaptador
+sólo entonces envía `parallel_tool_calls: true`.
+
 ## Herramientas implementadas
 
 | Tool | Acción | Protección principal |

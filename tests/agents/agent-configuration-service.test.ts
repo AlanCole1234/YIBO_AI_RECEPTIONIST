@@ -173,6 +173,22 @@ describe("AgentConfigurationService", () => {
     await expect(service.update("tenant-1", upgraded)).rejects.toThrow("subset");
   });
 
+  it("allows parallel tool calls only for read-only channel tools", async () => {
+    const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
+    const configured = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    configured.toolPolicies.channels.phone.enabledTools = ["check_availability"];
+    configured.toolPolicies.channels.phone.parallelToolCalls = true;
+    await expect(service.update("tenant-1", configured)).resolves.toEqual(configured);
+
+    configured.toolPolicies.channels.phone.enabledTools.push("update_customer");
+    await expect(service.update("tenant-1", configured)).rejects.toThrow("read-only tools only");
+
+    configured.toolPolicies.channels.phone.parallelToolCalls = false;
+    configured.toolPolicies.channels.voice_lab.enabledTools = ["check_availability"];
+    configured.toolPolicies.channels.voice_lab.parallelToolCalls = true;
+    await expect(service.update("tenant-1", configured)).rejects.toThrow("voice_lab.parallelToolCalls");
+  });
+
   it("rejects unknown tools and unsafe output limits", async () => {
     const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
     const value = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");

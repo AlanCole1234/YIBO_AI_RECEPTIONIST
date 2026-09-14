@@ -22,6 +22,7 @@ const agent = {
   },
   behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
   toolChoice: "auto" as const,
+  parallelToolCalls: false,
   tools: [{
     name: "check_availability" as const,
     description: "Find available times",
@@ -266,6 +267,18 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(value.connection.sent[0]).toMatchObject({
       type: "session.update",
       session: { tool_choice: "required" },
+    });
+  });
+
+  it("maps validated read-only parallelism into the Realtime session", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-parallel-tools",
+      agent: { ...agent, parallelToolCalls: true },
+    });
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: { parallel_tool_calls: true },
     });
   });
 

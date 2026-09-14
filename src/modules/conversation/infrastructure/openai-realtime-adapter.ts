@@ -114,7 +114,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
           parameters: tool.inputSchema,
         })),
         tool_choice: input.agent.toolChoice,
-        parallel_tool_calls: false,
+        parallel_tool_calls: input.agent.parallelToolCalls,
         max_output_tokens: maxOutputTokens,
         reasoning: { effort: input.agent.conversation.reasoningEffort },
         tracing: input.agent.conversation.tracing === "auto" ? "auto" : null,

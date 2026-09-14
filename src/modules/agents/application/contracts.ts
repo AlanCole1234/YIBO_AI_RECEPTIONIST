@@ -67,6 +67,7 @@ export interface AgentDefinition {
   audio: AgentAudioConfiguration;
   behavior: AgentBehaviorConfiguration;
   toolChoice: "auto" | "required" | "none";
+  parallelToolCalls: boolean;
   tools: AgentToolDefinition[];
   toolExecutor: ToolExecutor;
   trustedContext: ToolExecutionContext;
@@ -110,6 +111,7 @@ export interface AgentToolPoliciesConfiguration {
   channels: Record<AgentChannel, {
     enabledTools: AgentToolName[];
     toolChoice: "auto" | "required" | "none";
+    parallelToolCalls: boolean;
   }>;
   limits: {
     totalPerCall: number;

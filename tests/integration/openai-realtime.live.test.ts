@@ -30,6 +30,7 @@ liveIt("asks for availability through a real Realtime tool call", async () => {
       },
       behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
       toolChoice: "auto",
+      parallelToolCalls: false,
       tools: [{
         name: "check_availability",
         description: "Find available appointment slots.",

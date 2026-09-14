@@ -88,6 +88,13 @@ function validateToolPolicies(value: AgentConfiguration): void {
     if (policy.toolChoice === "required" && policy.enabledTools.length === 0) {
       throw new Error(`toolPolicies.channels.${channel}.toolChoice cannot be required without tools`);
     }
+    if (policy.parallelToolCalls) {
+      const mutatingTool = policy.enabledTools.find((name) =>
+        AGENT_TOOL_DEFINITIONS.find((definition) => definition.name === name)?.presentation?.kind !== "consult");
+      if (mutatingTool || (channel === "voice_lab" && policy.toolChoice !== "none")) {
+        throw new Error(`toolPolicies.channels.${channel}.parallelToolCalls requires read-only tools only`);
+      }
+    }
   }
   if (!Number.isInteger(toolPolicies.limits.totalPerCall)
     || toolPolicies.limits.totalPerCall < 1

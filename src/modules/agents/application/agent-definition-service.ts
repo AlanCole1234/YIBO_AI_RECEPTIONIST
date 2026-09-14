@@ -36,7 +36,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     const channelTools = new Set(channelPolicy.toolChoice === "none" ? [] : channelPolicy.enabledTools);
     const tools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
       isDeveloperTestTool(tool.name)
-        ? command.developerTestModeAuthorized
+        ? command.developerTestModeAuthorized && channelPolicy.toolChoice !== "none"
         : configuration.enabledTools.includes(tool.name) && channelTools.has(tool.name),
     );
     const instructions = this.prompts.compile({
@@ -57,6 +57,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       audio: structuredClone(configuration.audio),
       behavior: structuredClone(configuration.behavior),
       toolChoice: channelPolicy.toolChoice,
+      parallelToolCalls: channelPolicy.parallelToolCalls,
       tools,
       toolExecutor: new PolicyEnforcingToolExecutor(
         this.toolExecutor,

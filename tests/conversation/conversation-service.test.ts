@@ -47,6 +47,7 @@ function fixture(inboundAudio: AsyncIterable<AudioFrame> = stream()) {
     },
     behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
     toolChoice: "auto",
+    parallelToolCalls: false,
     tools: [{
       name: "check_availability",
       description: "Find available appointment times",
@@ -93,6 +94,7 @@ describe("ConversationService", () => {
         audio: value.agent.audio,
         behavior: value.agent.behavior,
         toolChoice: value.agent.toolChoice,
+        parallelToolCalls: value.agent.parallelToolCalls,
         tools: value.agent.tools,
       },
     }]);

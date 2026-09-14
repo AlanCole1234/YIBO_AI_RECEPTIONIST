@@ -72,3 +72,11 @@ requieren un error marcado `retryable` por el dominio y reutilizan la identidad
 de la invocación. La transferencia automática usa el mismo puerto y destino
 confiables que una transferencia solicitada. Sus defaults están desactivados o
 en una sola tentativa para conservar el comportamiento v3.
+
+## Consecuencia aplicada — AGENT-007
+
+El mismo esquema v4 admite `parallelToolCalls` como extensión compatible con
+default `false`. Sólo puede activarse si todas las herramientas efectivas del
+canal están clasificadas como consultas. La validación rechaza cualquier
+mutación, integración externa o tool de prueba; el payload Realtime no infiere
+esta propiedad por su cuenta.
