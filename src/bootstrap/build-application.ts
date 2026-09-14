@@ -299,7 +299,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
       }),
     })));
   const agentConfiguration = new AgentConfigurationService(configurationRepository);
-  const agentDefinitions = new AgentDefinitionService(configurationRepository, tools);
+  const agentDefinitions = new AgentDefinitionService(configurationRepository, tools, business);
   const conversations = new ConversationService({
     runtime,
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),

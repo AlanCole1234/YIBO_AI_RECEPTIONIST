@@ -8,11 +8,15 @@ import type {
   ToolExecutor,
 } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import type { BusinessDirectory } from "../../business/index.js";
+import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
 
 export class AgentDefinitionService implements AgentDefinitionFactory {
   constructor(
     private readonly configuration: AgentConfigurationSource,
     private readonly toolExecutor: ToolExecutor,
+    private readonly businesses: BusinessDirectory,
+    private readonly prompts: AgentPromptCompiler = new AgentPromptCompiler(),
   ) {}
 
   async prepare(command: PrepareAgentDefinitionCommand) {
@@ -20,9 +24,20 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     if (!configuration) {
       return failure<AgentDefinitionError>({ code: "CONFIGURATION_NOT_FOUND" });
     }
+    const location = await this.businesses.getLocation(command.tenantId, command.locationId);
+    if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
+
+    const instructions = this.prompts.compile({
+      editableInstructions: configuration.instructions,
+      locale: configuration.locale,
+      businessName: location.value.business.name,
+      locationName: location.value.location.name,
+      locationTimezone: location.value.location.timezone,
+      enabledTools: configuration.enabledTools,
+    });
 
     const definition: AgentDefinition = {
-      instructions: configuration.instructions,
+      instructions,
       locale: configuration.locale,
       ...(configuration.voice ? { voice: configuration.voice } : {}),
       conversation: structuredClone(configuration.conversation),

@@ -151,6 +151,10 @@ reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 - La configuración del agente es un documento versionado. Los repositorios
   convierten la forma histórica sin versión a la forma canónica v1 y SQLite la
   reescribe al primer acceso; versiones futuras desconocidas fallan cerradas.
+- `AgentPromptCompiler` convierte la guía editable en una sección delimitada y
+  añade identidad, locale, zona de la sucursal, tools habilitadas y reglas
+  inmutables. `AgentDefinitionService` falla si no puede obtener ese contexto
+  usando el tenant/location confiable de la llamada.
 
 ## Invariantes
 

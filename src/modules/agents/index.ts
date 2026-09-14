@@ -1,4 +1,6 @@
 export { AgentDefinitionService } from "./application/agent-definition-service.js";
+export { AgentPromptCompiler } from "./application/agent-prompt-compiler.js";
+export type { AgentPromptInput } from "./application/agent-prompt-compiler.js";
 export { AgentConfigurationService } from "./application/agent-configuration-service.js";
 export type { AgentConfigurationServiceContract } from "./application/agent-configuration-service.js";
 export { ToolExecutorImpl } from "./application/tool-executor.js";

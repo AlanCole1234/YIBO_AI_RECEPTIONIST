@@ -36,6 +36,12 @@ sin versión se actualizan en los repositorios de memoria y SQLite, preservando
 sus valores y completando sólo campos ausentes. SQLite guarda la forma canónica
 al primer acceso y una versión futura desconocida se rechaza.
 
+El texto que edita un administrador es guía, no el prompt completo.
+`AgentPromptCompiler` lo delimita y compone después el contexto confiable de la
+sucursal y reglas que no son editables: el modelo no elige tenant, sucursal,
+cliente ni destino; no inventa estado externo y sólo confirma mutaciones después
+de un resultado exitoso de la herramienta.
+
 El adaptador fija todavía PCM mono a 24 kHz, reducción `near_field`, respuesta e
 interrupción automáticas, timeout de silencio, tool choice automático y tools
 secuenciales. Estas decisiones permanecen documentadas como brecha hasta que el

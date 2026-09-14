@@ -80,7 +80,9 @@ export interface ConversationBehavior {
   };
 }
 
-export type AgentDefinitionError = { code: "CONFIGURATION_NOT_FOUND" };
+export type AgentDefinitionError = {
+  code: "CONFIGURATION_NOT_FOUND" | "BUSINESS_CONTEXT_NOT_FOUND";
+};
 
 export interface AgentDefinitionFactory {
   prepare(

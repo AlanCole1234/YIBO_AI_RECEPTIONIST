@@ -32,7 +32,8 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
       conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const, turnDetection: {} },
     },
   }];
-  const agents = new AgentDefinitionService(new InMemoryAgentConfigurationSource(configurations), toolExecutor);
+  const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
+  const agents = new AgentDefinitionService(new InMemoryAgentConfigurationSource(configurations), toolExecutor, directory);
   const transportClose = vi.fn(async () => undefined);
   const transport: ConversationTransport = {
     inboundAudio: noAudio(),
@@ -43,7 +44,6 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
   voice.register(incoming.callId, transport);
   const runtime = new ScriptedConversationRuntime();
   const conversations = new ConversationService({ runtime });
-  const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
   return {
     orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, conversations, repository),
     repository,
@@ -66,7 +66,7 @@ describe("CallOrchestratorService", () => {
     expect(system.runtime.openedInputs).toEqual([{
       conversationId: incoming.callId,
       agent: expect.objectContaining({
-        instructions: "Help the caller",
+        instructions: expect.stringContaining("<editable_guidance>\nHelp the caller\n</editable_guidance>"),
         locale: "en-US",
         tools: expect.arrayContaining([expect.objectContaining({ name: "check_availability" })]),
       }),
