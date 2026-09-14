@@ -23,6 +23,38 @@ El dashboard configura modelo, voz, locale, esfuerzo de razonamiento, límite de
 salida, VAD, instrucciones y herramientas. La configuración se valida, persiste
 por tenant y aplica a la próxima conversación.
 
+## Registro de capacidades por modelo
+
+`RealtimeModelCapabilityRegistry` es la única fuente soportada de modelos,
+voces, límites y controles. `GET /api/configuration` publica una copia de ese
+registro; el panel construye sus opciones desde la respuesta y vuelve a validar
+la combinación antes de enviarla. `AgentConfigurationService` aplica la misma
+validación en backend, por lo que un cliente modificado no puede guardar un
+modelo, voz, esfuerzo o límite fuera del registro.
+
+| Modelo habilitado | Contexto del modelo | Salida máxima del modelo | Límite explícito por respuesta |
+|---|---:|---:|---:|
+| `gpt-realtime-2.1` | 128 000 | 32 000 | 1–4096 |
+| `gpt-realtime-2.1-mini` | 128 000 | 32 000 | 1–4096 |
+
+La separación entre “salida máxima del modelo” y “límite explícito por
+respuesta” es intencional. La ficha del modelo declara la primera capacidad,
+mientras que el contrato Realtime acepta un entero de 1 a 4096 (o `inf`) para
+`max_output_tokens`. YIBO usa siempre el entero acotado y mantiene 64 como el
+mínimo práctico del slider, sin relajar la validación de API.
+
+El registro también declara soporte del proveedor para razonamiento,
+`tool_choice`, llamadas paralelas, tracing y truncación. En `AGENT-003` sólo son
+editables los campos presentes en el esquema v1; `AGENT-004` incorporará los
+controles restantes con discriminantes y validación por modelo, nunca como JSON
+libre.
+
+Fuentes normativas consultadas:
+
+- [GPT-Realtime-2.1](https://developers.openai.com/api/docs/models/gpt-realtime-2.1)
+- [GPT-Realtime-2.1 Mini](https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini)
+- [Accept call — Realtime API](https://developers.openai.com/api/reference/cli/resources/realtime/subresources/calls/methods/accept)
+
 El registro backend de herramientas también es la fuente de los títulos,
 descripciones, iconos, clasificación y ruta segura mostrados por el dashboard.
 Así una herramienta nueva puede mostrarse con fallback sin romper el panel.

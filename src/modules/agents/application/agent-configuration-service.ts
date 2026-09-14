@@ -6,6 +6,10 @@ import {
   type DefaultAgentConfigurationInput,
 } from "./agent-configuration-defaults.js";
 import { AGENT_CONFIGURATION_SCHEMA_VERSION, upgradeAgentConfiguration } from "./upgrade-agent-configuration.js";
+import {
+  RealtimeModelCapabilityRegistry,
+  type RealtimeModelCapability,
+} from "./model-capability-registry.js";
 
 export interface AgentConfigurationServiceContract {
   get(tenantId: TenantId): Promise<AgentConfiguration | null>;
@@ -16,17 +20,21 @@ export interface AgentConfigurationServiceContract {
     model: string,
     overrides?: Omit<DefaultAgentConfigurationInput, "locale" | "businessName" | "model">,
   ): AgentConfiguration;
+  modelCapabilities(): RealtimeModelCapability[];
 }
 
 export class AgentConfigurationService implements AgentConfigurationServiceContract {
-  constructor(private readonly repository: AgentConfigurationRepository) {}
+  constructor(
+    private readonly repository: AgentConfigurationRepository,
+    private readonly capabilityRegistry = new RealtimeModelCapabilityRegistry(),
+  ) {}
 
   get(tenantId: TenantId): Promise<AgentConfiguration | null> {
     return this.repository.getConfiguration(tenantId);
   }
 
   async update(tenantId: TenantId, configuration: VersionedAgentConfiguration): Promise<AgentConfiguration> {
-    const validated = validateConfiguration(upgradeAgentConfiguration(configuration));
+    const validated = validateConfiguration(upgradeAgentConfiguration(configuration), this.capabilityRegistry);
     await this.repository.saveConfiguration(tenantId, validated);
     return structuredClone(validated);
   }
@@ -37,33 +45,30 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
     model: string,
     overrides: Omit<DefaultAgentConfigurationInput, "locale" | "businessName" | "model"> = {},
   ): AgentConfiguration {
-    return createDefaultAgentConfiguration({ locale, businessName, model, ...overrides });
+    return validateConfiguration(
+      createDefaultAgentConfiguration({ locale, businessName, model, ...overrides }),
+      this.capabilityRegistry,
+    );
+  }
+
+  modelCapabilities(): RealtimeModelCapability[] {
+    return this.capabilityRegistry.list();
   }
 }
 
-function validateConfiguration(value: AgentConfiguration): AgentConfiguration {
+function validateConfiguration(
+  value: AgentConfiguration,
+  capabilityRegistry: RealtimeModelCapabilityRegistry,
+): AgentConfiguration {
   if (value.schemaVersion !== AGENT_CONFIGURATION_SCHEMA_VERSION) throw new Error("unsupported agent configuration schemaVersion");
   if (!value.instructions.trim()) throw new Error("instructions are required");
   if (!value.locale.trim()) throw new Error("locale is required");
   if (!value.conversation.model.trim()) throw new Error("conversation.model is required");
-  if (!Number.isInteger(value.conversation.maxOutputTokens)
-    || value.conversation.maxOutputTokens < 1
-    || value.conversation.maxOutputTokens > 4096) {
-    throw new Error("conversation.maxOutputTokens must be an integer between 1 and 4096");
-  }
   const allowedTools = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.name));
   if (new Set(value.enabledTools).size !== value.enabledTools.length
     || value.enabledTools.some((tool) => !allowedTools.has(tool))) {
     throw new Error("enabledTools contains an unknown or duplicate tool");
   }
-  const { threshold, prefixPaddingMs, silenceDurationMs } = value.conversation.turnDetection;
-  if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
-    throw new Error("turnDetection.threshold must be between 0 and 1");
-  }
-  for (const [name, candidate] of [["prefixPaddingMs", prefixPaddingMs], ["silenceDurationMs", silenceDurationMs]] as const) {
-    if (candidate !== undefined && (!Number.isInteger(candidate) || candidate < 0)) {
-      throw new Error(`turnDetection.${name} must be a non-negative integer`);
-    }
-  }
+  capabilityRegistry.validate(value);
   return structuredClone(value);
 }

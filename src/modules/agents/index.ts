@@ -3,6 +3,8 @@ export { AgentPromptCompiler } from "./application/agent-prompt-compiler.js";
 export type { AgentPromptInput } from "./application/agent-prompt-compiler.js";
 export { AgentConfigurationService } from "./application/agent-configuration-service.js";
 export type { AgentConfigurationServiceContract } from "./application/agent-configuration-service.js";
+export { RealtimeModelCapabilityRegistry } from "./application/model-capability-registry.js";
+export type { RealtimeModelCapability, ReasoningEffort } from "./application/model-capability-registry.js";
 export { ToolExecutorImpl } from "./application/tool-executor.js";
 export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
 export {

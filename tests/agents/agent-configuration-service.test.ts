@@ -57,4 +57,28 @@ describe("AgentConfigurationService", () => {
     value.conversation.maxOutputTokens = 0;
     await expect(service.update("tenant-1", value)).rejects.toThrow();
   });
+
+  it("publishes model capabilities and rejects incompatible model options", async () => {
+    const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
+    expect(service.modelCapabilities()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "gpt-realtime-2.1",
+        voices: expect.arrayContaining(["marin", "cedar"]),
+        limits: expect.objectContaining({
+          contextWindowTokens: 128_000,
+          modelMaxOutputTokens: 32_000,
+          responseOutputTokens: { minimum: 1, maximum: 4_096, uiMinimum: 64, step: 64 },
+        }),
+        controls: expect.objectContaining({ reasoningEfforts: ["minimal", "low", "medium", "high"] }),
+      }),
+    ]));
+
+    const unknownModel = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    unknownModel.conversation.model = "unknown-realtime-model";
+    await expect(service.update("tenant-1", unknownModel)).rejects.toThrow("conversation.model is not supported");
+
+    const unknownVoice = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
+    unknownVoice.voice = "unlisted-voice";
+    await expect(service.update("tenant-1", unknownVoice)).rejects.toThrow("voice is not supported");
+  });
 });

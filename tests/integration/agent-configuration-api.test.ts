@@ -42,14 +42,29 @@ describe("agent configuration API", () => {
 
     const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    const body = response.json<{
+      modelCapabilities: Array<Record<string, unknown>>;
+      availableTools: unknown[];
+      current: Record<string, unknown>;
+    }>();
+    expect(body).toMatchObject({
       current: { schemaVersion: 1, locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
       recommended: { schemaVersion: 1, locale: "es-MX" },
       secrets: { apiKeyConfigured: false },
     });
-    expect(response.json<{ availableTools: unknown[] }>().availableTools).toHaveLength(6);
+    expect(body.modelCapabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "gpt-realtime-2.1",
+        voices: expect.arrayContaining(["marin", "cedar"]),
+        limits: expect.objectContaining({
+          responseOutputTokens: { minimum: 1, maximum: 4096, uiMinimum: 64, step: 64 },
+        }),
+        controls: expect.objectContaining({ reasoningEfforts: ["minimal", "low", "medium", "high"] }),
+      }),
+    ]));
+    expect(body.availableTools).toHaveLength(6);
 
-    const current = response.json<{ current: Record<string, unknown> }>().current;
+    const current = body.current;
     const update = await server.inject({
       method: "PUT",
       url: "/api/configuration",
@@ -87,5 +102,24 @@ describe("agent configuration API", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ error: { code: "INVALID_AGENT_CONFIGURATION" } });
     expect(await app.agentConfiguration.get(app.tenantId)).toEqual(before);
+  });
+
+  it("rejects unsupported model and voice combinations", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
+    const current = await app.agentConfiguration.get(app.tenantId);
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/configuration",
+      headers: session.mutationHeaders,
+      payload: { ...current, voice: "not-a-realtime-voice" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "INVALID_AGENT_CONFIGURATION", message: expect.stringContaining("voice is not supported") },
+    });
   });
 });

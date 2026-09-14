@@ -26,6 +26,7 @@ export async function registerAgentConfigurationRoutes(
         business.value.name,
         app.config.openAiRealtimeModel,
       ),
+      modelCapabilities: app.agentConfiguration.modelCapabilities(),
       availableTools: AGENT_TOOL_DEFINITIONS.filter(({ name }) => !isDeveloperTestTool(name)).map(({ name, description, presentation }) => ({
         name,
         description,
