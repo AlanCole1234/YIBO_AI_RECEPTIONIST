@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import {
-  AGENT_TOOL_DEFINITIONS,
-  type AgentToolName,
+  PUBLIC_AGENT_TOOL_DEFINITIONS,
 } from "../../modules/agents/index.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
@@ -27,7 +26,7 @@ export async function registerAgentConfigurationRoutes(
         app.config.openAiRealtimeModel,
       ),
       modelCapabilities: app.agentConfiguration.modelCapabilities(),
-      availableTools: AGENT_TOOL_DEFINITIONS.filter(({ name }) => !isDeveloperTestTool(name)).map(({ name, description, presentation }) => ({
+      availableTools: PUBLIC_AGENT_TOOL_DEFINITIONS.map(({ name, description, presentation }) => ({
         name,
         description,
         ...presentation,
@@ -61,6 +60,3 @@ export async function registerAgentConfigurationRoutes(
     return { configuration, appliesTo: "next-conversation" as const };
   });
 }
-
-const isDeveloperTestTool = (name: AgentToolName): boolean =>
-  name === "enable_developer_test_mode" || name === "delete_test_appointments";

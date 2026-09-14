@@ -211,6 +211,16 @@ en unidades menores, moneda ISO y texto localizado. No serializa IDs de servicio
 sucursal o profesional. Al actualizar instalaciones existentes, la tool se
 habilita sólo en canales donde ya estaba habilitada `check_availability`.
 
+Las dos tools de Developer Test Mode pertenecen al registro interno, no al
+catálogo público administrable. Una única clasificación compartida las excluye
+de defaults, API y validación de configuración. Sólo una definición Voice Lab
+creada con autorización local confiable puede anunciarlas; el constructor del
+payload Realtime vuelve a rechazar cualquier intento de incluirlas en telefonía
+o en un contexto sin canal. El ejecutor exige además esa autorización antes de
+activar o limpiar. Sus citas, busy intervals y eventos viven en repositorio,
+agenda y calendario en memoria separados: las pruebas verifican que reservar un
+slot de laboratorio no crea citas ni ocupación en los adaptadores normales.
+
 `list_customer_appointments` consulta únicamente citas `CONFIRMED` cuyo inicio
 no ha pasado, ordenadas cronológicamente y limitadas al tenant, cliente y
 sucursal confiables. La respuesta conserva el snapshot histórico de servicio y

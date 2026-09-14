@@ -140,4 +140,36 @@ describe("agent configuration API", () => {
       error: { code: "INVALID_AGENT_CONFIGURATION", message: expect.stringContaining("voice is not supported") },
     });
   });
+
+  it("rejects Developer Test Mode tools in persisted administrator configuration", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
+    const current = await app.agentConfiguration.get(app.tenantId);
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/configuration",
+      headers: session.mutationHeaders,
+      payload: {
+        ...current,
+        enabledTools: [...current!.enabledTools, "enable_developer_test_mode"],
+        toolPolicies: {
+          ...current!.toolPolicies,
+          channels: {
+            ...current!.toolPolicies.channels,
+            voice_lab: {
+              ...current!.toolPolicies.channels.voice_lab,
+              enabledTools: [...current!.toolPolicies.channels.voice_lab.enabledTools, "enable_developer_test_mode"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "INVALID_AGENT_CONFIGURATION", message: expect.stringContaining("enabledTools") },
+    });
+  });
 });

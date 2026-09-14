@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_AGENT_BEHAVIOR } from "../../src/modules/agents/index.js";
+import {
+  AGENT_TOOL_DEFINITIONS,
+  DEFAULT_AGENT_BEHAVIOR,
+} from "../../src/modules/agents/index.js";
 import { buildRealtimeSessionUpdate } from "../../src/modules/conversation/index.js";
 
 const supportedModels = ["gpt-realtime-2.1", "gpt-realtime-2.1-mini"] as const;
@@ -18,9 +21,17 @@ describe("buildRealtimeSessionUpdate", () => {
     expect(() => buildRealtimeSessionUpdate(agent("gpt-realtime-2.1"), "text"))
       .toThrow("Realtime phone sessions require audio modality");
   });
+
+  it("rejects Developer Test Mode tools outside an authorized Voice Lab definition", () => {
+    const unsafe = agent("gpt-realtime-2.1");
+    unsafe.tools = [AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "enable_developer_test_mode")!];
+
+    expect(() => buildRealtimeSessionUpdate(unsafe, "audio"))
+      .toThrow("Developer Test Mode tools require an authorized Voice Lab session");
+  });
 });
 
-function agent(model: string) {
+function agent(model: string): Parameters<typeof buildRealtimeSessionUpdate>[0] {
   return {
     instructions: "Help the caller safely.",
     locale: "es-MX",

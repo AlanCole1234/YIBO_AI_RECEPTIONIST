@@ -4,7 +4,7 @@ import type {
   RealtimeTruncation,
   SessionUpdateEvent,
 } from "openai/resources/realtime/realtime";
-import { RealtimeModelCapabilityRegistry } from "../../agents/index.js";
+import { isDeveloperTestTool, RealtimeModelCapabilityRegistry } from "../../agents/index.js";
 import type { OpenConversationInput } from "../ports/conversation-runtime-port.js";
 import { REALTIME_AUDIO_TRANSPORT } from "../domain/realtime-transport-profile.js";
 
@@ -17,6 +17,9 @@ export function buildRealtimeSessionUpdate(
   if (!agent.instructions.trim()) throw new Error("Realtime instructions are required");
   if (agent.channel && modality !== REALTIME_AUDIO_TRANSPORT.modality) {
     throw new Error(`Realtime ${agent.channel} sessions require audio modality`);
+  }
+  if (agent.channel !== "voice_lab" && agent.tools.some(({ name }) => isDeveloperTestTool(name))) {
+    throw new Error("Developer Test Mode tools require an authorized Voice Lab session");
   }
   capabilities.validateRuntimeOptions(agent);
 

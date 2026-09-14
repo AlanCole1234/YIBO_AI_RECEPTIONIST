@@ -111,3 +111,9 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
 ];
+
+export const isDeveloperTestTool = (name: string): boolean =>
+  name === "enable_developer_test_mode" || name === "delete_test_appointments";
+
+export const PUBLIC_AGENT_TOOL_DEFINITIONS = AGENT_TOOL_DEFINITIONS
+  .filter(({ name }) => !isDeveloperTestTool(name));

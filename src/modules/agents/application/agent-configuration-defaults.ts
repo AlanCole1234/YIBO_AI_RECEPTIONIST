@@ -6,7 +6,7 @@ import type {
   AgentTurnDetectionConfiguration,
   ConversationBehavior,
 } from "./contracts.js";
-import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import { PUBLIC_AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 
 export const AGENT_CONFIGURATION_DEFAULTS_VERSION = 4;
 export const DEFAULT_REALTIME_MODEL = "gpt-realtime-2.1";
@@ -61,9 +61,7 @@ export interface DefaultAgentConfigurationInput {
 export function createDefaultAgentConfiguration(
   input: DefaultAgentConfigurationInput,
 ): AgentConfiguration {
-  const enabledTools = AGENT_TOOL_DEFINITIONS
-    .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
-    .map(({ name }) => name);
+  const enabledTools = PUBLIC_AGENT_TOOL_DEFINITIONS.map(({ name }) => name);
   return {
     schemaVersion: 4,
     identity: {

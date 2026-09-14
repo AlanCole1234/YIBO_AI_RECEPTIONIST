@@ -8,7 +8,11 @@ export type { RealtimeModelCapability, RealtimeRuntimeOptions, ReasoningEffort }
 export { ToolExecutorImpl } from "./application/tool-executor.js";
 export { PolicyEnforcingToolExecutor } from "./application/policy-enforcing-tool-executor.js";
 export { ConfirmationGateToolExecutor } from "./application/confirmation-gate-tool-executor.js";
-export { AGENT_TOOL_DEFINITIONS } from "./application/tool-definitions.js";
+export {
+  AGENT_TOOL_DEFINITIONS,
+  PUBLIC_AGENT_TOOL_DEFINITIONS,
+  isDeveloperTestTool,
+} from "./application/tool-definitions.js";
 export {
   AGENT_CONFIGURATION_DEFAULTS_VERSION,
   DEFAULT_AGENT_BEHAVIOR,

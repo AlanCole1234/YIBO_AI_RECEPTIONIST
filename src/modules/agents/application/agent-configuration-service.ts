@@ -1,7 +1,7 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentConfiguration, AgentConfigurationRepository, VersionedAgentConfiguration } from "../ports/agent-dependencies.js";
 import type { AgentDataCollectionField, AgentToolName } from "./contracts.js";
-import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import { AGENT_TOOL_DEFINITIONS, PUBLIC_AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
 import {
   createDefaultAgentConfiguration,
   type DefaultAgentConfigurationInput,
@@ -65,7 +65,7 @@ function validateConfiguration(
   if (!value.identity.instructions.trim()) throw new Error("identity.instructions are required");
   if (!value.identity.locale.trim()) throw new Error("identity.locale is required");
   if (!value.conversation.model.trim()) throw new Error("conversation.model is required");
-  const allowedTools = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.name));
+  const allowedTools = new Set(PUBLIC_AGENT_TOOL_DEFINITIONS.map((tool) => tool.name));
   if (new Set(value.enabledTools).size !== value.enabledTools.length
     || value.enabledTools.some((tool) => !allowedTools.has(tool))) {
     throw new Error("enabledTools contains an unknown or duplicate tool");

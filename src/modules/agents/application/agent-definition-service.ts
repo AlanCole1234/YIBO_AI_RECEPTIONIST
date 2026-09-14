@@ -7,7 +7,7 @@ import type {
   PrepareAgentDefinitionCommand,
   ToolExecutor,
 } from "./contracts.js";
-import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import { AGENT_TOOL_DEFINITIONS, isDeveloperTestTool } from "./tool-definitions.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
 import { PolicyEnforcingToolExecutor } from "./policy-enforcing-tool-executor.js";
@@ -76,6 +76,3 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     return success(definition);
   }
 }
-
-const isDeveloperTestTool = (name: string): boolean =>
-  name === "enable_developer_test_mode" || name === "delete_test_appointments";
