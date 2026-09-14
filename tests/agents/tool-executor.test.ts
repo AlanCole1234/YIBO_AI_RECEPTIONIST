@@ -3,7 +3,13 @@ import { success } from "../../src/shared/domain/result.js";
 import type { Appointment, AppointmentService } from "../../src/modules/appointments/index.js";
 import type { SchedulingService } from "../../src/modules/scheduling/index.js";
 import type { CustomerService } from "../../src/modules/customers/index.js";
-import { BusinessDirectoryService, InMemoryBusinessRepository, type BusinessProfile } from "../../src/modules/business/index.js";
+import {
+  BusinessDirectoryService,
+  InMemoryBusinessRepository,
+  type BusinessProfile,
+  type VersionedBusinessProfile,
+} from "../../src/modules/business/index.js";
+import { DEVELOPMENT_BUSINESS } from "../../src/app/development-fixtures.js";
 import {
   ToolExecutorImpl,
   type HumanTransferPort,
@@ -28,7 +34,7 @@ const confirmedAppointment: Appointment = {
   externalCalendarEventId: "event-1",
 };
 
-function fixture() {
+function fixture(businessProfiles: VersionedBusinessProfile[] = [business]) {
   const findAvailableSlots = vi.fn(async () => success([{
     employeeId: "employee-1",
     startAt: "2026-08-10T15:00:00.000Z",
@@ -52,7 +58,7 @@ function fixture() {
   const transfer: HumanTransferPort = { transferToConfiguredDestination };
   const updateCustomer = vi.fn(async () => success({ id: "customer-1", tenantId: "tenant-a", name: "John Smith", phone: "9155551234" }));
   const customers = { updateCustomer, findOrCreateByPhone: vi.fn(async () => success({ id: "test-customer", tenantId: "tenant-a", name: "YIBO Test Patient", phone: "+15550000000" })) } as unknown as CustomerService;
-  const businesses = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
+  const businesses = new BusinessDirectoryService(new InMemoryBusinessRepository(businessProfiles));
   return {
     appointments,
     createAppointment,
@@ -78,6 +84,52 @@ const business: BusinessProfile = {
 };
 
 describe("ToolExecutorImpl", () => {
+  it("returns public service, price, and branch information without internal IDs", async () => {
+    const profile = structuredClone(DEVELOPMENT_BUSINESS);
+    profile.tenantId = "tenant-a";
+    profile.businessId = "business-public-catalog";
+    profile.locations[0]!.name = "Centro Norte";
+    profile.locations[0]!.services[0]!.price.amountMinor = 12_500;
+    profile.locations.push({
+      ...structuredClone(profile.locations[0]!),
+      id: "south-internal-id",
+      name: "Centro Sur",
+      calledNumbers: ["+529991000099"],
+      services: profile.locations[0]!.services.map((offer) => ({
+        ...offer,
+        price: { ...offer.price, amountMinor: offer.serviceId === "consultation" ? 15_000 : offer.price.amountMinor },
+      })),
+    });
+    const { executor } = fixture([profile]);
+
+    const result = await executor.execute(context, {
+      toolCallId: "service-info",
+      name: "get_service_information",
+      arguments: { service: "Consulta" },
+    });
+
+    expect(result).toEqual({
+      toolCallId: "service-info",
+      ok: true,
+      data: {
+        services: [{
+          name: "Consulta",
+          description: "Consulta general",
+          durationMinutes: 30,
+          locations: [
+            { name: "Centro Norte", price: { amountMinor: 12_500, currency: "MXN", display: expect.any(String) } },
+            { name: "Centro Sur", price: { amountMinor: 15_000, currency: "MXN", display: expect.any(String) } },
+          ],
+        }],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("south-internal-id");
+    expect(serialized).not.toContain("employee-1");
+    expect(serialized).not.toContain('"consultation"');
+    expect(serialized).not.toContain('"default"');
+  });
+
   it("allows Developer Test Mode only from server-authorized local contexts", async () => {
     const { executor } = fixture();
     const denied = await executor.execute(context, { toolCallId: "test-denied", name: "enable_developer_test_mode", arguments: {} });

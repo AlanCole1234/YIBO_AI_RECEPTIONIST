@@ -62,7 +62,7 @@ describe("agent configuration API", () => {
         controls: expect.objectContaining({ reasoningEfforts: ["minimal", "low", "medium", "high"] }),
       }),
     ]));
-    expect(body.availableTools).toHaveLength(6);
+    expect(body.availableTools).toHaveLength(7);
 
     const current = body.current;
     const update = await server.inject({

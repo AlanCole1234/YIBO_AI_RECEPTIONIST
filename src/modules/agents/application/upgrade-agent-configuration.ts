@@ -166,7 +166,7 @@ function normalizePerToolLimits(value: unknown): AgentToolPoliciesConfiguration[
   if (value === undefined) return {};
   if (!isRecord(value)) throw new Error("toolPolicies.limits.perTool must be an object");
   const allowed: AgentToolName[] = [
-    "check_availability", "create_appointment", "update_customer", "cancel_appointment",
+    "get_service_information", "check_availability", "create_appointment", "update_customer", "cancel_appointment",
     "reschedule_appointment", "transfer_to_human", "enable_developer_test_mode", "delete_test_appointments",
   ];
   for (const [tool, limit] of Object.entries(value)) {

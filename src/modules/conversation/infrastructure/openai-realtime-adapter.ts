@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { OpenAIRealtimeWS } from "openai/realtime/ws";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
+import type { AgentToolName } from "../../agents/index.js";
 import type {
   ConversationRuntimeEvent,
   AssistantPlaybackPosition,
@@ -379,7 +380,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human" | "enable_developer_test_mode" | "delete_test_appointments",
+      name: event.name as AgentToolName,
       arguments: argumentsValue,
     });
   }

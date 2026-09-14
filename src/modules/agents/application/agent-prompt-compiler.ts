@@ -42,6 +42,9 @@ export class AgentPromptCompiler {
       "# Enabled capabilities",
       capabilities,
       "A tool request is only a request. Backend validation and the tool result determine whether an action happened.",
+      has("get_service_information")
+        ? "Use get_service_information as the sole source of service descriptions, prices, and branch availability; repeat only its patient-facing fields."
+        : "Do not claim access to current service descriptions, prices, or branch offerings.",
       has("check_availability")
         ? "Use check_availability as the sole source of appointment times. Never ask for service IDs or reveal why a time is busy."
         : "Do not claim calendar access because check_availability is not enabled.",

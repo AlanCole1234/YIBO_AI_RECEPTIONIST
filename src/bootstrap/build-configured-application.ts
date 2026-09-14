@@ -13,7 +13,12 @@ import { SqliteAdminIdentityRepository } from "../infrastructure/database/sqlite
 import { SqliteAdminAuditLog } from "../infrastructure/database/sqlite-admin-audit-log.js";
 import { SqliteCustomerRepository } from "../infrastructure/database/sqlite-customer-repository.js";
 import { SqliteAppointmentRepository } from "../infrastructure/database/sqlite-appointment-repository.js";
-import { AgentConfigurationService, DEFAULT_REALTIME_MODEL } from "../modules/agents/index.js";
+import {
+  AgentConfigurationService,
+  DEFAULT_REALTIME_MODEL,
+  type AgentConfiguration,
+  type AgentToolName,
+} from "../modules/agents/index.js";
 import {
   GoogleCalendarAdapter,
   GoogleOAuthService,
@@ -77,19 +82,9 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
           : {}),
       }),
     );
-  } else if (existingConfiguration.enabledTools.includes("create_appointment")
-    && (!existingConfiguration.enabledTools.includes("update_customer")
-      || !existingConfiguration.enabledTools.includes("reschedule_appointment"))) {
-    // Existing booking agents gain the minimum contact and rescheduling tools so
-    // the dashboard and the live agent agree without replacing configuration.
-    await configurationService.update(tenantId, {
-      ...existingConfiguration,
-      enabledTools: [
-        ...existingConfiguration.enabledTools,
-        ...(existingConfiguration.enabledTools.includes("update_customer") ? [] : ["update_customer" as const]),
-        ...(existingConfiguration.enabledTools.includes("reschedule_appointment") ? [] : ["reschedule_appointment" as const]),
-      ],
-    });
+  } else {
+    const migrated = addCompatibleAgentTools(existingConfiguration);
+    if (migrated) await configurationService.update(tenantId, migrated);
   }
 
   const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
@@ -135,6 +130,38 @@ function buildGoogleIntegration(
       new BusinessCalendarAssignmentResolver(new BusinessDirectoryService(businesses)),
       oauth,
     ),
+  };
+}
+
+const AGENT_TOOL_ADDITIONS: Array<{ prerequisite: AgentToolName; tool: AgentToolName }> = [
+  { prerequisite: "create_appointment", tool: "update_customer" },
+  { prerequisite: "create_appointment", tool: "reschedule_appointment" },
+  { prerequisite: "check_availability", tool: "get_service_information" },
+];
+
+function addCompatibleAgentTools(configuration: AgentConfiguration): AgentConfiguration | null {
+  const addForPrerequisites = (tools: AgentToolName[]): AgentToolName[] => {
+    const additions = AGENT_TOOL_ADDITIONS
+      .filter(({ prerequisite, tool }) => tools.includes(prerequisite) && !tools.includes(tool))
+      .map(({ tool }) => tool);
+    return additions.length > 0 ? [...tools, ...additions] : tools;
+  };
+  const enabledTools = addForPrerequisites(configuration.enabledTools);
+  const phoneTools = addForPrerequisites(configuration.toolPolicies.channels.phone.enabledTools);
+  const voiceLabTools = addForPrerequisites(configuration.toolPolicies.channels.voice_lab.enabledTools);
+  if (enabledTools === configuration.enabledTools
+    && phoneTools === configuration.toolPolicies.channels.phone.enabledTools
+    && voiceLabTools === configuration.toolPolicies.channels.voice_lab.enabledTools) return null;
+  return {
+    ...configuration,
+    enabledTools,
+    toolPolicies: {
+      ...configuration.toolPolicies,
+      channels: {
+        phone: { ...configuration.toolPolicies.channels.phone, enabledTools: phoneTools },
+        voice_lab: { ...configuration.toolPolicies.channels.voice_lab, enabledTools: voiceLabTools },
+      },
+    },
   };
 }
 

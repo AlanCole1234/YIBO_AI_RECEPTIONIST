@@ -158,6 +158,7 @@ sólo entonces envía `parallel_tool_calls: true`.
 
 | Tool | Acción | Protección principal |
 |---|---|---|
+| `get_service_information` | Consulta servicios, descripción, duración, precio y sucursales | Sólo nombres públicos; omite IDs y ofertas inactivas |
 | `check_availability` | Consulta slots reales o una hora exacta | Servicio/empleado y zona se resuelven en backend |
 | `update_customer` | Guarda nombre completo y teléfono | Cliente procede de la llamada |
 | `create_appointment` | Crea y confirma una cita | Requiere slot consultado, ownership e idempotencia |
@@ -170,6 +171,13 @@ sólo entonces envía `parallel_tool_calls: true`.
 `tenantId`, `callId`, `customerId` e idempotencia son contexto confiable y se
 rechazan si aparecen en argumentos del modelo. Deshabilitar una herramienta
 impide que sea registrada en la sesión.
+
+`get_service_information` consulta el catálogo completo del tenant usando el
+tenant confiable de la llamada. Devuelve únicamente servicios y ofertas activas:
+nombre y descripción del servicio, duración, nombre público de sucursal y precio
+en unidades menores, moneda ISO y texto localizado. No serializa IDs de servicio,
+sucursal o profesional. Al actualizar instalaciones existentes, la tool se
+habilita sólo en canales donde ya estaba habilitada `check_availability`.
 
 ## Calendario y citas
 

@@ -8,6 +8,7 @@ import type {
 } from "../../../shared/types/identifiers.js";
 
 export type AgentToolName =
+  | "get_service_information"
   | "check_availability"
   | "create_appointment"
   | "update_customer"

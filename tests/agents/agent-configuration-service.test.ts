@@ -14,7 +14,7 @@ describe("AgentConfigurationService", () => {
     const recommended = service.recommended("es-MX", "Clínica YIBO", "gpt-realtime-2.1");
 
     expect(recommended.enabledTools).toEqual([
-      "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
+      "get_service_information", "check_availability", "create_appointment", "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
     ]);
     expect(recommended).toMatchObject({
       schemaVersion: 4,

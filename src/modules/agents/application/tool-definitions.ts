@@ -2,6 +2,19 @@ import type { AgentToolDefinition } from "./contracts.js";
 
 export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
+    name: "get_service_information",
+    description: "List active patient-facing services with their descriptions, duration, prices, and the branch names where each is offered. Optionally filter by an exact service name. Never expose or ask for internal IDs.",
+    presentation: { title: "Service information", help: "Reads public service, price, and branch information without exposing internal identifiers.", route: "BusinessDirectory", icon: "ⓘ", kind: "consult" },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [],
+      properties: {
+        service: { type: "string", minLength: 1, description: "Optional patient-facing service name." },
+      },
+    },
+  },
+  {
     name: "check_availability",
     description: "Find real clinic-calendar appointment slots. Use dateExpression for natural caller phrases. service is an optional patient-facing choice such as Cleaning or Consultation; omit it to use the clinic's configured default appointment type. Never ask for or expose an internal service ID. When the caller asks about an exact time, include requestedStartAt as an ISO datetime. Results are verified, privacy-safe, and sorted earliest first.",
     presentation: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕", kind: "consult" },

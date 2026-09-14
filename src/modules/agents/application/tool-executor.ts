@@ -38,6 +38,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       return invalid(call, "Trusted context fields cannot be supplied by the model");
     }
     switch (call.name) {
+      case "get_service_information": return this.getServiceInformation(context, call);
       case "check_availability": return this.checkAvailability(context, call);
       case "create_appointment": return this.createAppointment(context, call);
       case "update_customer": return this.updateCustomer(context, call);
@@ -47,6 +48,44 @@ export class ToolExecutorImpl implements ToolExecutor {
       case "enable_developer_test_mode": return this.enableDeveloperTestMode(context, call);
       case "delete_test_appointments": return this.deleteTestAppointments(context, call);
     }
+  }
+
+  private async getServiceInformation(context: ToolExecutionContext, call: AgentToolCall) {
+    const input = call.arguments as Input;
+    if (!exactKeys(input, ["service"], []) || (input.service !== undefined && !text(input.service))) {
+      return invalid(call, "service must be a non-empty patient-facing name when provided");
+    }
+    if (!this.businesses) {
+      return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Service information is unavailable right now.", false);
+    }
+    const result = await this.businesses.getBusinessProfile(context.tenantId);
+    if (!result.ok) {
+      return toolError(call, result.error.code, "Service information is unavailable right now.", false);
+    }
+    const requestedName = text(input.service) ? normalizeName(input.service) : undefined;
+    const activeLocations = result.value.locations.filter(({ active }) => active);
+    const services = result.value.services
+      .filter((service) => service.active && (!requestedName || normalizeName(service.name) === requestedName))
+      .map((service) => ({
+        name: service.name,
+        description: service.description,
+        durationMinutes: service.durationMinutes,
+        locations: activeLocations.flatMap((location) => {
+          const offer = location.services.find((candidate) => candidate.active && candidate.serviceId === service.id);
+          return offer ? [{
+            name: location.name,
+            price: {
+              amountMinor: offer.price.amountMinor,
+              currency: offer.price.currency,
+              display: formatMoney(offer.price.amountMinor, offer.price.currency, location.locale),
+            },
+          }] : [];
+        }),
+      }))
+      .filter(({ locations }) => locations.length > 0);
+    return services.length > 0
+      ? { toolCallId: call.toolCallId, ok: true as const, data: { services } }
+      : toolError(call, "SERVICE_NOT_FOUND", "No active service with that name is available.", false);
   }
 
   private async updateCustomer(context: ToolExecutionContext, call: AgentToolCall) {
@@ -406,3 +445,9 @@ const availabilityMessage = (code: string): string => {
 
 const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
 const hasFirstAndLastName = (value: string): boolean => value.trim().split(/\s+/).length >= 2;
+const normalizeName = (value: string): string => value.trim().toLocaleLowerCase();
+const formatMoney = (amountMinor: number, currency: string, locale: string): string => {
+  const formatter = new Intl.NumberFormat(locale, { style: "currency", currency });
+  const fractionDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+  return formatter.format(amountMinor / (10 ** fractionDigits));
+};

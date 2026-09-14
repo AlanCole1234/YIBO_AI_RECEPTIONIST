@@ -34,7 +34,7 @@ export interface Appointment {
 }
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean }
 
-export type AgentToolName = "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human";
+export type AgentToolName = "get_service_information" | "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human";
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export interface AgentConfiguration {
