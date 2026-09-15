@@ -25,6 +25,13 @@ export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
     return success({ provider: "memory", externalEventId });
   }
 
+  async rescheduleEvent(command: Parameters<AppointmentCalendarPort["rescheduleEvent"]>[0]) {
+    const error = this.consumeFailure();
+    if (error) return failure<AppointmentCalendarError>(error);
+    if (!this.events.has(command.externalEventId)) return failure<AppointmentCalendarError>({ code: "EVENT_NOT_FOUND" });
+    return success(undefined);
+  }
+
   async cancelEvent(command: Parameters<AppointmentCalendarPort["cancelEvent"]>[0]) {
     const error = this.consumeFailure();
     if (error) return failure<AppointmentCalendarError>(error);

@@ -254,7 +254,7 @@ describe("AppointmentServiceImpl", () => {
     expect(cancelled.ok && cancelled.value.status).toBe("CANCELLED");
   });
 
-  it("replaces the external event and persists the validated rescheduled slot", async () => {
+  it("preserves the external event and persists the validated rescheduled slot", async () => {
     const { service } = fixture();
     await service.createAppointment(command);
 
@@ -270,7 +270,7 @@ describe("AppointmentServiceImpl", () => {
       startAt: "2026-08-10T16:00:00.000Z",
       endAt: "2026-08-10T16:30:00.000Z",
       status: "CONFIRMED",
-      externalCalendarEventId: "event-2",
+      externalCalendarEventId: "event-1",
     } });
   });
 

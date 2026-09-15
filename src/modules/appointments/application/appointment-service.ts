@@ -144,6 +144,7 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
     if (appointment.externalCalendarEventId) {
       const cancelled = await this.calendar.cancelEvent({
+        appointmentId: appointment.id,
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
         employeeId: appointment.employeeId,
@@ -186,42 +187,22 @@ export class AppointmentServiceImpl implements AppointmentService {
         );
       }
 
-      const customer = await this.customers.get(appointment.tenantId, appointment.customerId);
-      const replacement = await this.calendar.createEvent({
+      const moved = await this.calendar.rescheduleEvent({
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
         appointmentId: appointment.id,
         employeeId: appointment.employeeId,
-        title: `${appointment.serviceNameSnapshot} appointment`,
-        serviceName: appointment.serviceNameSnapshot,
-        ...(customer ? { patient: customer } : {}),
+        externalEventId: appointment.externalCalendarEventId!,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
-        idempotencyKey: `${appointment.idempotencyKey}:reschedule:${slot.value.startAt}`,
       });
-      if (!replacement.ok) return failure<RescheduleAppointmentError>(calendarFailure(replacement.error));
-
-      const oldCancelled = await this.calendar.cancelEvent({
-        tenantId: appointment.tenantId,
-        locationId: appointment.locationId,
-        employeeId: appointment.employeeId,
-        externalEventId: appointment.externalCalendarEventId!,
-      });
-      if (!oldCancelled.ok) {
-        await this.calendar.cancelEvent({
-          tenantId: appointment.tenantId,
-          locationId: appointment.locationId,
-          employeeId: appointment.employeeId,
-          externalEventId: replacement.value.externalEventId,
-        });
-        return failure<RescheduleAppointmentError>(calendarFailure(oldCancelled.error));
-      }
+      if (!moved.ok) return failure<RescheduleAppointmentError>(calendarFailure(moved.error));
 
       const updated: Appointment = {
         ...appointment,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
-        externalCalendarEventId: replacement.value.externalEventId,
+        externalCalendarEventId: appointment.externalCalendarEventId,
       };
       await this.repository.save(updated);
       return success(updated);

@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { failure, success } from "../../../shared/domain/result.js";
-import type { AppointmentCalendarPort } from "../../appointments/index.js";
+import type { AppointmentCalendarPort, AppointmentCalendarError } from "../../appointments/index.js";
 import type { BusyInterval, CalendarPort } from "../../scheduling/index.js";
 import { dateTimeInTimezone } from "../../scheduling/domain/time.js";
 import type { GoogleOAuthService } from "./google-oauth-service.js";
@@ -51,7 +52,7 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
     const token = await this.tokenFor(command.tenantId);
     if (!token.ok) return token;
-    const externalEventId = googleEventId(command.appointmentId);
+    const externalEventId = googleEventId(command.tenantId, command.appointmentId);
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(assignment.value.calendarId)}/events`;
     try {
       const timeZone = assignment.value.timezone;
@@ -92,10 +93,13 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
           // the intended wall-clock time explicit to Google Calendar as well.
           start,
           end,
-          extendedProperties: { private: { yiboAppointmentId: command.appointmentId } },
+          extendedProperties: { private: { yiboAppointmentId: command.appointmentId, yiboTenantId: command.tenantId } },
         }),
       });
       if (response.status === 409) {
+        const existing = await this.readOwnedEvent({ ...command, externalEventId }, token.value, assignment.value.calendarId);
+        if (!existing.ok) return existing;
+        if (!matchesTimes(existing.value, command)) return eventMismatch("The existing event has different appointment times.");
         googleLog("calendar.google.event.created", {
           tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
           appointmentId: command.appointmentId, externalEventId, duplicate: true,
@@ -134,43 +138,70 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     }
   }
 
-  async cancelEvent(command: { tenantId: string; locationId: string; employeeId: string; externalEventId: string }) {
+  async rescheduleEvent(command: Parameters<AppointmentCalendarPort["rescheduleEvent"]>[0]) {
+    if (!validTimes(command)) return eventMismatch("A valid appointment time range is required.");
     const assignment = await this.calendars.resolve(command);
     if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
-    const token = await this.oauth.accessToken(command.tenantId);
-    if (!token) return failure({ code: "AUTHORIZATION_REQUIRED" as const });
-    googleLog("calendar.google.event.cancelling", {
-      tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
-      externalEventId: command.externalEventId, assignmentSource: assignment.value.source,
-    });
+    const token = await this.tokenFor(command.tenantId);
+    if (!token.ok) return token;
     try {
-      const response = await this.fetcher(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(assignment.value.calendarId)}/events/${encodeURIComponent(command.externalEventId)}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
-      if (response.status === 404) {
-        googleLog("calendar.google.event.cancel_failed", {
-          tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
-          externalEventId: command.externalEventId, httpStatus: 404,
-        });
-        return failure({ code: "EVENT_NOT_FOUND" as const });
-      }
-      if (!response.ok) {
-        googleLog("calendar.google.event.cancel_failed", {
-          tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
-          externalEventId: command.externalEventId, httpStatus: response.status,
-        });
-        return failure(providerError(response.status));
-      }
-      googleLog("calendar.google.event.cancelled", {
-        tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
-        externalEventId: command.externalEventId,
+      const existing = await this.readOwnedEvent(command, token.value, assignment.value.calendarId);
+      if (!existing.ok) return existing;
+      if (!existing.value.etag) return eventMismatch("The calendar event has no version identifier.");
+      const timeZone = assignment.value.timezone;
+      const response = await this.fetcher(this.eventUrl(command.externalEventId, assignment.value.calendarId), {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json", "if-match": existing.value.etag },
+        // Preserve event identity, attendees, reminders, notes, and other fields.
+        body: JSON.stringify({ start: dateTimeInTimezone(new Date(command.startAt), timeZone), end: dateTimeInTimezone(new Date(command.endAt), timeZone) }),
       });
+      if (!response.ok) return failure<AppointmentCalendarError>(eventOperationError(response.status));
+      const updated = await response.json() as GoogleEvent;
+      if (updated.id !== command.externalEventId || updated.status === "cancelled" || !matchesTimes(updated, command)) {
+        return eventMismatch("The calendar did not return the expected rescheduled event.");
+      }
       return success(undefined);
     } catch {
-      googleLog("calendar.google.event.cancel_failed", {
-        tenantId: command.tenantId, locationId: command.locationId, employeeId: command.employeeId,
-        externalEventId: command.externalEventId, failure: "network_or_response_error",
-      });
-      return failure({ code: "PROVIDER_UNAVAILABLE" as const, retryable: true });
+      return failure<AppointmentCalendarError>({ code: "PROVIDER_UNAVAILABLE", retryable: true });
     }
+  }
+
+  async cancelEvent(command: Parameters<AppointmentCalendarPort["cancelEvent"]>[0]) {
+    const assignment = await this.calendars.resolve(command);
+    if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
+    const token = await this.tokenFor(command.tenantId);
+    if (!token.ok) return token;
+    try {
+      const existing = await this.readOwnedEvent(command, token.value, assignment.value.calendarId);
+      if (!existing.ok) return existing;
+      if (!existing.value.etag) return eventMismatch("The calendar event has no version identifier.");
+      const response = await this.fetcher(this.eventUrl(command.externalEventId, assignment.value.calendarId), {
+        method: "DELETE", headers: { authorization: `Bearer ${token.value}`, "if-match": existing.value.etag },
+      });
+      if (!response.ok) return failure<AppointmentCalendarError>(eventOperationError(response.status));
+      return success(undefined);
+    } catch {
+      return failure<AppointmentCalendarError>({ code: "PROVIDER_UNAVAILABLE", retryable: true });
+    }
+  }
+
+  private eventUrl(externalEventId: string, calendarId: string): string {
+    return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(externalEventId)}`;
+  }
+
+  private async readOwnedEvent(command: { tenantId: string; appointmentId: string; externalEventId: string }, token: string, calendarId: string) {
+    const response = await this.fetcher(this.eventUrl(command.externalEventId, calendarId), { headers: { authorization: `Bearer ${token}` } });
+    if (!response.ok) return failure<AppointmentCalendarError>(eventOperationError(response.status));
+    const event = await response.json() as GoogleEvent;
+    if (event.status === "cancelled") return failure<AppointmentCalendarError>({ code: "EVENT_NOT_FOUND" });
+    const identity = event.extendedProperties?.private;
+    // Older YIBO events have only yiboAppointmentId. Preserve their persisted IDs
+    // and accept that marker; new events additionally record the tenant.
+    if (event.id !== command.externalEventId || identity?.yiboAppointmentId !== command.appointmentId
+      || (identity.yiboTenantId !== undefined && identity.yiboTenantId !== command.tenantId)) {
+      return eventMismatch("The calendar event does not belong to this appointment.");
+    }
+    return success(event);
   }
 
   private async tokenFor(tenantId: string) {
@@ -181,7 +212,27 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
   }
 }
 
-const googleEventId = (appointmentId: string): string => `a${appointmentId.replace(/[^0-9a-f]/gi, "").toLowerCase()}`;
+const googleEventId = (tenantId: string, appointmentId: string): string =>
+  `a${createHash("sha256").update(JSON.stringify([tenantId, appointmentId])).digest("hex")}`;
+
+interface GoogleEvent {
+  id?: string;
+  etag?: string;
+  status?: string;
+  start?: { dateTime?: string };
+  end?: { dateTime?: string };
+  extendedProperties?: { private?: { yiboAppointmentId?: string; yiboTenantId?: string } };
+}
+const validTimes = (command: { startAt: string; endAt: string }): boolean =>
+  Number.isFinite(Date.parse(command.startAt)) && Number.isFinite(Date.parse(command.endAt)) && Date.parse(command.startAt) < Date.parse(command.endAt);
+const matchesTimes = (event: GoogleEvent, command: { startAt: string; endAt: string }): boolean =>
+  Date.parse(event.start?.dateTime ?? "") === Date.parse(command.startAt) && Date.parse(event.end?.dateTime ?? "") === Date.parse(command.endAt);
+const eventMismatch = (message: string) => failure<AppointmentCalendarError>({ code: "VALIDATION_ERROR", message });
+const eventOperationError = (status: number): AppointmentCalendarError => {
+  if (status === 404 || status === 410) return { code: "EVENT_NOT_FOUND" };
+  if (status === 412) return { code: "VALIDATION_ERROR", message: "The calendar event changed during this operation. Check it again before retrying." };
+  return providerError(status);
+};
 
 const providerError = (status: number) => {
   if (status === 401 || status === 403) return { code: "AUTHORIZATION_REQUIRED" as const };

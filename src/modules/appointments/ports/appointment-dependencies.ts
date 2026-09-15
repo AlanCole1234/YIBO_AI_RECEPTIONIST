@@ -31,7 +31,17 @@ export interface AppointmentCalendarPort {
     endAt: ISODateTime;
     idempotencyKey: IdempotencyKey;
   }): Promise<Result<{ provider: string; externalEventId: string }, AppointmentCalendarError>>;
+  rescheduleEvent(command: {
+    tenantId: TenantId;
+    locationId: LocationId;
+    appointmentId: AppointmentId;
+    employeeId: EmployeeId;
+    externalEventId: string;
+    startAt: ISODateTime;
+    endAt: ISODateTime;
+  }): Promise<Result<void, AppointmentCalendarError>>;
   cancelEvent(command: {
+    appointmentId: AppointmentId;
     tenantId: TenantId;
     locationId: LocationId;
     employeeId: EmployeeId;

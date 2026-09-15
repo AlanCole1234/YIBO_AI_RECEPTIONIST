@@ -93,3 +93,34 @@ already forwarded by the generic event channel are not forwarded a second time.
 These are internal connection safeguards, not tenant/provider tuning controls.
 Three SDK-boundary tests plus the adapter suite passed (30 tests); both typechecks
 passed. No external API call was used.
+
+## Preserved Calendar identity fix adapted to routed calendars
+
+Root cause: the recovered reschedule path inserted using the original appointment
+ID. Google returned 409 for that already-existing ID; the adapter treated every
+409 as success, then the domain deleted that same original event. The appointment
+could remain locally confirmed while its Google event was deleted. Separately,
+stripping non-hexadecimal characters made IDs ending in x/y/z collide and omitted
+tenant identity, allowing unrelated events to be mistaken for successful creates.
+
+The calendar port now offers rescheduleEvent. The domain validates the target slot
+and patches the persisted event ID without insert/delete compensation. Google
+checks appointment ownership (and tenant marker when present), uses the retrieved
+etag for conditional patch/delete, and verifies returned ID/times. A duplicate
+create must match ownership and time. New IDs hash the complete tenant/appointment
+tuple; existing IDs remain unchanged. Memory and SQLite implement the same port.
+The current location/professional CalendarAssignmentResolver remains authoritative.
+
+Validation: 29 focused tests; 306 full-suite tests passed, one optional live test
+skipped; both typechecks and production build passed. Eight new provider-boundary
+regressions cover formerly colliding IDs, tenant scoping, similar appointments,
+repeated rescheduling, cancel after reschedule, exact local times, original ID,
+no duplicate inserts, ownership, legacy IDs and etag conflict. Domain regression
+now expects the original event ID. No real Google events were changed.
+
+References checked: [conditional modifications](https://developers.google.com/workspace/calendar/api/guides/version-resources)
+and [event patch semantics](https://developers.google.com/workspace/calendar/api/v3/reference/events/patch).
+Remaining release checks owned by UI-007/E2E-002: calendar-mapping changes with
+existing appointments, ambiguous network outcomes, and live-provider verification.
+Legacy events without a tenant marker rely on the trusted routed calendar and
+matching appointment marker; mismatches fail closed. No database migration here.

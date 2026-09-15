@@ -126,7 +126,7 @@ describe("GoogleCalendarAdapter", () => {
       requests.push({ url: String(input), method: init?.method ?? "GET" });
       return init?.method === "DELETE"
         ? new Response(null, { status: 204 })
-        : new Response(JSON.stringify({ id: "event-safe" }), { status: 200 });
+        : new Response(JSON.stringify({ id: "event-safe", etag: "version-1", extendedProperties: { private: { yiboAppointmentId: "appointment-safe" } } }), { status: 200 });
     });
     const resolver: CalendarAssignmentResolver = {
       resolve: async ({ employeeId }) => ({
@@ -150,11 +150,12 @@ describe("GoogleCalendarAdapter", () => {
       startAt: "2026-09-11T15:00:00.000Z", endAt: "2026-09-11T15:30:00.000Z", idempotencyKey: "safe-request",
     });
     await adapter.cancelEvent({
-      tenantId: "tenant-1", locationId: "north", employeeId: "employee-2", externalEventId: "event-safe",
+      tenantId: "tenant-1", locationId: "north", employeeId: "employee-2", appointmentId: "appointment-safe", externalEventId: "event-safe",
     });
 
     expect(requests).toEqual([
       { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events", method: "POST" },
+      { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events/event-safe", method: "GET" },
       { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events/event-safe", method: "DELETE" },
     ]);
     const serializedLogs = logs.mock.calls.flat().join("\n");
