@@ -82,3 +82,14 @@ ordering, delayed response-created acknowledgement, and failed tool output durin
 speech with automatic responses disabled. Provider protocol reference checked:
 https://developers.openai.com/api/docs/guides/realtime-conversations .
 No live latency or phone-call improvement is inferred from these deterministic tests.
+
+### Realtime connection startup
+
+The installed OpenAI SDK explicitly reports unhandled rejections when no SDK error
+listener exists. Registering it only after the socket opens left startup exposed.
+The listener now exists immediately; a socket close before open rejects startup,
+and the SDK WebSocket receives a 10-second handshake deadline. Provider errors
+already forwarded by the generic event channel are not forwarded a second time.
+These are internal connection safeguards, not tenant/provider tuning controls.
+Three SDK-boundary tests plus the adapter suite passed (30 tests); both typechecks
+passed. No external API call was used.

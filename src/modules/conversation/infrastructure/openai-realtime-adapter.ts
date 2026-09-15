@@ -456,19 +456,33 @@ class SDKRealtimeConnection implements RealtimeConnection {
   private readonly opened: Promise<void>;
   private eventHandler?: (event: unknown) => void;
   private readonly pendingEvents: unknown[] = [];
+  private errorHandler?: (error: { message: string; code?: string }) => void;
+  private readonly pendingErrors: Array<{ message: string; code?: string }> = [];
 
   constructor(input: { apiKey: string; model: string }) {
     const client = new OpenAI({ apiKey: input.apiKey });
-    this.realtime = new OpenAIRealtimeWS({ model: input.model }, client);
+    this.realtime = new OpenAIRealtimeWS({ model: input.model, options: { handshakeTimeout: 10_000 } }, client);
+    // Attach before awaiting open: the SDK otherwise reports startup errors as
+    // unhandled promise rejections even when the raw socket has an error listener.
+    this.realtime.on("error", (error) => {
+      // Provider error events already travel through the event handler.
+      if (error.error) return;
+      const details = { message: error.message };
+      if (this.errorHandler) this.errorHandler(details);
+      else this.pendingErrors.push(details);
+    });
     this.opened = new Promise((resolve, reject) => {
       const onOpen = () => { cleanup(); resolve(); };
       const onError = (error: Error) => { cleanup(); reject(error); };
+      const onClose = () => { cleanup(); reject(new Error("Realtime connection closed before opening")); };
       const cleanup = () => {
         this.realtime.socket.off("open", onOpen);
         this.realtime.socket.off("error", onError);
+        this.realtime.socket.off("close", onClose);
       };
       this.realtime.socket.once("open", onOpen);
       this.realtime.socket.once("error", onError);
+      this.realtime.socket.once("close", onClose);
     });
     this.realtime.on("event", (event: RealtimeServerEvent) => {
       if (this.eventHandler) this.eventHandler(event);
@@ -494,10 +508,8 @@ class SDKRealtimeConnection implements RealtimeConnection {
   }
 
   onError(handler: (error: { message: string; code?: string }) => void): void {
-    this.realtime.on("error", (error) => handler({
-      message: error.message,
-      ...(error.error?.code ? { code: error.error.code } : {}),
-    }));
+    this.errorHandler = handler;
+    for (const error of this.pendingErrors.splice(0)) handler(error);
   }
 
   onClose(handler: (reason?: string) => void): void {

@@ -144,7 +144,7 @@ con `pnpm test` y `pnpm build`.
 | UI-002 | DONE | Esquema v4 y controles generados por modelo con visibilidad/errores por capacidad |
 | UI-003 | DONE | Siete secciones editan comportamiento, silencios, canales, confirmación, límites y escalamiento |
 | INT-001 | DONE | ARI/RTP cableado por DID confiable al runtime moderno; 41 pruebas focales y typechecks aprobados |
-| INT-002 | IN_PROGRESS | Clasificación documentada; secuencia de respuestas y deduplicación verificadas con 43 pruebas y ambos typechecks; sin cambios de defaults |
+| INT-002 | IN_PROGRESS | Clasificación documentada; secuencia de respuestas y deduplicación verificadas con 43 pruebas y ambos typechecks; sin cambios de defaults; startup SDK acotado (30 pruebas) |
 | INT-003 | TODO | E2E confiable, typecheck, suite completa y build |
 | UI-004 | TODO | Preview real y explícita mediante Voice Lab |
 | UI-005 | TODO | Administración de sucursales y políticas |
