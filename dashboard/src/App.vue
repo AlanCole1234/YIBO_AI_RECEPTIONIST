@@ -6,16 +6,9 @@ import { messages, type MessageKey } from "./i18n";
 import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 import AdminLogin from "./components/AdminLogin.vue";
+import LocationSettings from "./components/LocationSettings.vue";
 
 type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings";
-const timezones = [
-  { value: "America/Denver", label: "Mountain Time (El Paso)" },
-  { value: "America/Chicago", label: "Central Time" },
-  { value: "America/New_York", label: "Eastern Time" },
-  { value: "America/Los_Angeles", label: "Pacific Time" },
-  { value: "America/Phoenix", label: "Arizona Time" },
-];
-
 const section = ref<Section>("overview");
 const adminSession = createAdminSession();
 const auth = adminSession.state;
@@ -41,7 +34,6 @@ const selectedSlot = ref<Slot>();
 const createdAppointment = ref<Appointment>();
 const lookupId = ref("");
 const lookupResult = ref<Appointment>();
-const timezone = ref("America/Denver");
 
 const selectedService = computed(() => business.value?.services.find((service) => service.id === serviceId.value));
 const eligibleEmployees = computed(() => business.value?.employees.filter(
@@ -76,7 +68,6 @@ async function loadWorkspace(): Promise<void> {
     googleCalendar.value = calendarStatus;
     serviceId.value = profile.services[0]?.id ?? "";
     employeeId.value = profile.services[0]?.eligibleEmployeeIds[0] ?? "";
-    timezone.value = profile.timezone;
     customerForm.value.phone = profile.region === "US" ? "+1" : "+52";
   } catch (error) {
     globalError.value = messageFor(error);
@@ -157,12 +148,10 @@ async function findAppointment(): Promise<void> {
   await run(async () => { lookupResult.value = await api.appointment(lookupId.value.trim()); });
 }
 
-async function saveTimezone(): Promise<void> {
-  await run(async () => {
-    business.value = await api.updateBusinessTimezone(timezone.value);
-    slots.value = [];
-    selectedSlot.value = undefined;
-  });
+async function locationSettingsSaved(): Promise<void> {
+  slots.value = [];
+  selectedSlot.value = undefined;
+  await run(async () => { business.value = await api.business(); });
 }
 
 async function run(action: () => Promise<void>): Promise<void> {
@@ -308,17 +297,8 @@ function statusLabel(status: string): string {
         <article v-if="lookupResult" class="panel details"><div><span>ID</span><strong>{{ lookupResult.id }}</strong></div><div><span>{{ t('customer') }}</span><strong>{{ lookupResult.customerId }}</strong></div><div><span>{{ t('service') }}</span><strong>{{ lookupResult.serviceId }}</strong></div><div><span>{{ t('professional') }}</span><strong>{{ lookupResult.employeeId }}</strong></div><div><span>{{ t('start') }}</span><strong>{{ formatDateTime(lookupResult.startAt) }}</strong></div><div><span>{{ t('status') }}</span><strong>{{ statusLabel(lookupResult.status) }}</strong></div></article>
       </section>
 
-      <section v-else-if="section === 'settings'" class="view narrow">
-        <div class="section-heading"><div><p class="eyebrow">Business settings</p><h2>Time zone</h2><p>Choose the local time YIBO should use for availability, appointments, Google Calendar, and AI scheduling conversations.</p></div></div>
-        <form class="panel form-card" @submit.prevent="saveTimezone">
-          <label>Business time zone
-            <select v-model="timezone">
-              <option v-for="option in timezones" :key="option.value" :value="option.value">{{ option.label }} — {{ option.value }}</option>
-            </select>
-          </label>
-          <p class="settings-help">For El Paso, choose <strong>Mountain Time (El Paso)</strong>. YIBO uses IANA time zones, so daylight saving time is handled automatically.</p>
-          <button class="primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save time zone' }}</button>
-        </form>
+      <section v-else-if="section === 'settings'" class="view">
+        <LocationSettings @saved="locationSettingsSaved" />
       </section>
     </main>
   </div>

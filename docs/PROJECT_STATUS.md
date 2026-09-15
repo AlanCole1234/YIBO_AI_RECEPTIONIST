@@ -11,7 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **UI-005 — administración de sucursales y políticas**.
+- Tarea activa: **ninguna — UI-005 terminada; ejecución detenida por solicitud del usuario**.
+- Próxima tarea: **UI-006**, pendiente y no iniciada.
+- UI-005 verificada el 15 de septiembre de 2026: 24 pruebas focales aprobadas, ambos typechecks y build de producción aprobados.
 - Baseline recuperado verificado localmente: 270 pruebas aprobadas, 1 omitida; ambos typechecks y build aprobados el 15 de septiembre de 2026.
 - Preservación local completa: `backup/alan-local-before-integration` (`54e4b9b`), backup remoto de `edd624e`, bundle privado verificado para ambos stashes y reflog. Ver `INTEGRATION_INVENTORY.md`.
 - Último checkpoint cerrado: Checkpoint 6; 261 pruebas aprobadas, 1 omitida y
@@ -148,7 +150,7 @@ con `pnpm test` y `pnpm build`.
 | INT-002 | DONE | Latencia clasificada; configuración preservada; respuestas serializadas y startup SDK acotado; pruebas y documentación verificadas |
 | INT-003 | DONE | E2E ARI/RTP → DID/location → agente/tools → cleanup; 306 pruebas, 1 live omitida, ambos typechecks y build aprobados |
 | UI-004 | DONE | Preview explícita de configuración guardada en Voice Lab; costo visible, tenant/runtime verificados; 14 pruebas, typechecks y build aprobados |
-| UI-005 | IN_PROGRESS | Administración de sucursales y políticas |
+| UI-005 | DONE | Settings administra sucursales, números, dirección, zona, horarios, cierres, políticas y transferencia con roles/CAS existentes; 24 pruebas, typechecks y build aprobados |
 | UI-006 | TODO | Administración de catálogos, precios y profesionales |
 | UI-007 | TODO | Mapeo de calendarios |
 | UI-008 | TODO | Operación ampliada de citas |

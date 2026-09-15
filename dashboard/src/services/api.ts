@@ -1,3 +1,5 @@
+import type { EditableBusinessConfiguration, VersionedBusinessConfiguration } from "../../../src/modules/business/index.js";
+
 export interface ServiceDefinition {
   id: string;
   name: string;
@@ -172,6 +174,11 @@ export const api = {
   me: () => request<{ principal: AdminPrincipal }>("/api/auth/me"),
   health: () => request<{ status: string }>("/api/health"),
   business: () => request<Business>("/api/business"),
+  businessConfiguration: () => request<VersionedBusinessConfiguration>("/api/admin/business-configuration"),
+  updateBusinessConfiguration: (configuration: EditableBusinessConfiguration, version: number) =>
+    request<VersionedBusinessConfiguration>("/api/admin/business-configuration", {
+      method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ configuration }),
+    }),
   updateBusinessTimezone: (timezone: string) => request<Business>("/api/business/timezone", {
     method: "PUT",
     body: JSON.stringify({ timezone }),
