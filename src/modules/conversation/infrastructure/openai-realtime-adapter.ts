@@ -115,6 +115,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private state: RealtimeTurnState = "listening";
   private activeResponseId?: string;
   private toolResponsePending = false;
+  private responseRequested = false;
+  private readonly deliveredToolResults = new Set<string>();
+  private readonly automaticTurnResponse: boolean;
   private inputAudioFrames = 0;
   private callerIsSpeaking = false;
   private readonly behavior: OpenConversationInput["agent"]["behavior"];
@@ -130,6 +133,8 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   ) {
     this.allowedTools = new Set(input.agent.tools.map((tool) => tool.name));
     this.behavior = structuredClone(input.agent.behavior);
+    this.automaticTurnResponse = input.agent.audio.turnDetection.type !== "manual"
+      && input.agent.audio.turnDetection.createResponse;
     this.automaticSilenceResponse = input.agent.audio.turnDetection.type === "server_vad"
       && input.agent.audio.turnDetection.createResponse;
     connection.onEvent((event) => this.handleEvent(event));
@@ -150,6 +155,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       },
     });
     this.logger.info?.("OpenAI Realtime response.create sent", { source: "text_turn" });
+    this.responseRequested = true;
     this.connection.send({ type: "response.create" });
     this.setState("thinking", { source: "text_turn" });
   }
@@ -182,6 +188,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   async sendToolResult(result: ToolResultEnvelope): Promise<void> {
     this.assertOpen();
+    if (this.deliveredToolResults.has(result.toolCallId)) return;
     this.connection.send({
       type: "conversation.item.create",
       item: {
@@ -192,15 +199,15 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
           : { ok: false, error: result.error }),
       },
     });
-    if (this.callerIsSpeaking) {
-      this.logger.info?.("OpenAI Realtime tool result will be included in the caller's next server-VAD response", { state: this.state });
-      return;
-    }
-    if (this.activeResponseId) {
-      this.toolResponsePending = true;
-      this.logger.info?.("OpenAI Realtime tool result queued until the active response completes", { state: this.state });
-      return;
-    }
+    this.deliveredToolResults.add(result.toolCallId);
+    this.toolResponsePending = true;
+    this.flushToolResponse();
+  }
+
+  private flushToolResponse(): void {
+    if (!this.toolResponsePending || this.callerIsSpeaking || this.activeResponseId || this.responseRequested) return;
+    this.toolResponsePending = false;
+    this.responseRequested = true;
     this.connection.send({ type: "response.create" });
     this.logger.info?.("OpenAI Realtime response.create sent", { source: "tool_result" });
     this.setState("thinking", { source: "tool_result" });
@@ -322,10 +329,15 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.callerIsSpeaking = false;
         this.setState("thinking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_stopped" });
+        if (!this.automaticTurnResponse) this.flushToolResponse();
         return;
       case "response.created":
         this.logger.info?.("OpenAI Realtime response created", eventLogDetails(value));
         this.activeResponseId = responseId(value);
+        // A server-created turn consumes queued results; a locally requested
+        // turn may have been requested before a later result was delivered.
+        if (!this.responseRequested) this.toolResponsePending = false;
+        this.responseRequested = false;
         if (this.suppressNextSilenceResponse) {
           this.suppressNextSilenceResponse = false;
           this.connection.send({ type: "response.cancel" });
@@ -341,19 +353,14 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         const status = responseStatus(value);
         if (status === "cancelled") this.logger.info?.("OpenAI Realtime response cancelled", eventLogDetails(value));
         this.activeResponseId = undefined;
-        if (status === "cancelled") this.toolResponsePending = false;
+        this.responseRequested = false;
         // A cancellation can arrive after the caller has already started speaking.
         // Preserve that fact so a late tool result cannot start a competing response.
         this.setState(this.callerIsSpeaking ? "user_speaking" : "listening", { reason: status ?? "done" });
         this.logger.info?.("OpenAI Realtime response state reset", { reason: status ?? "done" });
         this.queue.push({ type: "assistant.response_done", ...(status ? { status } : {}) });
         this.handleUsage(value.response);
-        if (this.toolResponsePending && !this.callerIsSpeaking && status !== "cancelled") {
-          this.toolResponsePending = false;
-          this.connection.send({ type: "response.create" });
-          this.logger.info?.("OpenAI Realtime response.create sent", { source: "queued_tool_result" });
-          this.setState("thinking", { source: "queued_tool_result" });
-        }
+        if (!(this.callerIsSpeaking && this.automaticTurnResponse)) this.flushToolResponse();
         return;
       case "error":
         this.handleProviderEventError(value.error);

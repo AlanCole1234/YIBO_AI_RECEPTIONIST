@@ -65,3 +65,20 @@ The current ConversationService retains trusted turn sequencing and confirmation
 Validation: 41 focused tests passed across call orchestration, conversation service, confirmation gate, tool policy, telephony gateway and the new modern Asterisk E2E; backend/dashboard typechecks passed. The deterministic E2E uses fake ARI/Realtime providers at their boundaries, real trusted DID resolution and agent/tool modules, real RTP socket allocation/cleanup, and rejects unknown DIDs before media allocation. No live provider writes or application restart occurred during integration.
 
 Production setup: enable the complete ASTERISK_ARI settings in the API environment and bind the RTP range to a private interface. Route Stasis arguments to the configured clinic DID. Restrict ARI and UDP to the PBX network. Do not configure private-number diagnostic bypasses; use authorized Voice Lab instead. Process termination closes the PBX resources. INT-002 still owns response pacing and provider-setting reconciliation; INT-003 must pass before UI work resumes.
+
+## INT-002 response sequencing
+
+Tool outputs retain the full modern envelope, including opaque confirmation tokens.
+Results are delivered once per tool-call ID. A local response request reserves the
+response slot until response.created arrives, preventing a second tool result from
+creating a competing response during that gap. Pending results wait for the current
+response; automatic VAD owns the next caller turn when enabled. With automatic
+responses disabled, pending tool output resumes after speech stops. This is category
+D bookkeeping, not a change to configured VAD or provider defaults.
+
+Validation: 43 focused conversation/Realtime tests passed and both typechecks passed.
+The four added regressions cover token preservation/deduplication, active-response
+ordering, delayed response-created acknowledgement, and failed tool output during
+speech with automatic responses disabled. Provider protocol reference checked:
+https://developers.openai.com/api/docs/guides/realtime-conversations .
+No live latency or phone-call improvement is inferred from these deterministic tests.

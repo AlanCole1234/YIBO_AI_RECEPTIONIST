@@ -578,6 +578,62 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(connection.sent.filter((event) => (event as { type?: string }).type === "response.create")).toEqual([]);
   });
 
+  it("delivers a confirmation token once and requests only one response for duplicate results", async () => {
+    const value = fixture();
+    const session = await open(value);
+    const result = { toolCallId: "confirm-1", ok: false as const, error: {
+      code: "CONFIRMATION_REQUIRED", message: "Ask the caller", retryable: false,
+      confirmationToken: "opaque-confirmation-token",
+    } };
+    await session.sendToolResult(result);
+    await session.sendToolResult(result);
+    expect(value.connection.sent.slice(1)).toEqual([
+      { type: "conversation.item.create", item: {
+        type: "function_call_output", call_id: "confirm-1",
+        output: JSON.stringify({ ok: false, error: result.error }),
+      } },
+      { type: "response.create" },
+    ]);
+  });
+
+  it("waits for the active response before continuing with a tool result", async () => {
+    const value = fixture();
+    const session = await open(value);
+    value.connection.emit({ type: "response.created", response: { id: "first" } });
+    await session.sendToolResult({ toolCallId: "tool-1", ok: true, data: { booked: true } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.create" });
+    value.connection.emit({ type: "response.done", response: { id: "first", status: "completed" } });
+    value.connection.emit({ type: "response.created", response: { id: "second" } });
+    value.connection.emit({ type: "response.done", response: { id: "second", status: "completed" } });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+  });
+
+  it("serializes results arriving before response.created acknowledges the first request", async () => {
+    const value = fixture();
+    const session = await open(value);
+    await session.sendToolResult({ toolCallId: "tool-1", ok: true, data: {} });
+    await session.sendToolResult({ toolCallId: "tool-2", ok: true, data: {} });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+    value.connection.emit({ type: "response.created", response: { id: "first" } });
+    value.connection.emit({ type: "response.done", response: { id: "first", status: "completed" } });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(2);
+  });
+
+  it("continues a pending failed tool result after speech with automatic VAD responses disabled", async () => {
+    const value = fixture();
+    const session = await value.adapter.openSession({ conversationId: "manual-response", agent: {
+      ...agent, audio: { ...agent.audio, turnDetection: {
+        type: "server_vad", createResponse: false, interruptResponse: true,
+      } },
+    } });
+    value.connection.emit({ type: "input_audio_buffer.speech_started" });
+    await session.sendToolResult({ toolCallId: "calendar-failure", ok: false,
+      error: { code: "CALENDAR_UNAVAILABLE", message: "Booking failed", retryable: true } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.create" });
+    value.connection.emit({ type: "input_audio_buffer.speech_stopped" });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+  });
+
   it("logs and translates connection errors", async () => {
     const value = fixture();
     const session = await open(value);
