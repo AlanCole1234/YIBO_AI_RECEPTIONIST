@@ -32,6 +32,7 @@ describe("buildApplication", () => {
     expect(app.runtime).toBeInstanceOf(ScriptedConversationRuntime);
     expect(app.telephony.answeredCallIds).toEqual(["call-bootstrap-1"]);
     expect((app.runtime as ScriptedConversationRuntime).openedInputs).toHaveLength(1);
+    expect((app.runtime as ScriptedConversationRuntime).latestSession.greetingStartCount).toBe(1);
 
     await app.calls.handleTelephonyEvent({
       type: "CALL_HUNG_UP",

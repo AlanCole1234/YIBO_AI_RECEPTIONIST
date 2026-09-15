@@ -50,11 +50,22 @@ export class SqliteCalendarAdapter implements CalendarPort, AppointmentCalendarP
     return success({ provider: "sqlite-local", externalEventId });
   }
 
-  async cancelEvent(command: { tenantId: string; externalEventId: string }) {
+  async rescheduleEvent(command: Parameters<AppointmentCalendarPort["rescheduleEvent"]>[0]) {
+    if (!validRange(command.startAt, command.endAt)) {
+      return failure({ code: "VALIDATION_ERROR" as const, message: "A valid calendar range is required." });
+    }
+    const result = this.database.prepare(`
+      UPDATE calendar_events SET start_at = ?, end_at = ?
+      WHERE region_id = ? AND tenant_id = ? AND external_event_id = ? AND appointment_id = ? AND cancelled = 0
+    `).run(command.startAt, command.endAt, this.region, command.tenantId, command.externalEventId, command.appointmentId);
+    return result.changes > 0 ? success(undefined) : failure({ code: "EVENT_NOT_FOUND" as const });
+  }
+
+  async cancelEvent(command: Parameters<AppointmentCalendarPort["cancelEvent"]>[0]) {
     const result = this.database.prepare(`
       UPDATE calendar_events SET cancelled = 1
-      WHERE region_id = ? AND tenant_id = ? AND external_event_id = ?
-    `).run(this.region, command.tenantId, command.externalEventId);
+      WHERE region_id = ? AND tenant_id = ? AND external_event_id = ? AND appointment_id = ?
+    `).run(this.region, command.tenantId, command.externalEventId, command.appointmentId);
     return result.changes > 0 ? success(undefined) : failure({ code: "EVENT_NOT_FOUND" as const });
   }
 }

@@ -28,7 +28,7 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
         "Speak warmly and naturally, using complete sentences and a conversational rhythm.",
         "Be concise, but never cut off a sentence or end abruptly.",
         "Confirm important details before making changes and never invent availability.",
-        "For a new booking, ask only: 'What day would you like to come in?' Wait for the answer before asking anything else. Resolve supported day phrases with check_availability, offer only the earliest available time first, and keep each reply to one or two short sentences. After the caller accepts an available time, collect the required contact details one question at a time, then create the appointment and confirm it only when the booking succeeds.",
+        "Ask one question at a time and wait patiently for the caller's answer. Treat short pauses, 'um', 'maybe', 'hold on', 'give me a second', and 'let me think' as an unfinished turn; never rush into the next question. For a new booking, ask only: 'What day would you like to come in?' Wait for the answer before asking anything else. Resolve supported day phrases with check_availability, offer only the earliest available time first, and keep each reply to one or two short sentences. Present the exact offered appointment and require a new explicit yes before booking: silence, an idle timeout, maybe, or an earlier yes to another question are never confirmation. After explicit agreement, use confirm_appointment for that exact slot, collect the required contact details one question at a time, then create the appointment and confirm it only when the booking succeeds.",
       ].join(" "),
       locale,
       voice: "marin",
@@ -57,11 +57,11 @@ function validateConfiguration(value: AgentConfiguration): AgentConfiguration {
     || value.enabledTools.some((tool) => !allowedTools.has(tool))) {
     throw new Error("enabledTools contains an unknown or duplicate tool");
   }
-  const { threshold, prefixPaddingMs, silenceDurationMs } = value.conversation.turnDetection;
+  const { threshold, prefixPaddingMs, silenceDurationMs, responseDelayMs } = value.conversation.turnDetection;
   if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
     throw new Error("turnDetection.threshold must be between 0 and 1");
   }
-  for (const [name, candidate] of [["prefixPaddingMs", prefixPaddingMs], ["silenceDurationMs", silenceDurationMs]] as const) {
+  for (const [name, candidate] of [["prefixPaddingMs", prefixPaddingMs], ["silenceDurationMs", silenceDurationMs], ["responseDelayMs", responseDelayMs]] as const) {
     if (candidate !== undefined && (!Number.isInteger(candidate) || candidate < 0)) {
       throw new Error(`turnDetection.${name} must be a non-negative integer`);
     }

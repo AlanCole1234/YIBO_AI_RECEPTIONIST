@@ -32,9 +32,9 @@ const locales = [
 ];
 const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conversation"]["turnDetection"]> = {
   auto: {},
-  fast: { threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
-  balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
-  patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
+  fast: { threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380, responseDelayMs: 150 },
+  balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 650, responseDelayMs: 150 },
+  patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000, responseDelayMs: 450 },
 };
 const toolCopy: Record<AgentToolName, { title: string; help: string; route: string; icon: string }> = {
   check_availability: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕" },
@@ -150,7 +150,8 @@ function sameVad(
 ): boolean {
   return left.threshold === right.threshold
     && left.prefixPaddingMs === right.prefixPaddingMs
-    && left.silenceDurationMs === right.silenceDurationMs;
+    && left.silenceDurationMs === right.silenceDurationMs
+    && left.responseDelayMs === right.responseDelayMs;
 }
 
 function clone(value: AgentConfiguration): AgentConfiguration { return structuredClone(value); }
@@ -205,7 +206,8 @@ function errorMessage(caught: unknown): string {
             <details class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
               <label>Sensitivity <output>{{ configuration.conversation.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.conversation.turnDetection.threshold" type="range" min="0" max="1" step="0.01"></label>
               <label>Audio before speech <output>{{ configuration.conversation.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.conversation.turnDetection.prefixPaddingMs" type="range" min="0" max="1000" step="20"></label>
-              <label>End-of-turn silence <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
+              <label>End-of-turn silence <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 650 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
+              <label>Patience after silence <output>{{ configuration.conversation.turnDetection.responseDelayMs ?? 150 }} ms</output><input v-model.number="configuration.conversation.turnDetection.responseDelayMs" type="range" min="0" max="1000" step="50"></label>
             </div></details>
           </section>
 

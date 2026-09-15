@@ -33,9 +33,15 @@ export class ScriptedConversationRuntimeSession implements ConversationRuntimeSe
   interruptCount = 0;
   readonly interruptions: Array<AssistantPlaybackPosition | undefined> = [];
   closeCount = 0;
+  assistantPlaybackEndedCount = 0;
+  greetingStartCount = 0;
 
   private readonly eventQueue = new AsyncEventQueue<ConversationRuntimeEvent>();
   private closed = false;
+
+  async startGreeting(): Promise<void> {
+    this.greetingStartCount += 1;
+  }
 
   async sendText(text: string): Promise<void> {
     this.receivedText.push(text);
@@ -47,6 +53,10 @@ export class ScriptedConversationRuntimeSession implements ConversationRuntimeSe
 
   async sendToolResult(result: ToolResultEnvelope): Promise<void> {
     this.receivedToolResults.push(result);
+  }
+
+  assistantPlaybackEnded(): void {
+    this.assistantPlaybackEndedCount += 1;
   }
 
   async interrupt(position?: AssistantPlaybackPosition): Promise<void> {

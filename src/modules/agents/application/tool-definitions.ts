@@ -19,8 +19,22 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     },
   },
   {
+    name: "confirm_appointment",
+    description: "Record an explicit new caller confirmation for one exact verified appointment slot. Call this only immediately after the caller clearly says yes, confirm it, book it, that works, go ahead, or please do in response to being offered that exact time. Never call it for silence, an earlier yes to a different question, background noise, maybe, or an unclear answer. The exact slot must already have been returned by check_availability.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["employeeId", "startAt"],
+      properties: {
+        service: { type: "string", minLength: 1, description: "The patient-facing service for the exact offered slot." },
+        employeeId: { type: "string", minLength: 1 },
+        startAt: { type: "string", format: "date-time", description: "Copy the exact availability slot startAt unchanged." },
+      },
+    },
+  },
+  {
     name: "create_appointment",
-    description: "Create an appointment for the verified customer in this call. Use the patient-facing service name, not an internal service ID.",
+    description: "Create an appointment for the verified customer in this call only after confirm_appointment has recorded a new explicit caller confirmation for this exact slot. Use the patient-facing service name, not an internal service ID.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

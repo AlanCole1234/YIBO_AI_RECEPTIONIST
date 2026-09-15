@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { success } from "../../src/shared/domain/result.js";
+import { failure, success } from "../../src/shared/domain/result.js";
 import type { Appointment, AppointmentService } from "../../src/modules/appointments/index.js";
 import type { SchedulingService } from "../../src/modules/scheduling/index.js";
 import type { CustomerService } from "../../src/modules/customers/index.js";
@@ -73,7 +73,61 @@ const business: BusinessProfile = {
   openingHours: [{ dayOfWeek: 1, startTime: "09:00", endTime: "17:00" }],
 };
 
+async function explicitlyConfirm(
+  executor: ToolExecutorImpl,
+  options: { service?: string; startAt?: string } = {},
+) {
+  const service = options.service ?? "Consultation";
+  const startAt = options.startAt ?? "2026-08-10T15:00:00.000Z";
+  await executor.execute(context, {
+    toolCallId: `availability-${service}`,
+    name: "check_availability",
+    arguments: { service, employeeId: "employee-1", rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00" },
+  });
+  return executor.execute(context, {
+    toolCallId: `confirmation-${service}`,
+    name: "confirm_appointment",
+    arguments: { service, employeeId: "employee-1", startAt },
+  });
+}
+
 describe("ToolExecutorImpl", () => {
+  it.each([
+    ["2026-08-10T15:00:00.000Z", "Monday, August 10, 2026 at 9:00 AM"],
+    ["2026-08-11T00:30:00.000Z", "Monday, August 10, 2026 at 6:30 PM"],
+    ["2026-12-15T17:30:00.000Z", "Tuesday, December 15, 2026 at 10:30 AM"],
+  ])("returns confirmation speech date/time from the actual saved appointment %s", async (startAt, display) => {
+    const { executor, createAppointment } = fixture();
+    const consent = await explicitlyConfirm(executor);
+    expect(consent).not.toHaveProperty("data.appointmentDisplay");
+    // Deliberately differ from the input: only the persisted result is authoritative.
+    createAppointment.mockResolvedValueOnce(success({ ...confirmedAppointment, startAt,
+      endAt: new Date(Date.parse(startAt) + 30 * 60_000).toISOString() }));
+    const call = { toolCallId: "book", name: "create_appointment" as const,
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: confirmedAppointment.startAt } };
+    expect(await executor.execute(context, call)).toMatchObject({ ok: true, data: {
+      appointment: { startAt, status: "CONFIRMED" }, appointmentDisplay: display,
+    } });
+    const duplicate = await executor.execute(context, { ...call, toolCallId: "duplicate" });
+    expect(duplicate.ok).toBe(false);
+    expect(duplicate).not.toHaveProperty("data.appointmentDisplay");
+    expect(createAppointment).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["CALENDAR_SYNC_FAILED", "SLOT_NO_LONGER_AVAILABLE", "PENDING_CONFIRMATION"] as const)(
+    "does not supply successful confirmation speech for %s", async code => {
+      const { executor, appointments } = fixture();
+      await explicitlyConfirm(executor);
+      appointments.createAppointment = vi.fn(async () => code === "PENDING_CONFIRMATION"
+        ? success({ ...confirmedAppointment, status: "PENDING_CONFIRMATION" as const })
+        : failure({ code, message: "Calendar creation failed", retryable: false }));
+      const result = await executor.execute(context, { toolCallId: "failed-book", name: "create_appointment",
+        arguments: { service: "Consultation", employeeId: "employee-1", startAt: confirmedAppointment.startAt } });
+      expect(result.ok).toBe(false);
+      expect(result).not.toHaveProperty("data");
+    },
+  );
+
   it("uses the trusted tenant when checking availability", async () => {
     const { executor, findAvailableSlots } = fixture();
     const result = await executor.execute(context, {
@@ -163,6 +217,7 @@ describe("ToolExecutorImpl", () => {
 
   it("builds appointment commands only from validated arguments and trusted session fields", async () => {
     const { createAppointment, executor } = fixture();
+    await explicitlyConfirm(executor);
     const result = await executor.execute(context, {
       toolCallId: "tool-42",
       name: "create_appointment",
@@ -186,8 +241,153 @@ describe("ToolExecutorImpl", () => {
     });
   });
 
-  it("normalizes a caller's bare local time in the clinic timezone before booking", async () => {
+  it("blocks booking when an offered slot has not received a new explicit confirmation", async () => {
     const { createAppointment, executor } = fixture();
+    await executor.execute(context, {
+      toolCallId: "offer-only",
+      name: "check_availability",
+      arguments: { service: "Consultation", employeeId: "employee-1", rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00" },
+    });
+
+    const result = await executor.execute(context, {
+      toolCallId: "book-after-silence",
+      name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "EXPLICIT_CONFIRMATION_REQUIRED" } });
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("claims confirmation before concurrent booking calls can both enter the appointment service", async () => {
+    const { executor, createAppointment } = fixture();
+    await explicitlyConfirm(executor);
+    const results = await Promise.all(["first", "second"].map(toolCallId => executor.execute(context, {
+      toolCallId, name: "create_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    })));
+    expect(createAppointment).toHaveBeenCalledTimes(1);
+    expect(results.filter(result => result.ok)).toHaveLength(1);
+  });
+
+  it.each(Array.from({ length: 25 }, (_, i) => i))("one confirmation permits at most one concurrent booking #%i", async i => {
+    const { executor, createAppointment } = fixture();
+    await explicitlyConfirm(executor);
+    const results = await Promise.all(Array.from({ length: 2 + i }, (_, n) => executor.execute(context, {
+      toolCallId: `duplicate-${n}`, name: "create_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    })));
+    expect(createAppointment).toHaveBeenCalledTimes(1);
+    expect(results.filter(result => result.ok)).toHaveLength(1);
+  });
+
+  it.each(Array.from({ length: 25 }, (_, i) => i))("successful booking consumes consent and cannot be reconfirmed by replay #%i", async i => {
+    const { executor, createAppointment } = fixture();
+    await explicitlyConfirm(executor);
+    expect(await executor.execute(context, { toolCallId: `book-${i}`, name: "create_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" } })).toMatchObject({ ok: true });
+    expect(await executor.execute(context, { toolCallId: `confirm-replay-${i}`, name: "confirm_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" } })).toMatchObject({ ok: false });
+    expect(createAppointment).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(Array.from({ length: 25 }, (_, i) => i))("changed selection cannot use the old confirmation #%i", async i => {
+    const { executor, createAppointment } = fixture();
+    await explicitlyConfirm(executor);
+    await executor.execute(context, { toolCallId: `change-${i}`, name: "check_availability", arguments: { service: "Consultation", rangeStart: "2026-08-11T00:00", rangeEnd: "2026-08-12T00:00" } });
+    expect(await executor.execute(context, { toolCallId: `book-${i}`, name: "create_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" } })).toMatchObject({ ok: false });
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("disconnect invalidates pending availability before it can recreate a proposal", async () => {
+    const { executor, findAvailableSlots } = fixture();
+    let resolve!: (value: Awaited<ReturnType<typeof findAvailableSlots>>) => void;
+    findAvailableSlots.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const pending = executor.execute(context, { toolCallId: "late", name: "check_availability", arguments: { service: "Consultation", rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00" } });
+    for (let i = 0; i < 30 && !resolve; i++) await Promise.resolve();
+    expect(resolve).toBeTypeOf("function");
+    executor.releaseCall(context);
+    resolve(success([{ employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z" }]));
+    expect(await pending).toMatchObject({ ok: false, error: { code: "AVAILABILITY_SUPERSEDED" } });
+  });
+
+  it("isolates 50 overlapping call proposals and clears them on disconnect", async () => {
+    const { executor, createAppointment } = fixture();
+    const contexts = Array.from({ length: 50 }, (_, i) => ({ ...context, callId: `isolated-${i}` }));
+    await Promise.all(contexts.map(async callContext => {
+      await executor.execute(callContext, { toolCallId: "availability", name: "check_availability", arguments: { service: "Consultation", rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00" } });
+      await executor.execute(callContext, { toolCallId: "confirmation", name: "confirm_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" } });
+      executor.releaseCall(callContext);
+      expect(await executor.execute(callContext, { toolCallId: "book", name: "create_appointment", arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" } })).toMatchObject({ ok: false });
+    }));
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("cannot confirm a provider that was not offered for the selected slot", async () => {
+    const { executor, createAppointment } = fixture();
+    await explicitlyConfirm(executor);
+    const result = await executor.execute(context, { toolCallId: "different-provider", name: "confirm_appointment", arguments: { service: "Consultation", employeeId: "employee-never-offered", startAt: "2026-08-10T15:00:00.000Z" } });
+    expect(result).toMatchObject({ ok: false, error: { code: "CONFIRMATION_SLOT_NOT_CURRENT" } });
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("consumes an explicit confirmation so duplicate booking calls cannot create duplicates", async () => {
+    const { createAppointment, executor } = fixture();
+    await explicitlyConfirm(executor);
+    const first = await executor.execute(context, {
+      toolCallId: "book-confirmed", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+    const duplicate = await executor.execute(context, {
+      toolCallId: "book-duplicate", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(first.ok).toBe(true);
+    expect(duplicate).toMatchObject({ ok: false, error: { code: "EXPLICIT_CONFIRMATION_REQUIRED" } });
+    expect(createAppointment).toHaveBeenCalledTimes(1);
+  });
+
+  it("invalidates an old confirmed proposal when the caller asks for a different day or time", async () => {
+    const { createAppointment, executor, findAvailableSlots } = fixture();
+    await explicitlyConfirm(executor);
+    findAvailableSlots.mockResolvedValueOnce(success([{
+      employeeId: "employee-1", startAt: "2026-08-11T16:30:00.000Z", endAt: "2026-08-11T17:00:00.000Z",
+    }]));
+
+    await executor.execute(context, {
+      toolCallId: "availability-monday", name: "check_availability",
+      arguments: { service: "Consultation", employeeId: "employee-1", rangeStart: "2026-08-11T00:00", rangeEnd: "2026-08-12T00:00" },
+    });
+    const staleFridayBooking = await executor.execute(context, {
+      toolCallId: "book-stale-friday", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(staleFridayBooking).toMatchObject({ ok: false, error: { code: "SLOT_NOT_REVALIDATED" } });
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("does not retain an old confirmation when the changed-time availability check fails", async () => {
+    const { createAppointment, executor, findAvailableSlots } = fixture();
+    await explicitlyConfirm(executor);
+    findAvailableSlots.mockResolvedValueOnce(failure({ code: "EXTERNAL_CALENDAR_UNAVAILABLE", retryable: true }) as never);
+
+    await executor.execute(context, {
+      toolCallId: "availability-change-failed", name: "check_availability",
+      arguments: { service: "Consultation", employeeId: "employee-1", rangeStart: "2026-08-11T00:00", rangeEnd: "2026-08-12T00:00" },
+    });
+    const staleFridayBooking = await executor.execute(context, {
+      toolCallId: "book-after-failed-change", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
+    });
+
+    expect(staleFridayBooking).toMatchObject({ ok: false, error: { code: "EXPLICIT_CONFIRMATION_REQUIRED" } });
+    expect(createAppointment).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a caller's bare local time in the clinic timezone before booking", async () => {
+    const { createAppointment, executor, findAvailableSlots } = fixture();
+    findAvailableSlots.mockResolvedValueOnce(success([{
+      employeeId: "employee-1", startAt: "2026-08-10T21:00:00.000Z", endAt: "2026-08-10T21:30:00.000Z",
+    }]));
+    await explicitlyConfirm(executor, { startAt: "2026-08-10T15:00" });
     await executor.execute(context, {
       toolCallId: "tool-local-time",
       name: "create_appointment",
@@ -223,6 +423,11 @@ describe("ToolExecutorImpl", () => {
         rangeStart: "2026-08-10T00:00", rangeEnd: "2026-08-11T00:00",
         requestedStartAt: "2026-08-10T15:00",
       },
+    });
+    await executor.execute(context, {
+      toolCallId: "tool-confirm-3pm",
+      name: "confirm_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T15:00" },
     });
     await executor.execute(context, {
       toolCallId: "tool-book-3pm",
@@ -307,6 +512,7 @@ describe("ToolExecutorImpl", () => {
     const contactResult = await executor.execute(context, {
       toolCallId: "tool-contact", name: "update_customer", arguments: { name: "John Smith", phone: "915-555-1234" },
     });
+    await explicitlyConfirm(executor, { service: "Cleaning" });
     const appointmentResult = await executor.execute(context, {
       toolCallId: "tool-cleaning", name: "create_appointment", arguments: { service: "Cleaning", employeeId: "employee-1", startAt: "2026-08-10T15:00:00.000Z" },
     });

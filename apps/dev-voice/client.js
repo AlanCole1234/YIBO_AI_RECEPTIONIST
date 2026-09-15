@@ -92,10 +92,12 @@ function playPcm16(arrayBuffer, metadata) {
   node.start(playbackAt);
   setOrb("speaking", "YIBO está hablando", "Puedes interrumpir su respuesta en cualquier momento");
   playback.nodes.push(node);
+  playback.sequence = metadata.sequence;
   node.onended = () => {
     if (playback?.assistantTurnId !== metadata.assistantTurnId) return;
     playback.nodes = playback.nodes.filter((candidate) => candidate !== node);
     if (playback.nodes.length === 0) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "playback.idle", sequence: playback.sequence }));
       playback = undefined;
       setOrb(stream ? "listening" : "idle", stream ? "Escuchando" : "En espera", stream ? "Tu turno" : "El micrófono está apagado");
     }

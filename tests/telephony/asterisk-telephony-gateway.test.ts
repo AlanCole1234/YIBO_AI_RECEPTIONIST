@@ -34,6 +34,21 @@ const incoming: AsteriskEvent = {
 };
 
 describe("AsteriskTelephonyGateway", () => {
+  it("notifies hangup even while media cleanup is pending", async () => {
+    const client = new FakeAsteriskClient();
+    let finish!: () => void;
+    const media = { prepare: async () => {}, cleanup: () => new Promise<void>(resolve => { finish = resolve; }) };
+    const gateway = new AsteriskTelephonyGateway(client, () => "call-cleanup", media);
+    const events: any[] = [];
+    gateway.onEvent(async event => { events.push(event); });
+    await client.emit(incoming);
+    const ending = client.emit({type: "CHANNEL_DESTROYED", channelId: incoming.channelId, occurredAt: incoming.occurredAt});
+    await new Promise(resolve => setImmediate(resolve));
+    const notified = events.some(event => event.type === "CALL_HUNG_UP");
+    finish(); await ending;
+    expect(notified).toBe(true);
+  });
+
   it("maps an Asterisk channel to a YIBO incoming call event", async () => {
     const { client, events } = fixture();
     await client.emit(incoming);
@@ -112,6 +127,19 @@ describe("AsteriskTelephonyGateway", () => {
       ok: false,
       error: { code: "PROVIDER_UNAVAILABLE", retryable: true },
     });
+  });
+
+  it("prepares and tears down the ARI media transport with the caller channel", async () => {
+    const client = new FakeAsteriskClient();
+    const media = { prepare: vi.fn(async () => {}), cleanup: vi.fn(async () => {}) };
+    const gateway = new AsteriskTelephonyGateway(client, () => "call-media", media);
+    gateway.onEvent(async () => {});
+
+    await client.emit(incoming);
+    await client.emit({ type: "CHANNEL_DESTROYED", channelId: incoming.channelId, occurredAt: incoming.occurredAt });
+
+    expect(media.prepare).toHaveBeenCalledWith("call-media", incoming.channelId, incoming.dialedNumber);
+    expect(media.cleanup).toHaveBeenCalledWith("call-media");
   });
 
   it("does not emit provider events for unknown channels", async () => {

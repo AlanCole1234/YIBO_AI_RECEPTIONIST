@@ -7,13 +7,21 @@ import type {
   TransferDestination,
 } from "../../application/contracts.js";
 import { AsteriskCallRegistry } from "./asterisk-call-registry.js";
-import type { AsteriskClient, AsteriskEvent, AsteriskFailure } from "./asterisk-client.js";
+import type { AsteriskClient, AsteriskEvent, AsteriskFailure, ConnectableAsteriskClient } from "./asterisk-client.js";
 
 export class AsteriskTelephonyGateway implements TelephonyGateway {
   private readonly handlers: Array<(event: TelephonyEvent) => Promise<void>> = [];
   private readonly calls: AsteriskCallRegistry;
 
-  constructor(client: AsteriskClient, createCallId: () => CallId) {
+  constructor(
+    client: AsteriskClient,
+    createCallId: () => CallId,
+    private readonly media?: {
+      prepare(callId: CallId, callerChannelId: string, dialedNumber?: string): Promise<void>;
+      cleanup(callId: CallId): Promise<void>;
+      isDiagnosticCall?(dialedNumber?: string): boolean;
+    },
+  ) {
     this.client = client;
     this.calls = new AsteriskCallRegistry(createCallId);
     client.onEvent((event) => this.handleAsteriskEvent(event));
@@ -23,6 +31,11 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
 
   onEvent(handler: (event: TelephonyEvent) => Promise<void>): void {
     this.handlers.push(handler);
+  }
+
+  close(): void {
+    const client = this.client as Partial<ConnectableAsteriskClient>;
+    client.close?.();
   }
 
   async answer(callId: CallId) {
@@ -60,6 +73,20 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
   private async handleAsteriskEvent(event: AsteriskEvent): Promise<void> {
     if (event.type === "CHANNEL_ENTERED_APPLICATION") {
       const callId = this.calls.register(event.channelId);
+      if (this.media) {
+        try {
+          await this.media.prepare(callId, event.channelId, event.dialedNumber);
+        } catch (error) {
+          console.error(JSON.stringify({ event: "telephony.media.prepare_failed", callId, channelId: event.channelId, error: safeError(error) }));
+          await this.client.hangup(event.channelId).catch(() => undefined);
+          this.calls.unregisterChannel(event.channelId);
+          return;
+        }
+      }
+      if (this.media?.isDiagnosticCall?.(event.dialedNumber)) {
+        await this.client.answer(event.channelId).catch((error) => console.error(JSON.stringify({ event: "telephony.media.audio_diagnostic_answer_failed", callId, error: safeError(error) })));
+        return;
+      }
       return this.emit({
         type: "INCOMING_CALL",
         callId,
@@ -73,7 +100,15 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
       : this.calls.callIdForChannel(event.channelId);
     if (!callId) return;
     if (event.type === "CHANNEL_DESTROYED") {
-      return this.emit({ type: "CALL_HUNG_UP", callId, occurredAt: normalizedTimestamp(event.occurredAt) });
+      console.log(JSON.stringify({ event: "telephony.asterisk.call_ended", callId, channelId: event.channelId }));
+      // Realtime shutdown must not wait for remote bridge/channel deletion.
+      await Promise.all([
+        Promise.resolve().then(() => this.media?.cleanup(callId)).catch(error => {
+          console.error(JSON.stringify({ event: "telephony.media.cleanup_failed", callId, error: safeError(error) }));
+        }),
+        this.emit({ type: "CALL_HUNG_UP", callId, occurredAt: normalizedTimestamp(event.occurredAt) }),
+      ]);
+      return;
     }
     if (/^[0-9A-D*#]$/.test(event.digit)) {
       return this.emit({
@@ -99,6 +134,8 @@ const normalizeDestination = (destination: TransferDestination): { kind: "phone"
   if (!/^\d{1,8}$/.test(destination.value.trim())) return null;
   return { kind: "extension", value: destination.value.trim() };
 };
+
+const safeError = (value: unknown) => (value instanceof Error ? value.message : "Unexpected media setup error").slice(0, 300);
 
 const normalizedTimestamp = (value: string): string => {
   const date = new Date(value);

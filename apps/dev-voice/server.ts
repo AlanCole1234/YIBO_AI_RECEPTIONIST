@@ -102,6 +102,7 @@ function attachHarness(socket: WebSocket): void {
   let nextBinaryIsWav = false;
   let inboundFrames = 0;
   let outboundFrames = 0;
+  let playbackIdleListener: (() => void) | undefined;
   let lastAssistantTurnId: string | undefined;
   type PlaybackPosition = { assistantTurnId: string; audioEndMs: number };
   const playbackAcks = new Map<string, (position: PlaybackPosition | undefined) => void>();
@@ -159,11 +160,15 @@ function attachHarness(socket: WebSocket): void {
             });
           }
           if (socket.readyState === socket.OPEN) {
-            socket.send(JSON.stringify({ type: "audio.chunk", assistantTurnId, bytes: frame.data.byteLength }));
+            socket.send(JSON.stringify({ type: "audio.chunk", assistantTurnId, sequence: outboundFrames, bytes: frame.data.byteLength }));
             socket.send(frame.data, { binary: true });
           }
         },
         interrupt: interruptLocalPlayback,
+        onPlaybackIdle: listener => {
+          playbackIdleListener = listener;
+          return () => { if (playbackIdleListener === listener) playbackIdleListener = undefined; };
+        },
       },
       close: async () => inbound.end(),
     };
@@ -188,7 +193,10 @@ function attachHarness(socket: WebSocket): void {
       try {
         if (!binary) {
           const message = JSON.parse(raw.toString()) as Record<string, unknown>;
-          if (message.type === "playback.cleared") {
+          if (message.type === "playback.idle") {
+            // Ignore a drain acknowledgement if newer audio is already in flight.
+            if (message.sequence === outboundFrames) playbackIdleListener?.();
+          } else if (message.type === "playback.cleared") {
             const requestId = typeof message.requestId === "string" ? message.requestId : "";
             const assistantTurnId = typeof message.assistantTurnId === "string" ? message.assistantTurnId : "";
             const audioEndMs = typeof message.audioEndMs === "number" ? message.audioEndMs : 0;

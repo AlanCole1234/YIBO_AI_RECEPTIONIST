@@ -26,7 +26,8 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       locale: configuration.locale,
       ...(configuration.voice ? { voice: configuration.voice } : {}),
       conversation: structuredClone(configuration.conversation),
-      tools: AGENT_TOOL_DEFINITIONS.filter((tool) => configuration.enabledTools.includes(tool.name)),
+      tools: AGENT_TOOL_DEFINITIONS.filter((tool) => configuration.enabledTools.includes(tool.name)
+        || (tool.name === "confirm_appointment" && configuration.enabledTools.includes("create_appointment"))),
       toolExecutor: this.toolExecutor,
       trustedContext: { ...command },
     };

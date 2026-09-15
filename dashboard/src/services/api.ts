@@ -56,6 +56,7 @@ export interface AgentConfiguration {
       threshold?: number;
       prefixPaddingMs?: number;
       silenceDurationMs?: number;
+      responseDelayMs?: number;
     };
   };
 }

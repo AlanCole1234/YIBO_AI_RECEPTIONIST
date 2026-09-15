@@ -16,6 +16,7 @@ const terminalStates = new Set<CallState>(["COMPLETED", "FAILED", "TRANSFERRED"]
 
 export class CallOrchestratorService implements CallOrchestrator {
   private readonly sessions = new Map<string, ConversationSession>();
+  private readonly incomingCalls = new Map<string, Promise<void>>();
 
   constructor(
     private readonly businessDirectory: BusinessDirectory,
@@ -28,8 +29,22 @@ export class CallOrchestratorService implements CallOrchestrator {
   ) {}
 
   async handleTelephonyEvent(event: TelephonyEvent): Promise<void> {
-    if (event.type === "INCOMING_CALL") return this.handleIncoming(event);
-    if (event.type === "CALL_HUNG_UP") return this.shutdown(event.callId, event.occurredAt);
+    if (event.type === "INCOMING_CALL") {
+      const existing = this.incomingCalls.get(event.callId);
+      if (existing) return existing;
+      // Claim startup before any repository/telephony await can admit a replay.
+      const starting = this.handleIncoming(event).finally(() => this.incomingCalls.delete(event.callId));
+      this.incomingCalls.set(event.callId, starting);
+      return starting;
+    }
+    if (event.type === "CALL_HUNG_UP") {
+      try {
+        await this.incomingCalls.get(event.callId);
+      } finally {
+        await this.shutdown(event.callId, event.occurredAt);
+      }
+      return;
+    }
     // DTMF is persisted by the telephony implementation if required; it does not alter call state.
   }
 
@@ -98,18 +113,35 @@ export class CallOrchestratorService implements CallOrchestrator {
 
     this.sessions.set(record.callId, conversation);
     await this.transition(record.callId, "IN_CONVERSATION", event.occurredAt);
+    // A dead runtime must not leave an answered telephone channel silently open.
+    void conversation.completed.then(async completion => {
+      if (this.sessions.get(record.callId) !== conversation) return;
+      this.sessions.delete(record.callId);
+      await conversation.close();
+      await this.transition(record.callId, completion.status === "failed" ? "FAILED" : "COMPLETED", new Date().toISOString());
+      await this.telephony.hangup(record.callId);
+    }).catch(error => console.error(JSON.stringify({
+      event: "call.conversation.cleanup_failed", callId: record.callId, error: safeErrorMessage(error),
+    })));
+    // `voice.open` has prepared the transport and `conversations.start` has
+    // opened Realtime. Start exactly one greeting only after both are ready.
+    await conversation.startGreeting();
   }
 
   private async shutdown(callId: string, occurredAt: string): Promise<void> {
     const record = await this.calls.findByCallId(callId);
-    if (!record || terminalStates.has(record.state)) return;
+    if (!record || terminalStates.has(record.state)) {
+      console.log(JSON.stringify({ event: "telephony.call.cleanup", callId, status: "already_terminal_or_untracked" }));
+      return;
+    }
 
     const session = this.sessions.get(callId);
     if (session) {
-      await session.close();
       this.sessions.delete(callId);
+      await session.close();
     }
     await this.transition(callId, "COMPLETED", occurredAt);
+    console.log(JSON.stringify({ event: "telephony.call.cleanup", callId, status: "completed" }));
   }
 
   private async fail(callId: string, occurredAt: string): Promise<void> {
