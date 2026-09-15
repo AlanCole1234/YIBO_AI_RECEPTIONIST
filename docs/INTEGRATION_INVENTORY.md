@@ -124,3 +124,18 @@ Remaining release checks owned by UI-007/E2E-002: calendar-mapping changes with
 existing appointments, ambiguous network outcomes, and live-provider verification.
 Legacy events without a tenant marker rely on the trusted routed calendar and
 matching appointment marker; mismatches fail closed. No database migration here.
+
+## INT-003 green integration checkpoint
+
+At commit 8e4f6e2, all 306 deterministic tests passed (61 test files), with the
+optional live Realtime file skipped. Both backend and dashboard typechecks passed;
+Vite production build passed. The installed tsc/vue-tsc/vitest/vite executables
+were used directly because the pnpm launcher stalls in this environment; they
+execute the exact commands configured by the package scripts. UI-004 may now
+resume. No global latency defaults or persisted agent settings changed.
+
+Owned remaining roadmap work includes real preview (UI-004), metadata latency
+aggregation (OBS-001), administrative routing changes with existing bookings
+(UI-007), and natural final-response/playback completion plus transfer/outage
+scenarios (E2E-002). The old ad-hoc end_call provider tool remains intentionally
+unported; its behavior must use the modern validated tool/lifecycle contracts.
