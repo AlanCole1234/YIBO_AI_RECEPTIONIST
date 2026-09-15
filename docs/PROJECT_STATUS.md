@@ -10,7 +10,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
-- Tarea activa: **INT-001 — integración PBX/media sobre la arquitectura recuperada**.
+- Tarea activa: **INT-002 — reconciliar latencia y controles de voz**.
 - Baseline recuperado verificado localmente: 270 pruebas aprobadas, 1 omitida; ambos typechecks y build aprobados el 15 de septiembre de 2026.
 - Preservación local completa: `backup/alan-local-before-integration` (`54e4b9b`), backup remoto de `edd624e`, bundle privado verificado para ambos stashes y reflog. Ver `INTEGRATION_INVENTORY.md`.
 - Último checkpoint cerrado: Checkpoint 6; 261 pruebas aprobadas, 1 omitida y
@@ -143,8 +143,8 @@ con `pnpm test` y `pnpm build`.
 | UI-001 | DONE | Login/restauración/logout, expiración por 401/deadline y navegación según rol |
 | UI-002 | DONE | Esquema v4 y controles generados por modelo con visibilidad/errores por capacidad |
 | UI-003 | DONE | Siete secciones editan comportamiento, silencios, canales, confirmación, límites y escalamiento |
-| INT-001 | IN_PROGRESS | Auditoría, ARI, codec y transporte RTP acotado verificados; falta cableado al runtime moderno |
-| INT-002 | TODO | Clasificar latencia y conservar configuración versionada |
+| INT-001 | DONE | ARI/RTP cableado por DID confiable al runtime moderno; 41 pruebas focales y typechecks aprobados |
+| INT-002 | IN_PROGRESS | Clasificar latencia y conservar configuración versionada |
 | INT-003 | TODO | E2E confiable, typecheck, suite completa y build |
 | UI-004 | TODO | Preview real y explícita mediante Voice Lab |
 | UI-005 | TODO | Administración de sucursales y políticas |

@@ -337,6 +337,25 @@ describe("ConversationService", () => {
   });
 });
 
+describe("integrated lifecycle deadlines",()=>{
+ it("returns an uncertain mutation once and prevents another mutation after timeout",async()=>{
+  vi.useFakeTimers();const value=fixture();let resolve!: (r:AgentToolResult)=>void;
+  value.execute.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));const session=await start(value);
+  try {
+   value.runtime.latestSession.emit({type:"tool.call",toolCallId:"slow",name:"create_appointment",arguments:{}});
+   await vi.advanceTimersByTimeAsync(12000);
+   expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ok:false,error:{code:"ACTION_OUTCOME_UNKNOWN"}});
+   resolve({toolCallId:"slow",ok:true,data:{}});await vi.advanceTimersByTimeAsync(0);
+   value.runtime.latestSession.emit({type:"tool.call",toolCallId:"retry",name:"create_appointment",arguments:{}});await vi.advanceTimersByTimeAsync(0);
+   expect(value.execute).toHaveBeenCalledTimes(1);expect(value.runtime.latestSession.receivedToolResults).toHaveLength(2);
+  } finally {await session.close();expect(vi.getTimerCount()).toBe(0);vi.useRealTimers();}
+ });
+ it("settles an unexpected runtime stream end",async()=>{
+  const value=fixture();const session=await start(value);await value.runtime.latestSession.close();
+  expect(await session.completed).toMatchObject({status:"closed"});await session.close();expect(value.closeTransport).toHaveBeenCalledTimes(1);
+ });
+});
+
 async function eventually(assertion: () => void): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 50; attempt += 1) {

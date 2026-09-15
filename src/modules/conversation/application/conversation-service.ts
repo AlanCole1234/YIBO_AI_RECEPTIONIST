@@ -49,6 +49,10 @@ class ActiveConversationSession implements ConversationSession {
   private closePromise?: Promise<void>;
   private interruptedTurnId?: string;
   private turnSequence = 0;
+  private readonly toolCalls = new Set<string>();
+  private readonly deadlines = new Set<() => void>();
+  private mutationPending = false;
+  private mutationUncertain = false;
 
   constructor(private readonly dependencies: ConversationSessionControllerDependencies) {
     this.completed = new Promise((resolve) => { this.resolveCompleted = resolve; });
@@ -76,7 +80,7 @@ class ActiveConversationSession implements ConversationSession {
   private async forwardInboundAudio(): Promise<void> {
     try {
       for await (const frame of this.dependencies.command.transport.inboundAudio) {
-        await this.dependencies.runtimeSession.sendAudio(frame);
+        await this.bounded(this.dependencies.runtimeSession.sendAudio(frame), 5_000);
       }
     } catch (error) {
       await this.fail({
@@ -92,6 +96,7 @@ class ActiveConversationSession implements ConversationSession {
         await this.handleRuntimeEvent(event);
         if (event.type === "closed" || event.type === "error") return;
       }
+      if (!this.closePromise && !this.completionSettled) { this.settle({status:"closed",reason:"runtime_stream_ended"}); await this.close(); }
     } catch (error) {
       await this.fail({
         code: "RUNTIME_ERROR",
@@ -102,13 +107,14 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async handleRuntimeEvent(event: ConversationRuntimeEvent): Promise<void> {
-    this.dependencies.command.observeEvent?.(event);
+    if (this.closePromise || this.completionSettled) return;
+    this.observe(event);
     switch (event.type) {
       case "audio.delta":
         if (event.assistantTurnId === this.interruptedTurnId) return;
         this.interruptedTurnId = undefined;
         try {
-          await this.dependencies.command.transport.outboundAudio.write(event.frame, event.assistantTurnId);
+          await this.bounded(this.dependencies.command.transport.outboundAudio.write(event.frame, event.assistantTurnId), 5_000);
         } catch (error) {
           await this.fail({ code: "AUDIO_TRANSPORT_ERROR", message: errorMessage(error) });
         }
@@ -140,7 +146,7 @@ class ActiveConversationSession implements ConversationSession {
       case "user.speech_stopped":
         return;
       case "usage":
-        await this.recordUsage(event);
+        void this.recordUsage(event).catch(() => undefined);
         return;
     }
   }
@@ -167,22 +173,47 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }>): Promise<void> {
-    this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: "started", toolCallId: event.toolCallId, name: event.name });
-    try {
-      const result = await this.dependencies.command.agent.toolExecutor.execute(
-        { ...this.dependencies.command.agent.trustedContext, turnSequence: this.turnSequence },
-        {
-          toolCallId: event.toolCallId,
-          name: event.name,
-          arguments: event.arguments,
-        },
-      );
-      await this.dependencies.runtimeSession.sendToolResult(toEnvelope(result));
-      this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: result.ok ? "completed" : "failed", toolCallId: event.toolCallId, name: event.name });
-    } catch (error) {
-      this.dependencies.command.observeEvent?.({ type: "tool.execution", phase: "failed", toolCallId: event.toolCallId, name: event.name });
-      await this.fail({ code: "TOOL_EXECUTION_ERROR", message: errorMessage(error) });
+    if (this.toolCalls.has(event.toolCallId) || this.closePromise) return;
+    this.toolCalls.add(event.toolCallId);
+    this.observe({type:"tool.execution",phase:"started",toolCallId:event.toolCallId,name:event.name});
+    const mutable = ["create_appointment", "cancel_appointment", "reschedule_appointment", "transfer_to_human", "update_customer"].includes(event.name);
+    let result: ToolResultEnvelope;
+    if (mutable && (this.mutationPending || this.mutationUncertain)) {
+      result = {toolCallId:event.toolCallId,ok:false,error:{code:"ACTION_OUTCOME_UNKNOWN",message:"A prior action is pending or uncertain. Do not retry or claim success; ask staff to verify it.",retryable:false}};
+    } else {
+      if (mutable) this.mutationPending = true;
+      try {
+        const executed = await this.bounded(this.dependencies.command.agent.toolExecutor.execute(
+          { ...this.dependencies.command.agent.trustedContext, turnSequence: this.turnSequence },
+          {toolCallId:event.toolCallId,name:event.name,arguments:event.arguments},
+        ), 12_000);
+        result = toEnvelope(executed);
+      } catch (error) {
+        if (error instanceof CallDeadlineError && mutable) this.mutationUncertain = true;
+        result = {toolCallId:event.toolCallId,ok:false,error:{
+          code: error instanceof CallDeadlineError ? (mutable ? "ACTION_OUTCOME_UNKNOWN" : "TOOL_TIMEOUT") : "TOOL_EXECUTION_FAILED",
+          message: error instanceof CallDeadlineError && mutable ? "The action may have completed. Do not claim success or retry; ask staff to verify it." : "The operation did not complete. Explain the failure without claiming success.",retryable:false,
+        }};
+      } finally { if (mutable) this.mutationPending = false; }
     }
+    if (this.closePromise || this.completionSettled) return;
+    try {
+      await this.bounded(this.dependencies.runtimeSession.sendToolResult(result), 5_000);
+      this.observe({type:"tool.execution",phase:result.ok?"completed":"failed",toolCallId:event.toolCallId,name:event.name});
+    } catch { if (!this.closePromise) await this.fail({code:"TOOL_EXECUTION_ERROR",message:"Tool result delivery failed"}); }
+  }
+
+  private observe(event: ConversationRuntimeEvent): void {
+    try { this.dependencies.command.observeEvent?.(event); } catch { /* Observation cannot block or terminate a call. */ }
+  }
+
+  private bounded<T>(operation: Promise<T>, durationMs: number): Promise<T> {
+    return new Promise<T>((resolve,reject) => {
+      const cancel = () => { clearTimeout(timer); this.deadlines.delete(cancel); reject(new CallDeadlineError()); };
+      const timer = setTimeout(cancel,durationMs);
+      this.deadlines.add(cancel);
+      operation.then(resolve,reject).finally(() => {clearTimeout(timer);this.deadlines.delete(cancel);});
+    });
   }
 
   private async fail(error: ConversationError): Promise<void> {
@@ -191,9 +222,10 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async closeResources(): Promise<void> {
+    for (const cancel of [...this.deadlines]) cancel();
     const results = await Promise.allSettled([
-      this.dependencies.runtimeSession.close(),
-      this.dependencies.command.transport.close(),
+      this.bounded(Promise.resolve().then(() => this.dependencies.runtimeSession.close()), 5_000),
+      this.bounded(Promise.resolve().then(() => this.dependencies.command.transport.close()), 5_000),
     ]);
     if (!this.completionSettled) {
       const rejection = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
@@ -230,3 +262,5 @@ const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok
     };
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : "Unexpected conversation failure";
+
+class CallDeadlineError extends Error {}

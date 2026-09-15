@@ -1,3 +1,4 @@
+import { buildAsteriskIntegration } from "./asterisk-integration.js";
 import {
   defaultDatabasePath,
   migrateDatabase,
@@ -88,7 +89,8 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   }
 
   const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
-  return buildApplication({
+  const asterisk = options.enableAsteriskTelephony && !options.telephonyGateway ? buildAsteriskIntegration(environment) : undefined;
+  const application = buildApplication({
     ...options,
     environment,
     businesses,
@@ -106,7 +108,10 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
       ? { adminSessionSecret: environment.YIBO_ADMIN_SESSION_KEY.trim() }
       : {}),
     ...(google ? { googleOAuth: google.oauth, calendar: google.calendar } : {}),
+    ...(asterisk ? { telephonyGateway: asterisk.telephony, voiceGateway: asterisk.voice } : {}),
   });
+  if (asterisk) await asterisk.client.connect();
+  return application;
 }
 
 function buildGoogleIntegration(

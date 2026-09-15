@@ -110,6 +110,7 @@ export interface YiboApplication {
   voice: VoiceMediaGateway;
   calendar: ApplicationCalendar;
   telephony: TelephonyGateway & {
+    close?(): void | Promise<void>;
     readonly answeredCallIds?: string[];
     readonly hungUpCallIds?: string[];
     readonly transfers?: Array<{ callId: string; destination: unknown }>;
@@ -139,6 +140,8 @@ export interface BuildApplicationOptions {
   runtime?: ConversationRuntimePort;
   humanTransfer?: HumanTransferPort;
   telephonyGateway?: TelephonyGateway;
+  voiceGateway?: import("../modules/voice/index.js").VoiceMediaGateway;
+  enableAsteriskTelephony?: boolean;
   agentConfigurationRepository?: AgentConfigurationRepository;
   usageRecorder?: ConversationUsageRecorder;
   callRepository?: CallRepository & CallHistoryReader;
@@ -304,7 +307,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     runtime,
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),
   });
-  const voice = new ScriptedVoiceMediaGateway();
+  const registeredVoice = new ScriptedVoiceMediaGateway();
+  const voice = options.voiceGateway ?? registeredVoice;
   const calls = new CallOrchestratorService(
     business,
     customers,
@@ -340,7 +344,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     adminAudit,
     ...(billing ? { billing } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
-    registerCallMedia: (callId, transport) => voice.register(callId, transport),
+    registerCallMedia: (callId, transport) => registeredVoice.register(callId, transport),
   };
 }
 
