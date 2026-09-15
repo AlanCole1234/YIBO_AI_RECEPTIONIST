@@ -6,3 +6,6 @@ export type {
 } from "./application/contracts.js";
 export { AsteriskTelephonyGateway } from "./infrastructure/asterisk/asterisk-telephony-gateway.js";
 export type { AsteriskClient, AsteriskEvent } from "./infrastructure/asterisk/asterisk-client.js";
+
+export { AsteriskAriClient } from "./infrastructure/asterisk/asterisk-ari-client.js";
+export type { AsteriskMediaClient, ConnectableAsteriskClient } from "./infrastructure/asterisk/asterisk-client.js";

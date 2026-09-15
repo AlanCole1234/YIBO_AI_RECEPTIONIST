@@ -1,0 +1,51 @@
+# Three-source integration inventory
+
+## Preservation and verified baseline (2026-09-15)
+
+Canonical modern source: `origin/codex/recovered-work` / `1ff998b`. Published Alan source: `origin/feature/telephony-integration` / `9183e76`, unique commits `f4331a4`, `9fafd6d`, `9183e76`, merge-base `e0f4343`. Local source: remote backup `backup/alan-local-before-integration` / `54e4b9b`, preserving 63 reviewed source/example/documentation/test files over `447c667`.
+
+The original checkout/index were left intact. A private, ignored `.local-preservation-20260915` directory there contains a verified all-ref Git bundle, both anchored stash tips, reflog recovery refs, pre-fetch branch/status/diff inventories, and a SHA-256 manifest/archive of all 69 modified/untracked files. Six diagnostic JSON artifacts remain private and were not added to the source snapshot. Credentials, ignored `.env`, databases and local runtime artifacts were not added. The local-only `edd624e` styling commit also has remote backup `backup/alan-app-shell-20260915`. The initial dashboard `b301132` and older stash `8b597d3` are anchored locally and bundled. Both original stashes remain untouched.
+
+All local branch tips were compared with remote reachability. Aside from preserved working changes and stashes, `edd624e` is the only non-remote commit on normal local branches; its other upstream-ahead commits already exist remotely. The two stashes contain old ingress/composition wiring and older telephony/workspace contracts. No PBX configuration files were found in standard local Asterisk directories or repository shell/config files. Deployment-specific credentials/ports remain in the ignored local environment, untouched.
+
+Baseline: 270 tests passed, one optional live test skipped; backend and dashboard typechecks and production build passed. The lockfile is byte-identical to the original checkout's installed dependency lockfile. The pnpm launcher stalls on this machine; installed matching local tsc/vue-tsc/vitest/vite executables execute the package scripts equivalently without modifying dependencies or tenant data.
+
+## Behavioral reconciliation
+
+| Evidence | Classification | Modern disposition |
+|---|---|---|
+| `f4331a4`, stash 0 authenticated HTTP event ingress | REIMPLEMENT | ARI authenticated outbound subscription is the production ingress; do not add another generic caller-supplied event authority or bypass current authentication/DID resolution. |
+| `9fafd6d` ARI transport and local ARI client | PORT | Bounded ARI operations, external-channel exclusion, correct channel-to-call routing; provider boundary only. |
+| `9fafd6d` AudioSocket server and old call-runtime/voice-bridge | DISCARD | Superseded for this deployment by locally proven ARI External Media RTP path; no second conversation owner. AudioSocket is intentionally not enabled. |
+| Local RTP parsing, PCMU codec, stream resampling, pacer | PORT | Media boundary converts 8 kHz PCMU to canonical PCM16 mono 24 kHz; preserve pacing, bounded buffering and cancellation. |
+| Local ARI private test/diagnostic dialed-number bypass | DISCARD | Never bypass modern trusted DID/location and developer-mode isolation. Diagnostics require authorized Voice Lab. |
+| Local startup replay protection, early hangup, runtime completion | REIMPLEMENT | Integrate with current location-aware orchestrator and transfer states. |
+| Local tool/deadline/late-result recovery | REIMPLEMENT | Keep current confirmation tokens, trusted turn sequence, tool policy and safe error envelopes. |
+| Local ad hoc end_call/provider prompt injection | REIMPLEMENT | Any completion action must use modern validated tool/policy/payload contracts, not an adapter-only undeclared tool. |
+| Modern persistent customer/appointment repositories, multi-location routing | ALREADY PRESENT | Retain; do not port local in-memory bootstrap or global Calendar ID. |
+| Local Calendar identity and conditional in-place reschedule | REIMPLEMENT | Retain routed calendar identity including location/professional, persisted ownership and original event identity. |
+| Local successful-booking confirmation and no repeated confirmation | REIMPLEMENT | Public mutation result/prompt with modern opaque references and backend confirmation tokens; no internal ID leakage. |
+| `9183e76`, `edd624e`, `b301132` dashboard layouts | DISCARD | Modern role-aware advanced configuration/dashboard wins. No missing functional behavior established. |
+| `685fed6`, `447c667` clinic-local dates and availability | ALREADY PRESENT | Validate against modern location timezone and public slot contracts; preserve business policy. |
+| Local silence/VAD/token/reasoning overrides | NEEDS BENCHMARK | Versioned settings are authoritative; no global default changes justified by local simulations. |
+
+## Latency classification (exactly one category per mechanism)
+
+| Mechanism | Category | Decision |
+|---|---|---|
+| PCM16 mono 24 kHz Realtime | A — transport invariant | Shared canonical profile; no PBX-driven change. |
+| 8 kHz PCMU, 160-byte/20 ms RTP packets | A — transport invariant | Boundary codec/framing; internal protocol constants. |
+| VAD mode, threshold, padding, silence, inactivity | B — agent configuration | Honor current validated schema and capabilities; no adapter override. |
+| Voice/model, reasoning effort, output tokens, noise reduction | B — agent configuration | Canonical defaults/upgrader; preserve saved tenant choices. |
+| create_response, interrupt_response, truncation, tracing, tool policy | B — agent configuration | Preserve validated payload and channel restrictions. |
+| Local 650 ms silence / 100 ms local grace recommendations | C — candidate product defaults | Not adopted globally: no measured multi-channel p50/p95 evidence. |
+| Stateful downsampling and avoiding repeated conversion | D — internal optimization | Port and test sample continuity across chunk boundaries. |
+| RTP pacing, prebuffer, capacity, cancellation/backpressure | D — internal optimization | Bounded media implementation; no arbitrary admin JSON. |
+| Progress deadlines, deduplicated tool/response events, async accounting | D — internal optimization | Reimplement around modern contracts; never retry an ambiguous mutation. |
+| Speech-end/first-audio/tool/RTP timing observations | D — internal optimization | Correlated metadata only; formalize in OBS-001. |
+
+No claim of live latency improvement is made. Historical local samples are protocol simulations, not a live p50/p95 dataset. Default changes require additional evidence. These dispositions are revisited only when tests/code show a missing behavior.
+
+## INT-001 transport foundation
+
+The first independently reversible change adds ARI controls with a four-second HTTP abort, excludes external-media StasisStart from caller ingress, and ports tested RTP parsing and stateful PCMU conversion. It preserves the modern shared Realtime transport constant and does not yet connect PBX to the application. Authentication, tool contracts and dashboard are unchanged.
