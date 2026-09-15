@@ -49,3 +49,9 @@ No claim of live latency improvement is made. Historical local samples are proto
 ## INT-001 transport foundation
 
 The first independently reversible change adds ARI controls with a four-second HTTP abort, excludes external-media StasisStart from caller ingress, and ports tested RTP parsing and stateful PCMU conversion. It preserves the modern shared Realtime transport constant and does not yet connect PBX to the application. Authentication, tool contracts and dashboard are unchanged.
+
+## INT-001 media boundary
+
+The second port adapts the local RTP pacer and transport to the current AudioSink boundary. Caller-number diagnostic bypasses are removed. Media waits at most four seconds for its peer instead of dropping greeting audio; close releases that wait. The learned peer is pinned, inbound queues are capped, and outbound overflow rejects the write instead of deleting old speech. Pacing stays 160 bytes/20 ms, with stateful resampling and cancellation. Timing retained here measures first model audio to first RTP; full turn correlation belongs to OBS-001. No provider setting or tenant default is changed.
+
+Validation: transport foundation 10 focused tests passed; media boundary 9 focused tests passed (a new capacity test was corrected to account for the first packet already dispatched). Both backend/dashboard typechecks passed. Runtime wiring and integrated E2E remain the next INT-001/INT-003 work.

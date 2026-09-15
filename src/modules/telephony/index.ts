@@ -9,3 +9,4 @@ export type { AsteriskClient, AsteriskEvent } from "./infrastructure/asterisk/as
 
 export { AsteriskAriClient } from "./infrastructure/asterisk/asterisk-ari-client.js";
 export type { AsteriskMediaClient, ConnectableAsteriskClient } from "./infrastructure/asterisk/asterisk-client.js";
+export { AsteriskRtpVoiceMediaGateway } from "./infrastructure/asterisk/asterisk-rtp-voice-media-gateway.js";

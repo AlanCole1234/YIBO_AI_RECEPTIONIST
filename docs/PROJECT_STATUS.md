@@ -143,7 +143,7 @@ con `pnpm test` y `pnpm build`.
 | UI-001 | DONE | Login/restauración/logout, expiración por 401/deadline y navegación según rol |
 | UI-002 | DONE | Esquema v4 y controles generados por modelo con visibilidad/errores por capacidad |
 | UI-003 | DONE | Siete secciones editan comportamiento, silencios, canales, confirmación, límites y escalamiento |
-| INT-001 | IN_PROGRESS | Auditoría completada; primer port: ARI y codec RTP sin alterar contratos modernos |
+| INT-001 | IN_PROGRESS | Auditoría, ARI, codec y transporte RTP acotado verificados; falta cableado al runtime moderno |
 | INT-002 | TODO | Clasificar latencia y conservar configuración versionada |
 | INT-003 | TODO | E2E confiable, typecheck, suite completa y build |
 | UI-004 | TODO | Preview real y explícita mediante Voice Lab |

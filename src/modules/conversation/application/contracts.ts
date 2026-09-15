@@ -12,6 +12,9 @@ import type { ConversationUsageRecorder } from "../ports/conversation-usage.js";
 
 export interface AudioSink {
   write(frame: AudioFrame, assistantTurnId: string): Promise<void>;
+  /** Callback after queued audio actually drains; never inferred from model response.done. */
+  onPlaybackIdle?(listener: () => void): () => void;
+  getBargeInDiagnostics?(): { outboundRtpPlaying: boolean; outboundQueueDepth: number; assistantPlaybackMs?: number; echoCorrelation?: number; echoSuspected?: boolean };
   interrupt?(): Promise<AssistantPlaybackPosition | undefined>;
 }
 
