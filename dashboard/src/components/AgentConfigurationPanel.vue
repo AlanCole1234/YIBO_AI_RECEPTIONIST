@@ -13,6 +13,7 @@ import { phoneTurnDetectionModes, validateAgentCapabilityFields } from "../servi
 import { prioritizeCollectionField, setConfirmationRequired, setToolEnabled } from "../services/agent-policy-controls";
 
 defineProps<{ locale: "es-MX" | "en-US" }>();
+const emit = defineEmits<{ preview: [] }>();
 
 type Step = "identity" | "conversation" | "silence" | "abilities" | "confirmations" | "limits" | "instructions";
 type VadPreset = "auto" | "fast" | "balanced" | "patient" | "custom";
@@ -48,7 +49,6 @@ const recommended = ref<AgentConfiguration>();
 const availableTools = ref<AgentConfigurationPayload["availableTools"]>([]);
 const modelCapabilities = ref<RealtimeModelCapability[]>([]);
 const step = ref<Step>("identity");
-const speechPlaying = ref(false);
 
 const currentStep = computed(() => steps.findIndex((candidate) => candidate.id === step.value));
 const selectedCapability = computed(() => modelCapabilities.value.find(({ id }) => id === configuration.value?.conversation.model));
@@ -154,26 +154,6 @@ async function save(): Promise<void> {
   } finally {
     saving.value = false;
   }
-}
-
-function playVoicePreview(): void {
-  if (!("speechSynthesis" in window) || !configuration.value) return;
-  if (window.speechSynthesis.speaking) {
-    window.speechSynthesis.cancel();
-    speechPlaying.value = false;
-    return;
-  }
-  const sample = configuration.value.identity.locale.startsWith("en")
-    ? "Hello, I'm YIBO. How can I help you today?"
-    : "Hola, soy YIBO. ¿En qué puedo ayudarte hoy?";
-  const utterance = new SpeechSynthesisUtterance(sample);
-  utterance.lang = configuration.value.identity.locale;
-  const language = utterance.lang.slice(0, 2).toLowerCase();
-  utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith(language)) ?? null;
-  utterance.onend = () => { speechPlaying.value = false; };
-  utterance.onerror = () => { speechPlaying.value = false; };
-  speechPlaying.value = true;
-  window.speechSynthesis.speak(utterance);
 }
 
 function sameVad(
@@ -332,8 +312,8 @@ function errorMessage(caught: unknown): string {
           <small>PREVIEW</small><div class="voice-orb"><i></i><i></i><i></i><i></i><i></i></div>
           <h3>{{ selectedCapability?.label ?? configuration.conversation.model }}</h3><p>Voice <strong>{{ configuration.audio.voice }}</strong> · {{ configuration.identity.locale }}</p>
           <blockquote>“{{ configuration.identity.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
-          <button type="button" class="preview-button" @click="playVoicePreview">{{ speechPlaying ? '■ Stop preview' : '▶ Listen to a free preview' }}</button>
-          <small class="preview-note">Uses your browser's local voice. It does not use the API and does not exactly represent the OpenAI voice.</small>
+          <button type="button" class="preview-button" @click="emit('preview')">Open saved-settings Voice Lab</button>
+          <small class="preview-note">Uses the real OpenAI voice and may incur API charges. Save your edits first; this preview uses saved settings, not unsaved changes. Audio starts only when you start the Voice Test.</small>
           <dl><div><dt>Response</dt><dd>{{ configuration.conversation.maxOutputTokens }} max tokens</dd></div><div><dt>Capabilities</dt><dd>{{ activeToolCount }} active</dd></div><div><dt>Protection</dt><dd>Trusted context</dd></div></dl>
         </aside>
       </div>

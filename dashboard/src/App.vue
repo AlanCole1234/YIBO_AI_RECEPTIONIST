@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
 import { createAdminSession } from "./services/admin-session";
 import { messages, type MessageKey } from "./i18n";
@@ -19,6 +19,12 @@ const timezones = [
 const section = ref<Section>("overview");
 const adminSession = createAdminSession();
 const auth = adminSession.state;
+const previewVisible = ref(false);
+async function showVoicePreview(): Promise<void> {
+  previewVisible.value = true;
+  await nextTick();
+  document.getElementById("voice-lab-title")?.scrollIntoView({ behavior: "smooth" });
+}
 const business = ref<Business>();
 const apiOnline = ref(false);
 const googleCalendar = ref<GoogleCalendarStatus>({ configured: false, connected: false });
@@ -268,8 +274,8 @@ function statusLabel(status: string): string {
       </section>
 
       <section v-else-if="section === 'agent'" class="view agent-view">
-        <AgentVoiceLab />
-        <AgentConfigurationPanel :locale="locale" />
+        <AgentVoiceLab v-if="previewVisible" :expected-tenant-id="auth.principal?.tenantId" />
+        <AgentConfigurationPanel :locale="locale" @preview="showVoicePreview" />
       </section>
 
       <section v-else-if="section === 'customers'" class="view narrow">

@@ -96,6 +96,13 @@ console.log(JSON.stringify({
 }));
 
 function attachHarness(socket: WebSocket): void {
+  void app.agentConfiguration.get(app.tenantId).then((configuration) => {
+    if (socket.readyState !== socket.OPEN) return;
+    socket.send(JSON.stringify({ type: "voice.lab.ready", tenantId: app.tenantId,
+      runtime: app.config.runtime, model: configuration?.conversation.model,
+      voice: configuration?.audio.voice, configurationSource: "saved",
+    }));
+  }).catch(() => { if (socket.readyState === socket.OPEN) socket.close(1011, "Configuration unavailable"); });
   const callId = app.ids.generate("call");
   const inbound = new AudioQueue();
   let conversationStarted = false;

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { api } from "../services/api";
+import { previewBlockReason } from "../services/voice-preview";
+const props = defineProps<{ expectedTenantId?: string }>();
+const previewMetadata = ref<Record<string, unknown>>();
+const previewBlocked = computed(() => previewBlockReason(props.expectedTenantId, previewMetadata.value));
 
 type LabState = "connecting" | "idle" | "listening" | "speaking" | "closed" | "error";
 type AudioContextConstructor = typeof AudioContext;
@@ -73,6 +77,10 @@ function connect(): void {
       return;
     }
     const message = JSON.parse(data) as Record<string, unknown>;
+    if (message.type === "voice.lab.ready") {
+      previewMetadata.value = message;
+      return;
+    }
     if (message.type === "audio.chunk") {
       pendingAudio = message as unknown as AudioMetadata;
       if (pendingAudio.assistantTurnId !== announcedAssistantTurnId) {
@@ -102,7 +110,7 @@ async function loadDeveloperReadiness(): Promise<void> {
 
 async function startMicrophone(): Promise<void> {
   const activeSocket = socket;
-  if (!connected.value || !activeSocket) return;
+  if (!connected.value || !activeSocket || previewBlocked.value) return;
   try {
     const activeContext = await resumeAudioContext();
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
@@ -153,7 +161,7 @@ function closeSession(): void {
 async function sendFixture(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (!file || !connected.value) return;
+  if (!file || !connected.value || previewBlocked.value) return;
   await resumeAudioContext();
   socket?.send(JSON.stringify({ type: "fixture.next", name: file.name }));
   socket?.send(await file.arrayBuffer());
@@ -273,7 +281,9 @@ function addEvent(value: string): void {
     <div class="lab-copy">
       <div class="lab-kicker"><span></span> LIVE TEST</div>
       <h2 id="voice-lab-title">Talk to your agent<br><em>before publishing it.</em></h2>
-      <p>This test uses the same ConversationService that telephony will use. Listen to its pace, refine it, and test interruptions right here.</p>
+      <p>Preview the saved agent settings through Voice Lab. Unsaved edits are not included. This is a browser voice test, not a phone call. Starting the microphone or sending a WAV uses OpenAI and may incur charges.</p>
+      <p v-if="previewBlocked" role="status">{{ previewBlocked }}</p>
+      <p v-else>Saved model: {{ previewMetadata?.model }} · Voice: {{ previewMetadata?.voice }}</p>
       <div class="privacy"><span>Audio is not saved</span><span>Transcript is off</span><span class="cost">May use credits</span></div>
     </div>
 
@@ -281,12 +291,12 @@ function addEvent(value: string): void {
       <div :class="['live-orb', state]"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
       <div class="live-status"><small>AGENT STATUS</small><strong>{{ statusCopy[0] }}</strong><span>{{ statusCopy[1] }}</span></div>
       <div class="lab-controls">
-        <button class="start" :disabled="!connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Start Voice Test</button>
+        <button class="start" :disabled="Boolean(previewBlocked) || !connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Start Voice Test</button>
         <button :disabled="!microphoneActive" @click="stopMicrophone()">Pause microphone</button>
         <button :disabled="!sessionUsed || state === 'closed'" @click="interrupt">Interrupt YIBO</button>
         <button class="close" :disabled="!sessionUsed || state === 'closed'" @click="closeSession">End Voice Test</button>
       </div>
-      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="!connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
+      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="Boolean(previewBlocked) || !connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
     </div>
 
     <aside class="test-readiness" aria-label="Voice test readiness">
