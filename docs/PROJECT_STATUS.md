@@ -11,8 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **ninguna — SEC-001 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
-- Próxima tarea: **E2E-001**, pendiente y no iniciada.
+- Tarea activa: **ninguna — E2E-001 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
+- Próxima tarea: **E2E-002**, pendiente y no iniciada.
+- E2E-001 verificada el 17 de septiembre de 2026: 2 escenarios nuevos, 68 pruebas focales aprobadas; ambos typechecks y build aprobados. DID → sucursal/precio → disponibilidad → contacto → confirmación → cita → adaptador Google, con RTP local y proveedores simulados; llamada real pendiente. Ver `VOICE_BOOKING_E2E.md`.
 - SEC-001 verificada el 17 de septiembre de 2026: 87 pruebas focales; suite completa 428 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Aislamiento regional/tenant/sucursal, contexto confiable de tools, confirmaciones y ARI; ver `SECURITY_ISOLATION.md`.
 - OBS-001 verificada el 17 de septiembre de 2026: 65 pruebas focales; suite completa 394 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Logs correlacionados sin contenido personal, métricas acotadas y percentiles por llamada; ver `OBSERVABILITY.md`.
 - UI-009 verificada el 17 de septiembre de 2026: 67 pruebas focales; suite completa 383 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Avisos de borrador y guardado condicional atómico de configuración del agente; ver `OPTIMISTIC_EDITING.md`.
@@ -163,7 +164,7 @@ con `pnpm test` y `pnpm build`.
 | UI-009 | DONE | Avisos de cambios sin guardar, conflictos explícitos y CAS atómico del agente; Checkpoint 7 cerrado con 383 pruebas, 1 omitida, typechecks y build |
 | OBS-001 | DONE | Correlación por tenant/sucursal/llamada, allowlist sin PII, VAD/tools/confirmaciones/calendario/transferencia y latencia/RTP/p50/p95; 394 pruebas, typechecks y build |
 | SEC-001 | DONE | 34 regresiones nuevas; scope completo de estado/tokens, argumentos hostiles y ARI inválido; 428 pruebas, typechecks y build |
-| E2E-001 | TODO | Flujo completo de voz hasta Google Calendar |
+| E2E-001 | DONE | Dos sucursales/precios/zonas, fallback/override Google, gate/éxito diferido, RTP y limpieza; 68 pruebas y build; validación live pendiente |
 | E2E-002 | TODO | Fallos, cambios de cita y transferencia end-to-end |
 | DOC-003 | TODO | Diagramas y runbooks finales |
 | REL-001 | TODO | Ensayo de migración regional y validación completa |
