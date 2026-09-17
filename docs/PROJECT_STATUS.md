@@ -11,8 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **ninguna — UI-007 terminada; ejecución detenida por solicitud del usuario**.
-- Próxima tarea: **UI-008**, pendiente y no iniciada.
+- Tarea activa: **ninguna — UI-008 terminada; ejecución detenida por solicitud del usuario**.
+- Próxima tarea: **UI-009**, pendiente y no iniciada.
+- UI-008 verificada el 17 de septiembre de 2026: 31 pruebas focales; suite completa 374 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Lista por cliente/sucursal, snapshot histórico, cancelación y reprogramación; ver `APPOINTMENT_ADMINISTRATION.md`.
 - UI-007 verificada el 17 de septiembre de 2026: 71 pruebas focales en 6 archivos, ambos typechecks y build aprobados. Mapeos de calendario por sucursal/profesional, fallback y verificación segura; ver `CALENDAR_ADMINISTRATION.md`.
 - UI-006 verificada el 16 de septiembre de 2026: 69 pruebas focales en 8 archivos, ambos typechecks y build de producción aprobados. Catálogos, precios por sucursal, profesionales, asignaciones y horarios; ver `CATALOG_ADMINISTRATION.md`.
 - UI-005 verificada el 15 de septiembre de 2026: 24 pruebas focales aprobadas, ambos typechecks y build de producción aprobados.
@@ -155,7 +156,7 @@ con `pnpm test` y `pnpm build`.
 | UI-005 | DONE | Settings administra sucursales, números, dirección, zona, horarios, cierres, políticas y transferencia con roles/CAS existentes; 24 pruebas, typechecks y build aprobados |
 | UI-006 | DONE | Catálogos con duración/buffer, precios por sucursal, profesionales y asignaciones de servicios/horarios; roles, validación y CAS existentes; 69 pruebas, typechecks y build aprobados |
 | UI-007 | DONE | Mapeos por sucursal/profesional con fallback visible, verificación de acceso, roles y CAS; 71 pruebas, typechecks y build aprobados |
-| UI-008 | TODO | Operación ampliada de citas |
+| UI-008 | DONE | Lista por cliente/sucursal, precio histórico y operaciones según rol/política; 374 pruebas completas, 1 live omitida, typechecks y build aprobados |
 | UI-009 | TODO | Edición optimista y conflictos explícitos |
 | OBS-001 | TODO | Observabilidad correlacionada sin PII |
 | SEC-001 | TODO | Pruebas de aislamiento y entradas hostiles |

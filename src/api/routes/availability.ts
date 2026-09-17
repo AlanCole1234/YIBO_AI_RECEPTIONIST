@@ -4,6 +4,7 @@ import { createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AvailabilityQuery {
+  locationId?: string;
   serviceId?: string;
   employeeId?: string;
   rangeStart?: string;
@@ -16,12 +17,13 @@ export async function registerAvailabilityRoutes(server: FastifyInstance, app: Y
     { preHandler: createAdminGuard(app, "operator") },
     async (request, reply) => {
     const { serviceId, employeeId, rangeStart, rangeEnd } = request.query;
-    if (!serviceId || !rangeStart || !rangeEnd) {
+    if (!serviceId || !rangeStart || !rangeEnd
+      || (request.query.locationId !== undefined && (typeof request.query.locationId !== "string" || !request.query.locationId.trim()))) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
     }
     const result = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
-      locationId: "default",
+      locationId: request.query.locationId ?? "default",
       serviceId,
       ...(employeeId ? { employeeId } : {}),
       rangeStart,

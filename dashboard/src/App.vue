@@ -7,6 +7,7 @@ import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 import AdminLogin from "./components/AdminLogin.vue";
 import LocationSettings from "./components/LocationSettings.vue";
+import AppointmentAdministration from "./components/AppointmentAdministration.vue";
 import CalendarSettings from "./components/CalendarSettings.vue";
 import CatalogSettings from "./components/CatalogSettings.vue";
 
@@ -34,8 +35,6 @@ const date = ref(nextWeekday());
 const slots = ref<Slot[]>([]);
 const selectedSlot = ref<Slot>();
 const createdAppointment = ref<Appointment>();
-const lookupId = ref("");
-const lookupResult = ref<Appointment>();
 
 const selectedService = computed(() => business.value?.services.find((service) => service.id === serviceId.value));
 const eligibleEmployees = computed(() => business.value?.employees.filter(
@@ -139,15 +138,9 @@ async function createAppointment(): Promise<void> {
       employeeId: selectedSlot.value!.employeeId,
       startAt: selectedSlot.value!.startAt,
     });
-    lookupId.value = createdAppointment.value.id;
     await checkAvailability();
     section.value = "appointments";
   });
-}
-
-async function findAppointment(): Promise<void> {
-  if (!lookupId.value.trim()) return;
-  await run(async () => { lookupResult.value = await api.appointment(lookupId.value.trim()); });
 }
 
 async function locationSettingsSaved(): Promise<void> {
@@ -293,10 +286,7 @@ function statusLabel(status: string): string {
       </section>
 
       <section v-else-if="section === 'appointments'" class="view">
-        <div class="section-heading"><div><p class="eyebrow">{{ t('appointments') }}</p><h2>{{ t('appointmentInspection') }}</h2></div></div>
-        <article v-if="createdAppointment" class="result-card success-card featured"><span class="result-label">{{ t('confirmedAppointment') }}</span><h3>{{ createdAppointment.id }}</h3><p>{{ formatDateTime(createdAppointment.startAt) }} — {{ slotTime(createdAppointment.endAt) }}</p><span class="pill success">{{ statusLabel(createdAppointment.status) }}</span><small>{{ t('externalEvent') }}: {{ createdAppointment.externalCalendarEventId }}</small></article>
-        <form class="panel lookup" @submit.prevent="findAppointment"><label>{{ t('appointmentId') }}<input v-model="lookupId" placeholder="appointment-1" /></label><button class="primary" :disabled="busy">{{ t('searchAppointment') }}</button></form>
-        <article v-if="lookupResult" class="panel details"><div><span>ID</span><strong>{{ lookupResult.id }}</strong></div><div><span>{{ t('customer') }}</span><strong>{{ lookupResult.customerId }}</strong></div><div><span>{{ t('service') }}</span><strong>{{ lookupResult.serviceId }}</strong></div><div><span>{{ t('professional') }}</span><strong>{{ lookupResult.employeeId }}</strong></div><div><span>{{ t('start') }}</span><strong>{{ formatDateTime(lookupResult.startAt) }}</strong></div><div><span>{{ t('status') }}</span><strong>{{ statusLabel(lookupResult.status) }}</strong></div></article>
+        <AppointmentAdministration :initial-customer-id="customer?.id" :initial-appointment-id="createdAppointment?.id" />
       </section>
 
       <section v-else-if="section === 'calendars'" class="view">

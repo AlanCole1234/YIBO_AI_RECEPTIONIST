@@ -26,7 +26,13 @@ export interface Business {
 export interface Customer { id: string; tenantId: string; phone: string; name?: string; email?: string }
 export interface Slot { employeeId: string; startAt: string; endAt: string }
 
+export interface AppointmentLocation { id: string; name: string; active: boolean; timezone: string; minimumCancellationNoticeMinutes: number; minimumRescheduleNoticeMinutes: number }
+
 export interface Appointment {
+  locationId: string;
+  serviceNameSnapshot: string;
+  priceAmountMinor: number;
+  priceCurrency: string;
   id: string;
   customerId: string;
   serviceId: string;
@@ -216,12 +222,17 @@ export const api = {
   }),
   findOrCreateCustomer: (input: { name: string; phone: string }) =>
     request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(input) }),
-  availability: (input: { serviceId: string; employeeId: string; rangeStart: string; rangeEnd: string }) => {
+  availability: (input: { locationId?: string; serviceId: string; employeeId: string; rangeStart: string; rangeEnd: string }) => {
     const query = new URLSearchParams(input);
     return request<{ slots: Slot[] }>(`/api/availability?${query}`);
   },
   createAppointment: (input: { customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
     request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
+  appointmentLocations: () => request<{ locations: AppointmentLocation[] }>("/api/appointment-locations"),
+  customerAppointments: (locationId: string, customerId: string) => request<{ appointments: Appointment[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments?${new URLSearchParams({ customerId })}`),
+  locationAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}`),
+  cancelAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),
+  rescheduleAppointment: (locationId: string, id: string, startAt: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify({ startAt }) }),
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
