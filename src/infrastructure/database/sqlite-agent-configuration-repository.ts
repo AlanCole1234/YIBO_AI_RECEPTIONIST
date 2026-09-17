@@ -25,6 +25,17 @@ export class SqliteAgentConfigurationRepository implements AgentConfigurationRep
     return upgraded;
   }
 
+  async compareAndSaveConfiguration(tenantId: TenantId, configuration: AgentConfiguration, expected: AgentConfiguration | null): Promise<boolean> {
+    const json = JSON.stringify(configuration);
+    const now = new Date().toISOString();
+    const result = expected === null
+      ? this.database.prepare(`INSERT INTO agent_configurations(region_id, tenant_id, configuration_json, updated_at)
+          VALUES (?, ?, ?, ?) ON CONFLICT(region_id, tenant_id) DO NOTHING`).run(this.region, tenantId, json, now)
+      : this.database.prepare(`UPDATE agent_configurations SET configuration_json = ?, updated_at = ?
+          WHERE region_id = ? AND tenant_id = ? AND configuration_json = ?`).run(json, now, this.region, tenantId, JSON.stringify(expected));
+    return result.changes === 1;
+  }
+
   async saveConfiguration(tenantId: TenantId, configuration: AgentConfiguration): Promise<void> {
     this.database.prepare(`
       INSERT INTO agent_configurations(region_id, tenant_id, configuration_json, updated_at)

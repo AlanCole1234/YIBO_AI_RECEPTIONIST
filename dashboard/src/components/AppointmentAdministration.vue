@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import { createAppointmentEditor, appointmentTime } from "../services/appointment-editor";
 import { priceText } from "../services/catalog-editor";
 const props = defineProps<{ initialCustomerId?: string; initialAppointmentId?: string }>();
 const editor = createAppointmentEditor(); const { state } = editor;
+useUnsavedChanges(() => Boolean(state.pending), () => state.busy);
 const day = ref("");
 const location = computed(() => state.locations.find(item => item.id === state.locationId));
 const time = (value: string) => appointmentTime(value, location.value?.timezone ?? "UTC");

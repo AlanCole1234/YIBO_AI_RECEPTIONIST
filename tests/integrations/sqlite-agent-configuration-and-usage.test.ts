@@ -7,12 +7,15 @@ describe("SQLite agent configuration and usage", () => {
       "--import", "tsx", "tests/fixtures/sqlite-agent-configuration-and-usage.ts",
     ], { encoding: "utf8", cwd: process.cwd() });
     const result = JSON.parse(output.trim()) as {
+      cas: boolean[]; inserted: boolean; duplicate: boolean; isolated: boolean;
       configuration: { schemaVersion: number; audio: { voice: string }; enabledTools: string[] };
       persistedSchemaVersion: number;
       usage: Record<string, number>;
       calls: Array<{ callId: string; state: string; usage: Record<string, number> }>;
     };
 
+    expect(result.cas).toEqual([true, false]);
+    expect(result.inserted).toBe(true); expect(result.duplicate).toBe(false); expect(result.isolated).toBe(true);
     expect(result.configuration.audio.voice).toBe("marin");
     expect(result.configuration.schemaVersion).toBe(4);
     expect(result.persistedSchemaVersion).toBe(4);

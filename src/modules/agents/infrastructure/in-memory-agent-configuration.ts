@@ -18,6 +18,12 @@ export class InMemoryAgentConfigurationSource implements AgentConfigurationRepos
     return value ? structuredClone(value) : null;
   }
 
+  async compareAndSaveConfiguration(tenantId: TenantId, configuration: AgentConfiguration, expected: AgentConfiguration | null): Promise<boolean> {
+    if (JSON.stringify(this.configurations.get(tenantId) ?? null) !== JSON.stringify(expected)) return false;
+    this.configurations.set(tenantId, structuredClone(configuration));
+    return true;
+  }
+
   async saveConfiguration(tenantId: TenantId, configuration: AgentConfiguration): Promise<void> {
     this.configurations.set(tenantId, structuredClone(configuration));
   }

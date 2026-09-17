@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import type { TenantServiceDefinition, ProfessionalDefinition, LocationProfessionalAssignment } from "../../../src/modules/business/index.js";
 import { createCatalogEditor, copyCatalogValue, priceText } from "../services/catalog-editor";
 const emit = defineEmits<{ saved: [] }>();
 const editor = createCatalogEditor();
 const { state } = editor;
+useUnsavedChanges(() => Boolean(draft.value), () => state.busy);
 const locationId = ref("");
 const configuration = computed(() => state.document?.configuration);
 const location = computed(() => configuration.value?.locations.find(item => item.id === locationId.value));

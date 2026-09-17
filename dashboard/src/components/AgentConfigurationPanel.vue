@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import {
   api,
@@ -39,6 +40,9 @@ const vadPresets: Record<Exclude<VadPreset, "custom">, ServerVad> = {
   balanced: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
   patient: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
 };
+const baseline = ref("");
+const revision = ref("");
+const conflict = ref(false);
 const loading = ref(true);
 const saving = ref(false);
 const saved = ref(false);
@@ -49,6 +53,7 @@ const recommended = ref<AgentConfiguration>();
 const availableTools = ref<AgentConfigurationPayload["availableTools"]>([]);
 const modelCapabilities = ref<RealtimeModelCapability[]>([]);
 const step = ref<Step>("identity");
+useUnsavedChanges(() => Boolean(configuration.value) && JSON.stringify(configuration.value) !== baseline.value, () => saving.value || loading.value);
 
 const currentStep = computed(() => steps.findIndex((candidate) => candidate.id === step.value));
 const selectedCapability = computed(() => modelCapabilities.value.find(({ id }) => id === configuration.value?.conversation.model));
@@ -82,6 +87,7 @@ async function load(): Promise<void> {
     const payload = await api.agentConfiguration();
     recommended.value = clone(payload.recommended);
     configuration.value = clone(payload.current ?? payload.recommended);
+    baseline.value = JSON.stringify(configuration.value); revision.value = payload.revision; conflict.value = false; saved.value = false;
     availableTools.value = payload.availableTools;
     modelCapabilities.value = payload.modelCapabilities;
     apiKeyConfigured.value = payload.secrets.apiKeyConfigured;
@@ -136,21 +142,24 @@ function toggleTool(name: AgentToolName): void {
 }
 
 function restoreRecommended(): void {
+  if (JSON.stringify(configuration.value) !== baseline.value && !window.confirm("Replace your unsaved edits with the recommended settings?")) return;
   if (recommended.value) configuration.value = clone(recommended.value);
   saved.value = false;
 }
 
 async function save(): Promise<void> {
-  if (!configuration.value || hasFieldErrors.value) return;
+  if (!configuration.value || hasFieldErrors.value || saving.value || conflict.value) return;
   saving.value = true;
   saved.value = false;
   error.value = "";
   try {
-    const result = await api.updateAgentConfiguration(configuration.value);
+    const result = await api.updateAgentConfiguration(configuration.value, revision.value);
     configuration.value = clone(result.configuration);
+    baseline.value = JSON.stringify(configuration.value); revision.value = result.revision;
     saved.value = true;
   } catch (caught) {
-    error.value = errorMessage(caught);
+    conflict.value = caught instanceof ApiError && caught.code === "CONFIGURATION_VERSION_CONFLICT";
+    error.value = conflict.value ? "Settings changed elsewhere. Your draft is retained. Copy any edits you need, then discard the draft and reload." : errorMessage(caught);
   } finally {
     saving.value = false;
   }
@@ -190,7 +199,7 @@ function changeFirstCollectionField(event: Event): void {
   prioritizeCollectionField(configuration.value, selected);
 }
 
-function clone(value: AgentConfiguration): AgentConfiguration { return structuredClone(value); }
+function clone(value: AgentConfiguration): AgentConfiguration { return JSON.parse(JSON.stringify(value)); }
 function errorMessage(caught: unknown): string {
   if (caught instanceof ApiError) return `Could not save the configuration (${caught.code}).`;
   return caught instanceof Error ? caught.message : "Could not load the configuration.";
@@ -214,6 +223,7 @@ function errorMessage(caught: unknown): string {
     <div v-else-if="!configuration" class="config-state error-state">{{ error }}</div>
 
     <form v-else @submit.prevent="save">
+      <fieldset :disabled="saving" style="border:0;padding:0;margin:0;min-width:0">
       <nav class="config-steps" aria-label="Configuration steps">
         <button v-for="(item, index) in steps" :key="item.id" type="button"
           :class="{ active: step === item.id, complete: index < currentStep }" @click="selectStep(item.id)">
@@ -319,7 +329,9 @@ function errorMessage(caught: unknown): string {
       </div>
 
       <p v-if="error" class="config-error" role="alert">{{ error }}</p>
-      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : hasFieldErrors ? 'Review highlighted fields' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving || hasFieldErrors">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
+      <button v-if="conflict" type="button" @click="load">Discard draft and reload latest settings</button>
+      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : hasFieldErrors ? 'Review highlighted fields' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving || hasFieldErrors || conflict">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
+      </fieldset>
     </form>
   </section>
 </template>

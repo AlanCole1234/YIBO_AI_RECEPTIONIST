@@ -46,7 +46,7 @@ selectors are rejected.
 Configuration version/CAS contracts remain unchanged. Appointments currently have
 no version field or conditional-write contract; UI-008 does not invent one or claim
 multi-tab appointment conflict protection. The domain revalidates operations at
-execution. Broader optimistic editing remains UI-009. No changes were made to the
+execution. UI-009 adds leave protection for pending confirmations; appointment domain concurrency is unchanged. No changes were made to the
 appointment domain, Google adapters, routing resolver, telephony or Realtime.
 
 ## Validation — 2026-09-17
@@ -67,4 +67,4 @@ appointment, verify its stored price and location-local time, reschedule to an
 available slot, cancel, and confirm Google retains one event through rescheduling
 and removes it on cancellation. Check policy rejection and operator/admin access.
 Existing UI-007 routing-change risks still apply to bookings made before a calendar
-mapping changes. UI-009 was not started.
+mapping changes. UI-009 is now complete; see `OPTIMISTIC_EDITING.md`.

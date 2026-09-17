@@ -5,10 +5,11 @@ import { api, ApiError } from "./api.js";
 export function createLocationEditor(client = api) {
   const state = reactive({
     draft: undefined as EditableBusinessConfiguration | undefined,
-    version: 0, busy: false, error: "", conflict: false, saved: false,
+    baseline: "", version: 0, busy: false, error: "", conflict: false, saved: false,
   });
   const accept = (document: VersionedBusinessConfiguration) => {
     state.draft = JSON.parse(JSON.stringify(document.configuration));
+    state.baseline = JSON.stringify(state.draft);
     state.version = document.version;
     state.conflict = false;
   };
@@ -37,7 +38,7 @@ export function createLocationEditor(client = api) {
       return false;
     } finally { state.busy = false; }
   }
-  return { state, load, save, canSave: computed(() => Boolean(state.draft) && !state.busy && !state.conflict) };
+  return { state, load, save, dirty: computed(() => Boolean(state.draft) && JSON.stringify(state.draft) !== state.baseline), canSave: computed(() => Boolean(state.draft) && !state.busy && !state.conflict) };
 }
 
 export function newLocation(source: LocationDefinition, id: string): LocationDefinition {

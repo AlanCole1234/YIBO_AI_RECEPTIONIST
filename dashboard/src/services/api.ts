@@ -121,6 +121,7 @@ export interface RealtimeModelCapability {
 }
 
 export interface AgentConfigurationPayload {
+  revision: string;
   current: AgentConfiguration | null;
   recommended: AgentConfiguration;
   modelCapabilities: RealtimeModelCapability[];
@@ -237,8 +238,9 @@ export const api = {
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
   agentConfiguration: () => request<AgentConfigurationPayload>("/api/configuration"),
-  updateAgentConfiguration: (configuration: AgentConfiguration) => request<{
+  updateAgentConfiguration: (configuration: AgentConfiguration, revision: string) => request<{
     configuration: AgentConfiguration;
     appliesTo: "next-conversation";
-  }>("/api/configuration", { method: "PUT", body: JSON.stringify(configuration) }),
+    revision: string;
+  }>("/api/configuration", { method: "PUT", headers: { "if-match": `"${revision}"` }, body: JSON.stringify(configuration) }),
 };

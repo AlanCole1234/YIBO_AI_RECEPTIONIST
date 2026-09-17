@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { TenantId } from "../../../shared/types/identifiers.js";
 import type { AgentConfiguration, AgentConfigurationRepository, VersionedAgentConfiguration } from "../ports/agent-dependencies.js";
 import type { AgentDataCollectionField, AgentToolName } from "./contracts.js";
@@ -14,7 +15,7 @@ import {
 
 export interface AgentConfigurationServiceContract {
   get(tenantId: TenantId): Promise<AgentConfiguration | null>;
-  update(tenantId: TenantId, configuration: VersionedAgentConfiguration): Promise<AgentConfiguration>;
+  update(tenantId: TenantId, configuration: VersionedAgentConfiguration, expectedRevision?: string): Promise<AgentConfiguration>;
   recommended(
     locale: string,
     businessName: string,
@@ -34,9 +35,13 @@ export class AgentConfigurationService implements AgentConfigurationServiceContr
     return this.repository.getConfiguration(tenantId);
   }
 
-  async update(tenantId: TenantId, configuration: VersionedAgentConfiguration): Promise<AgentConfiguration> {
+  async update(tenantId: TenantId, configuration: VersionedAgentConfiguration, expectedRevision?: string): Promise<AgentConfiguration> {
     const validated = validateConfiguration(upgradeAgentConfiguration(configuration), this.capabilityRegistry);
-    await this.repository.saveConfiguration(tenantId, validated);
+    if (expectedRevision !== undefined) {
+      const current = await this.repository.getConfiguration(tenantId);
+      if (agentConfigurationRevision(current) !== expectedRevision
+        || !await this.repository.compareAndSaveConfiguration(tenantId, validated, current)) throw new AgentConfigurationConflict();
+    } else await this.repository.saveConfiguration(tenantId, validated);
     return structuredClone(validated);
   }
 
@@ -169,3 +174,8 @@ function validateBehavior(value: AgentConfiguration): void {
     throw new Error("behavior.dataCollectionOrder must contain full_name, phone_number and service exactly once");
   }
 }
+
+/** Content revision is independent of the schema version and never enters provider payloads. */
+export const agentConfigurationRevision = (configuration: AgentConfiguration | null): string =>
+  createHash("sha256").update(JSON.stringify(configuration)).digest("hex");
+export class AgentConfigurationConflict extends Error {}

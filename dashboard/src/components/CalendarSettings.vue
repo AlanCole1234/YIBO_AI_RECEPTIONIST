@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { onMounted } from "vue";
 import { createCalendarEditor, calendarStatusLabel } from "../services/calendar-editor";
 const emit = defineEmits<{ saved: [] }>();
 const editor = createCalendarEditor();
 const { state } = editor;
+useUnsavedChanges(() => Boolean(state.draft), () => state.busy);
 async function save() { if (await editor.save()) emit("saved"); }
 async function selectLocation(event: Event) {
   const select = event.target as HTMLSelectElement;

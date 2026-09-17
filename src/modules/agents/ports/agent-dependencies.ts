@@ -78,6 +78,7 @@ export interface AgentConfigurationSource {
 
 export interface AgentConfigurationRepository extends AgentConfigurationSource {
   saveConfiguration(tenantId: TenantId, configuration: AgentConfiguration): Promise<void>;
+  compareAndSaveConfiguration(tenantId: TenantId, configuration: AgentConfiguration, expected: AgentConfiguration | null): Promise<boolean>;
 }
 
 export interface HumanTransferPort {

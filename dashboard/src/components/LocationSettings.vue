@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import { createLocationEditor, newLocation } from "../services/location-editor";
 
 const emit = defineEmits<{ saved: [] }>();
 const editor = createLocationEditor();
 const { state } = editor;
+useUnsavedChanges(() => editor.dirty.value, () => state.busy);
 const selectedId = ref("");
 const location = computed(() => state.draft?.locations.find(({ id }) => id === selectedId.value));
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

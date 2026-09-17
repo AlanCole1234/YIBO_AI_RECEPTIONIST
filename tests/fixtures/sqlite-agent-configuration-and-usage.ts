@@ -37,6 +37,18 @@ try {
   const configuration = await service.get(DEVELOPMENT_BUSINESS.tenantId);
   const persisted = JSON.parse((database.prepare(`SELECT configuration_json FROM agent_configurations
     WHERE region_id = ? AND tenant_id = ?`).get("MX", DEVELOPMENT_BUSINESS.tenantId) as { configuration_json: string }).configuration_json) as { schemaVersion?: number };
+  const changed = structuredClone(configuration!); changed.identity.instructions += " Updated.";
+  const cas = await Promise.all([
+    configurations.compareAndSaveConfiguration(DEVELOPMENT_BUSINESS.tenantId, changed, configuration),
+    configurations.compareAndSaveConfiguration(DEVELOPMENT_BUSINESS.tenantId, recommended, configuration),
+  ]);
+  const otherBusiness = structuredClone(DEVELOPMENT_BUSINESS);
+  otherBusiness.tenantId = "new-tenant"; otherBusiness.businessId = "new-business";
+  for (const location of otherBusiness.locations) location.calledNumbers = [];
+  seedBusiness(database, otherBusiness);
+  const inserted = await configurations.compareAndSaveConfiguration("new-tenant", recommended, null);
+  const duplicate = await configurations.compareAndSaveConfiguration("new-tenant", changed, null);
+  const isolated = await configurations.getConfiguration("new-tenant");
   const usage = new SqliteConversationUsageRepository(database, "MX");
   const calls = new SqliteCallRepository(database, "MX");
   await calls.create({
@@ -50,6 +62,7 @@ try {
     inputTokens: 100, outputTokens: 25, inputAudioMs: 12_000, outputAudioMs: 4_000, toolCalls: 2,
   });
   console.log(JSON.stringify({
+    cas, inserted, duplicate, isolated: isolated?.identity.instructions === recommended.identity.instructions,
     configuration,
     persistedSchemaVersion: persisted.schemaVersion,
     usage: await usage.summarize(DEVELOPMENT_BUSINESS.tenantId),

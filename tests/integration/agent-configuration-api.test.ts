@@ -83,7 +83,7 @@ describe("agent configuration API", () => {
     const update = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      headers: session.mutationHeaders,
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
       payload: { ...current, audio: { ...(current.audio as object), voice: "cedar" } },
     });
 
@@ -113,7 +113,7 @@ describe("agent configuration API", () => {
     const response = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      headers: session.mutationHeaders,
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
       payload: { ...before, identity: { ...before!.identity, instructions: "" } },
     });
 
@@ -131,7 +131,7 @@ describe("agent configuration API", () => {
     const response = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      headers: session.mutationHeaders,
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
       payload: { ...current, audio: { ...current!.audio, voice: "not-a-realtime-voice" } },
     });
 
@@ -150,7 +150,7 @@ describe("agent configuration API", () => {
     const response = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      headers: session.mutationHeaders,
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
       payload: {
         ...current,
         enabledTools: [...current!.enabledTools, "enable_developer_test_mode"],

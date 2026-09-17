@@ -18,8 +18,7 @@ identifiers and preserves untouched catalog, price, professional and calendar
 fields. The backend remains the source of validation and audit logging.
 The UI never silently retries a version conflict: it retains the draft, blocks
 further saves and offers **Discard draft and load latest settings**. Copy edits
-that should be retained before taking that explicit discard action. Broader
-navigation/unsaved-change protection remains the separate UI-009 task.
+that should be retained before taking that explicit discard action. Navigation/unsaved-change protection is provided by UI-009; see `OPTIMISTIC_EDITING.md`.
 
 Successful saves refresh displayed business information and clear stale
 availability selections. They do not move existing appointments or restart

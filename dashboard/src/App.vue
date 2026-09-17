@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, provide, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Slot } from "./services/api";
 import { createAdminSession } from "./services/admin-session";
 import { messages, type MessageKey } from "./i18n";
@@ -10,6 +10,10 @@ import LocationSettings from "./components/LocationSettings.vue";
 import AppointmentAdministration from "./components/AppointmentAdministration.vue";
 import CalendarSettings from "./components/CalendarSettings.vue";
 import CatalogSettings from "./components/CatalogSettings.vue";
+
+import { createUnsavedChanges, unsavedChangesKey } from "./services/unsaved-changes";
+const leaveGuard = createUnsavedChanges(message => window.confirm(message), message => window.alert(message));
+provide(unsavedChangesKey, leaveGuard);
 
 type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings" | "catalog" | "calendars";
 const section = ref<Section>("overview");
@@ -35,6 +39,7 @@ const date = ref(nextWeekday());
 const slots = ref<Slot[]>([]);
 const selectedSlot = ref<Slot>();
 const createdAppointment = ref<Appointment>();
+leaveGuard.register({ dirty: () => false, busy: () => busy.value });
 
 const selectedService = computed(() => business.value?.services.find((service) => service.id === serviceId.value));
 const eligibleEmployees = computed(() => business.value?.employees.filter(
@@ -51,11 +56,12 @@ const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123
 const t = (key: MessageKey): string => copy.value[key];
 
 onMounted(async () => {
+  window.addEventListener("beforeunload", leaveGuard.beforeUnload);
   await adminSession.restore();
   if (auth.phase === "authenticated") await loadWorkspace();
 });
 
-onUnmounted(() => adminSession.dispose());
+onUnmounted(() => { adminSession.dispose(); window.removeEventListener("beforeunload", leaveGuard.beforeUnload); });
 
 async function loadWorkspace(): Promise<void> {
   try {
@@ -80,6 +86,7 @@ async function login(credentials: { email: string; password: string }): Promise<
 }
 
 async function logout(): Promise<void> {
+  if (!leaveGuard.allowLeave()) return;
   await adminSession.logout();
   section.value = "overview";
   business.value = undefined;
@@ -91,12 +98,13 @@ function canAccessSection(candidate: Section): boolean {
 }
 
 function chooseSection(value: Section): void {
-  if (!canAccessSection(value)) return;
+  if (value === section.value || !canAccessSection(value) || !leaveGuard.allowLeave()) return;
   section.value = value;
   globalError.value = "";
 }
 
 async function connectGoogleCalendar(): Promise<void> {
+  if (!leaveGuard.allowLeave()) return;
   await run(async () => { window.location.assign((await api.googleCalendarConnect(window.location.origin)).url); });
 }
 

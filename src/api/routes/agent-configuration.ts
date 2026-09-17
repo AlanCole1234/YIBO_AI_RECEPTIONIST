@@ -1,3 +1,4 @@
+import { agentConfigurationRevision, AgentConfigurationConflict } from "../../modules/agents/application/agent-configuration-service.js";
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import {
@@ -18,8 +19,10 @@ export async function registerAgentConfigurationRoutes(
     }
     const location = business.value.locations.find(({ id }) => id === "default") ?? business.value.locations[0]!;
 
+    const current = await app.agentConfiguration.get(app.tenantId);
     return {
-      current: await app.agentConfiguration.get(app.tenantId),
+      revision: agentConfigurationRevision(current),
+      current,
       recommended: app.agentConfiguration.recommended(
         location.locale,
         business.value.name,
@@ -36,11 +39,16 @@ export async function registerAgentConfigurationRoutes(
   });
 
   server.put("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (request, reply) => {
+    const match = request.headers["if-match"];
+    if (typeof match !== "string" || !/^"[a-f0-9]{64}"$/.test(match)) {
+      return reply.code(match === undefined ? 428 : 400).send({ error: { code: "CONFIGURATION_VERSION_REQUIRED" } });
+    }
     const before = await app.agentConfiguration.get(app.tenantId);
     let configuration;
     try {
-      configuration = await app.agentConfiguration.update(app.tenantId, request.body as never);
+      configuration = await app.agentConfiguration.update(app.tenantId, request.body as never, match.slice(1, -1));
     } catch (error) {
+      if (error instanceof AgentConfigurationConflict) return reply.code(409).send({ error: { code: "CONFIGURATION_VERSION_CONFLICT" } });
       return reply.code(400).send({
         error: {
           code: "INVALID_AGENT_CONFIGURATION",
@@ -57,6 +65,6 @@ export async function registerAgentConfigurationRoutes(
       before,
       after: configuration,
     });
-    return { configuration, appliesTo: "next-conversation" as const };
+    return { configuration, revision: agentConfigurationRevision(configuration), appliesTo: "next-conversation" as const };
   });
 }

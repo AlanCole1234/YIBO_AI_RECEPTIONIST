@@ -9,18 +9,19 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Rama y commit inicial: `main` en `7df03e4`.
 - Estado inicial: árbol limpio y sincronizado con `origin/main`.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
-- Checkpoint activo: **Checkpoint 7 — Paneles administrativos**.
+- Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **ninguna — UI-008 terminada; ejecución detenida por solicitud del usuario**.
-- Próxima tarea: **UI-009**, pendiente y no iniciada.
+- Tarea activa: **ninguna — UI-009 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
+- Próxima tarea: **OBS-001**, pendiente y no iniciada.
+- UI-009 verificada el 17 de septiembre de 2026: 67 pruebas focales; suite completa 383 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Avisos de borrador y guardado condicional atómico de configuración del agente; ver `OPTIMISTIC_EDITING.md`.
 - UI-008 verificada el 17 de septiembre de 2026: 31 pruebas focales; suite completa 374 aprobadas y 1 live omitida; ambos typechecks y build aprobados. Lista por cliente/sucursal, snapshot histórico, cancelación y reprogramación; ver `APPOINTMENT_ADMINISTRATION.md`.
 - UI-007 verificada el 17 de septiembre de 2026: 71 pruebas focales en 6 archivos, ambos typechecks y build aprobados. Mapeos de calendario por sucursal/profesional, fallback y verificación segura; ver `CALENDAR_ADMINISTRATION.md`.
 - UI-006 verificada el 16 de septiembre de 2026: 69 pruebas focales en 8 archivos, ambos typechecks y build de producción aprobados. Catálogos, precios por sucursal, profesionales, asignaciones y horarios; ver `CATALOG_ADMINISTRATION.md`.
 - UI-005 verificada el 15 de septiembre de 2026: 24 pruebas focales aprobadas, ambos typechecks y build de producción aprobados.
 - Baseline recuperado verificado localmente: 270 pruebas aprobadas, 1 omitida; ambos typechecks y build aprobados el 15 de septiembre de 2026.
 - Preservación local completa: `backup/alan-local-before-integration` (`54e4b9b`), backup remoto de `edd624e`, bundle privado verificado para ambos stashes y reflog. Ver `INTEGRATION_INVENTORY.md`.
-- Último checkpoint cerrado: Checkpoint 6; 261 pruebas aprobadas, 1 omitida y
-  `pnpm build` aprobado el 14 de septiembre de 2026.
+- Último checkpoint cerrado: Checkpoint 7; 383 pruebas aprobadas, 1 live omitida,
+  ambos typechecks y build aprobados el 17 de septiembre de 2026.
 - Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
 - Última tarea verificada: AGENT-005; `pnpm typecheck`, 227 pruebas aprobadas y
@@ -157,7 +158,7 @@ con `pnpm test` y `pnpm build`.
 | UI-006 | DONE | Catálogos con duración/buffer, precios por sucursal, profesionales y asignaciones de servicios/horarios; roles, validación y CAS existentes; 69 pruebas, typechecks y build aprobados |
 | UI-007 | DONE | Mapeos por sucursal/profesional con fallback visible, verificación de acceso, roles y CAS; 71 pruebas, typechecks y build aprobados |
 | UI-008 | DONE | Lista por cliente/sucursal, precio histórico y operaciones según rol/política; 374 pruebas completas, 1 live omitida, typechecks y build aprobados |
-| UI-009 | TODO | Edición optimista y conflictos explícitos |
+| UI-009 | DONE | Avisos de cambios sin guardar, conflictos explícitos y CAS atómico del agente; Checkpoint 7 cerrado con 383 pruebas, 1 omitida, typechecks y build |
 | OBS-001 | TODO | Observabilidad correlacionada sin PII |
 | SEC-001 | TODO | Pruebas de aislamiento y entradas hostiles |
 | E2E-001 | TODO | Flujo completo de voz hasta Google Calendar |

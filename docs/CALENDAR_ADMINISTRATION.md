@@ -15,8 +15,7 @@ backend logic, persistence, telephony or Realtime behavior was changed.
   the loaded shared configuration version in `If-Match` and records existing audit
   metadata. Tenant identity and admin authorization remain server-controlled.
 - Failed saves retain the draft. Conflicts block further writes until the admin
-  explicitly discards the draft and reloads. Navigation-wide unsaved warnings
-  remain UI-009.
+  explicitly discards the draft and reloads. Navigation-wide unsaved warnings are provided by UI-009; see `OPTIMISTIC_EDITING.md`.
 - **Verify saved mappings** performs existing read-only access checks. It displays
   only fixed labels for accessible, unconfigured, disconnected, forbidden, missing,
   unavailable, or unconfigured integration states. Provider errors and OAuth

@@ -35,7 +35,7 @@ Failed saves retain the form. Version conflicts block subsequent writes until th
 administrator explicitly discards the draft and reloads. Successful saves advance
 the version, refresh business information and clear stale availability selections.
 Only one form is edited at a time; location selection is locked during an edit.
-Broader navigation/unsaved-change warnings remain UI-009.
+Navigation/unsaved-change warnings are provided by UI-009; see `OPTIMISTIC_EDITING.md`.
 
 Assigned catalog records can be protected from global deactivation even when an
 assignment is inactive. Use location offering/assignment activation controls to

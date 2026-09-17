@@ -27,6 +27,7 @@ async function fixture(roles: Array<"tenant_admin" | "operator"> = ["tenant_admi
 describe("UI-005 location editor through the authenticated versioned API", () => {
   it("loads and saves location fields while retaining catalogs and calendar/professional assignments", async () => {
     const { editor, app, requests } = await fixture();
+    expect(editor.dirty.value).toBe(false);
     const draft = editor.state.draft!;
     const unchanged = JSON.stringify({ services: draft.services, professionals: draft.professionals,
       assignments: draft.locations[0]!.professionals, prices: draft.locations[0]!.services });
@@ -39,7 +40,9 @@ describe("UI-005 location editor through the authenticated versioned API", () =>
     location.closures = [{ id: "holiday", startLocal: "2026-12-25T00:00", endLocal: "2026-12-26T00:00", administrativeReason: "Holiday" }];
     location.policies.minimumLeadTimeMinutes = 120;
     location.transferDestination = { type: "EXTENSION", value: "204" };
+    expect(editor.dirty.value).toBe(true);
     expect(await editor.save()).toBe(true);
+    expect(editor.dirty.value).toBe(false);
     expect(editor.state.version).toBe(2);
     expect(editor.state.draft!.locations[0]).toEqual(location);
     const after = editor.state.draft!;
