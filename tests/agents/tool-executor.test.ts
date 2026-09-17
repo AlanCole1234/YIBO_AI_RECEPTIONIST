@@ -87,6 +87,73 @@ const business: BusinessProfile = {
 };
 
 describe("ToolExecutorImpl", () => {
+  it.each([
+    { tenantId: "tenant-other" }, { locationId: "south" },
+    { customerId: "customer-other" }, { developerTestModeAuthorized: true as const },
+  ])("does not reuse appointment references under changed scope %j", async (changed) => {
+    const { executor, getAppointment } = fixture();
+    await executor.execute(context, { toolCallId: "list", name: "list_customer_appointments", arguments: {} });
+    await expect(executor.execute({ ...context, ...changed }, {
+      toolCallId: "cancel", name: "cancel_appointment", arguments: { appointmentReference: "upcoming-1" },
+    })).resolves.toMatchObject({ ok: false, error: { code: "APPOINTMENT_REFERENCE_NOT_FOUND" } });
+    expect(getAppointment).not.toHaveBeenCalled();
+    await expect(executor.execute(context, {
+      toolCallId: "cancel-original", name: "cancel_appointment", arguments: { appointmentReference: "upcoming-1" },
+    })).resolves.toMatchObject({ ok: true });
+  });
+
+  it("does not borrow another customer's cached availability with a reused call ID", async () => {
+    const { executor, createAppointment } = fixture();
+    await executor.execute(context, { toolCallId: "availability", name: "check_availability", arguments: {
+      service: "Consultation", rangeStart: "2026-08-10T00:00:00Z", rangeEnd: "2026-08-11T00:00:00Z",
+    } });
+    await expect(executor.execute({ ...context, customerId: "customer-other" }, {
+      toolCallId: "book-other", name: "create_appointment", arguments: {
+        service: "Consultation", employeeId: "employee-1", startAt: "2026-08-10T16:00:00Z",
+      },
+    })).resolves.toMatchObject({ ok: true });
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({ customerId: "customer-other", startAt: "2026-08-10T16:00:00.000Z" }));
+  });
+
+  it("does not carry developer mode into an unauthorized context with the same call ID", async () => {
+    const { executor, createAppointment } = fixture();
+    await executor.execute({ ...context, developerTestModeAuthorized: true }, {
+      toolCallId: "enable", name: "enable_developer_test_mode", arguments: {},
+    });
+    await executor.execute(context, { toolCallId: "book", name: "create_appointment",
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: confirmedAppointment.startAt } });
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({ customerId: context.customerId, source: "AI_CALL" }));
+  });
+
+  it.each(["regionId", "developerTestModeAuthorized", "turnSequence", "calendarId", "unexpected"])("rejects hostile developer-tool argument %s", async (key) => {
+    const { executor } = fixture();
+    for (const name of ["enable_developer_test_mode", "delete_test_appointments"] as const) {
+      await expect(executor.execute({ ...context, developerTestModeAuthorized: true }, {
+        toolCallId: "hostile", name, arguments: { [key]: "caller-controlled" },
+      })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_TOOL_ARGUMENTS" } });
+    }
+  });
+
+  it.each([
+    "get_service_information", "list_customer_appointments", "check_availability", "create_appointment",
+    "update_customer", "cancel_appointment", "reschedule_appointment", "transfer_to_human",
+    "enable_developer_test_mode", "delete_test_appointments",
+  ] as const)("rejects model-supplied context on %s before side effects", async (name) => {
+    const fixtureValue = fixture();
+    for (const key of ["tenantId", "locationId", "callId", "customerId", "idempotencyKey", "regionId", "turnSequence", "developerTestModeAuthorized"]) {
+      for (const argumentsValue of [{ [key]: "hostile" }, { nested: [{ [key]: "hostile" }] }]) {
+        await expect(fixtureValue.executor.execute({ ...context, developerTestModeAuthorized: true }, {
+          toolCallId: "hostile", name, arguments: argumentsValue,
+        })).resolves.toMatchObject({ ok: false, error: { code: "INVALID_TOOL_ARGUMENTS" } });
+      }
+    }
+    for (const method of [fixtureValue.createAppointment, fixtureValue.cancelAppointment,
+      fixtureValue.rescheduleAppointment, fixtureValue.findAvailableSlots, fixtureValue.getAppointment,
+      fixtureValue.listUpcomingAppointments, fixtureValue.updateCustomer, fixtureValue.transferToConfiguredDestination]) {
+      expect(method).not.toHaveBeenCalled();
+    }
+  });
+
   it("lists only public upcoming-appointment fields using trusted scope", async () => {
     const { executor, listUpcomingAppointments } = fixture();
 

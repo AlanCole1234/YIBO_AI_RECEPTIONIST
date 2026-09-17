@@ -3,6 +3,15 @@ import { AsteriskAriClient } from "../../src/modules/telephony/index.js";
 import type { AsteriskEvent } from "../../src/modules/telephony/index.js";
 
 describe("AsteriskAriClient Stasis classification", () => {
+  it.each(["null", "[]", "true", "42", "{", '{"channel":null}', '{"channel":{"id":23}}'])("ignores malformed ARI payload %s", async (raw) => {
+    const client = new AsteriskAriClient({ baseUrl: "http://127.0.0.1:8088", application: "yibo", username: "test", password: "test", logger: () => {} });
+    const handler = vi.fn();
+    client.onEvent(handler);
+    expect(() => (client as unknown as { onMessage(raw: string): void }).onMessage(raw)).not.toThrow();
+    await tick();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("ignores an External Media UnicastRTP StasisStart even when ARI app arguments are absent", async () => {
     const logs: Array<{ event: string; details?: Record<string, unknown> }> = [];
     const client = new AsteriskAriClient({

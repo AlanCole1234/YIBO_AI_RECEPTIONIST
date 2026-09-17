@@ -1,3 +1,4 @@
+import { trustedToolScope } from "./trusted-tool-scope.js";
 import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { AppointmentService } from "../../appointments/index.js";
 import type { SchedulingService } from "../../scheduling/index.js";
@@ -101,7 +102,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!business?.ok) {
       return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Upcoming appointments are unavailable right now.", false);
     }
-    const appointmentService = this.enabledTestCalls.has(context.callId)
+    const appointmentService = this.enabledTestCalls.has(trustedToolScope(context))
       ? this.developerTest?.appointments ?? this.appointments
       : this.appointments;
     const appointments = await appointmentService.listUpcomingAppointments({
@@ -130,7 +131,7 @@ export class ToolExecutorImpl implements ToolExecutor {
         },
       };
     });
-    this.appointmentReferencesByCall.set(context.callId, references);
+    this.appointmentReferencesByCall.set(trustedToolScope(context), references);
     return { toolCallId: call.toolCallId, ok: true as const, data: { appointments: publicAppointments } };
   }
 
@@ -155,7 +156,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     const serviceId = await this.resolveServiceId(context.tenantId, context.locationId, input.service);
     if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
-    const testMode = this.enabledTestCalls.has(context.callId);
+    const testMode = this.enabledTestCalls.has(trustedToolScope(context));
     const scheduling = testMode ? this.developerTest?.scheduling ?? this.scheduling : this.scheduling;
     const employeeId = input.employeeId as string | undefined ?? (testMode
       ? await this.defaultTestEmployeeId(context.tenantId, context.locationId, serviceId)
@@ -224,7 +225,7 @@ export class ToolExecutorImpl implements ToolExecutor {
         parsedUtcDateTime: requestedStartAt.instant,
       });
     }
-    this.confirmableAvailabilityByCall.set(context.callId, {
+    this.confirmableAvailabilityByCall.set(trustedToolScope(context), {
       ...(requested?.ok ? { requestedStartAt: requestedStartAt?.instant } : {}),
       availableStartAts: result.value.map((slot) => slot.startAt),
     });
@@ -301,8 +302,8 @@ export class ToolExecutorImpl implements ToolExecutor {
   }
 
   private async createAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
+    const testMode = this.enabledTestCalls.has(trustedToolScope(context));
+    const customerId = testMode ? this.testCustomersByCall.get(trustedToolScope(context)) : context.customerId;
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before creating an appointment.", false);
     const input = call.arguments as Input;
     if (!exactKeys(input, ["service", "employeeId", "startAt"], ["employeeId", "startAt"]) ||
@@ -313,7 +314,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
     const normalizedStartAt = await this.normalizeDateTime(context.tenantId, context.locationId, input.startAt);
     if (!normalizedStartAt) return invalid(call, "startAt must be a valid clinic-local or offset-aware datetime");
-    const availability = this.confirmableAvailabilityByCall.get(context.callId);
+    const availability = this.confirmableAvailabilityByCall.get(trustedToolScope(context));
     const confirmedStartAt = availability?.requestedStartAt ?? normalizedStartAt.instant;
     // A time returned by calendar availability is an authoritative instant. If the
     // model rebuilds it (for example, by adding Z to a local 3 PM), never turn that
@@ -355,7 +356,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (result.value.status !== "CONFIRMED") {
       return toolError(call, "APPOINTMENT_NOT_CONFIRMED", "The appointment is not confirmed. Do not present it as booked.", false);
     }
-    if (testMode) this.testAppointmentsByCall.set(context.callId, [...(this.testAppointmentsByCall.get(context.callId) ?? []), result.value.id]);
+    if (testMode) this.testAppointmentsByCall.set(trustedToolScope(context), [...(this.testAppointmentsByCall.get(trustedToolScope(context)) ?? []), result.value.id]);
     const business = await this.businesses?.getLocation(context.tenantId, context.locationId);
     const locale = business?.ok ? business.value.location.locale : "en";
     return {
@@ -380,39 +381,41 @@ export class ToolExecutorImpl implements ToolExecutor {
   }
 
   private async enableDeveloperTestMode(context: ToolExecutionContext, call: AgentToolCall) {
+    if (!exactKeys(call.arguments as Input, [], [])) return invalid(call, "This tool does not accept arguments");
     if (!context.developerTestModeAuthorized) return toolError(call, "TEST_MODE_NOT_AUTHORIZED", "Developer Test Mode is not available in this session.", false);
     if (!this.customers) return toolError(call, "TEST_MODE_UNAVAILABLE", "Developer Test Mode is unavailable.", false);
     const customer = await this.customers.findOrCreateByPhone({ tenantId: context.tenantId, phone: "+15550000000", name: "YIBO Test Patient" });
     if (!customer.ok) return toolError(call, "TEST_MODE_UNAVAILABLE", "Developer Test Mode could not be initialized.", false);
-    this.testCustomersByCall.set(context.callId, customer.value.id);
-    this.enabledTestCalls.add(context.callId);
+    this.testCustomersByCall.set(trustedToolScope(context), customer.value.id);
+    this.enabledTestCalls.add(trustedToolScope(context));
     calendarLog("developer.test_mode.enabled", { tenantId: context.tenantId, callId: context.callId });
     return { toolCallId: call.toolCallId, ok: true as const, data: { enabled: true, message: "Test mode enabled." } };
   }
 
   private async deleteTestAppointments(context: ToolExecutionContext, call: AgentToolCall) {
-    if (!context.developerTestModeAuthorized || !this.enabledTestCalls.has(context.callId)) return toolError(call, "TEST_MODE_NOT_AUTHORIZED", "Developer Test Mode is not enabled in this session.", false);
-    const appointments = this.testAppointmentsByCall.get(context.callId) ?? [];
+    if (!exactKeys(call.arguments as Input, [], [])) return invalid(call, "This tool does not accept arguments");
+    if (!context.developerTestModeAuthorized || !this.enabledTestCalls.has(trustedToolScope(context))) return toolError(call, "TEST_MODE_NOT_AUTHORIZED", "Developer Test Mode is not enabled in this session.", false);
+    const appointments = this.testAppointmentsByCall.get(trustedToolScope(context)) ?? [];
     const appointmentService = this.developerTest?.appointments ?? this.appointments;
     let deleted = 0;
     for (const appointmentId of appointments) {
       const result = await appointmentService.cancelAppointment({ tenantId: context.tenantId, locationId: context.locationId, appointmentId });
       if (result.ok) deleted += 1;
     }
-    this.testAppointmentsByCall.delete(context.callId);
+    this.testAppointmentsByCall.delete(trustedToolScope(context));
     return { toolCallId: call.toolCallId, ok: true as const, data: { deleted } };
   }
 
   private async cancelAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
+    const testMode = this.enabledTestCalls.has(trustedToolScope(context));
+    const customerId = testMode ? this.testCustomersByCall.get(trustedToolScope(context)) : context.customerId;
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before cancelling an appointment.", false);
     const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
     const input = call.arguments as Input;
     if (!exactKeys(input, ["appointmentReference"], ["appointmentReference"]) || !text(input.appointmentReference)) {
       return invalid(call, "appointmentReference from list_customer_appointments is required");
     }
-    const appointmentId = this.appointmentReferencesByCall.get(context.callId)?.get(input.appointmentReference);
+    const appointmentId = this.appointmentReferencesByCall.get(trustedToolScope(context))?.get(input.appointmentReference);
     if (!appointmentId) return toolError(call, "APPOINTMENT_REFERENCE_NOT_FOUND", "List upcoming appointments again and use one of the returned references.", false);
     const lookup = await appointments.getAppointment({
       tenantId: context.tenantId,
@@ -431,13 +434,13 @@ export class ToolExecutorImpl implements ToolExecutor {
       const retryable = result.error.code === "CALENDAR_SYNC_FAILED" && result.error.retryable;
       return toolError(call, result.error.code, "The appointment could not be cancelled. Do not claim it was cancelled.", retryable);
     }
-    this.appointmentReferencesByCall.get(context.callId)?.delete(input.appointmentReference);
+    this.appointmentReferencesByCall.get(trustedToolScope(context))?.delete(input.appointmentReference);
     return { toolCallId: call.toolCallId, ok: true as const, data: { cancelled: true, reference: input.appointmentReference } };
   }
 
   private async rescheduleAppointment(context: ToolExecutionContext, call: AgentToolCall) {
-    const testMode = this.enabledTestCalls.has(context.callId);
-    const customerId = testMode ? this.testCustomersByCall.get(context.callId) : context.customerId;
+    const testMode = this.enabledTestCalls.has(trustedToolScope(context));
+    const customerId = testMode ? this.testCustomersByCall.get(trustedToolScope(context)) : context.customerId;
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before rescheduling an appointment.", false);
     const appointments = testMode ? this.developerTest?.appointments ?? this.appointments : this.appointments;
     const input = call.arguments as Input;
@@ -445,7 +448,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       || !text(input.appointmentReference) || !dateTime(input.startAt)) {
       return invalid(call, "appointmentReference and a valid startAt are required");
     }
-    const appointmentId = this.appointmentReferencesByCall.get(context.callId)?.get(input.appointmentReference);
+    const appointmentId = this.appointmentReferencesByCall.get(trustedToolScope(context))?.get(input.appointmentReference);
     if (!appointmentId) return toolError(call, "APPOINTMENT_REFERENCE_NOT_FOUND", "List upcoming appointments again and use one of the returned references.", false);
     const lookup = await appointments.getAppointment({ tenantId: context.tenantId, locationId: context.locationId, appointmentId });
     if (!lookup.ok || lookup.value.customerId !== customerId) {

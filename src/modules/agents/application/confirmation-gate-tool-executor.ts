@@ -1,3 +1,4 @@
+import { trustedToolScope } from "./trusted-tool-scope.js";
 import { randomBytes } from "node:crypto";
 import type {
   AgentToolCall,
@@ -8,7 +9,7 @@ import type {
 } from "./contracts.js";
 
 type PendingConfirmation = {
-  callId: string;
+  scope: string;
   tool: AgentToolName;
   argumentsFingerprint: string;
   issuedAtTurn: number;
@@ -37,7 +38,7 @@ export class ConfirmationGateToolExecutor implements ToolExecutor {
     if (confirmationToken === undefined) {
       const token = this.createToken();
       this.pending.set(token, {
-        callId: context.callId,
+        scope: trustedToolScope(context),
         tool: call.name,
         argumentsFingerprint: stableJson(actionArguments),
         issuedAtTurn: context.turnSequence,
@@ -50,7 +51,7 @@ export class ConfirmationGateToolExecutor implements ToolExecutor {
     }
     const pending = this.pending.get(confirmationToken);
     if (!pending
-      || pending.callId !== context.callId
+      || pending.scope !== trustedToolScope(context)
       || pending.tool !== call.name
       || pending.argumentsFingerprint !== stableJson(actionArguments)) {
       return failure(call, "CONFIRMATION_MISMATCH", "The confirmation does not match this action. Start confirmation again.");

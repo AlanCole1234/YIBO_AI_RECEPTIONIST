@@ -102,6 +102,20 @@ describe("admin authentication API", () => {
     expect(selectedTenant.json()).toEqual({ error: { code: "UNTRUSTED_TENANT_SELECTOR" } });
   });
 
+  it("rejects nested tenant/region selectors without revoking the valid session", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server, ["tenant_admin"]);
+    for (const key of ["tenantId", "tenant_id", "regionId", "region_id"]) {
+      const response = await server.inject({ method: "POST", url: "/api/auth/logout",
+        headers: session.mutationHeaders, payload: { nested: [{ [key]: "foreign" }] },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: { code: "UNTRUSTED_TENANT_SELECTOR" } });
+    }
+    expect((await server.inject({ method: "GET", url: "/api/auth/me", headers: session.readHeaders })).statusCode).toBe(200);
+  });
+
   it("rejects a valid session issued for another tenant", async () => {
     const app = buildApplication({ adminSessionSecret: "a-development-test-secret-that-is-long-enough" });
     server = await createApiServer(app);

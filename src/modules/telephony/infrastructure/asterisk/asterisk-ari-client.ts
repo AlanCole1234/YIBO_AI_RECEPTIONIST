@@ -115,10 +115,10 @@ export class AsteriskAriClient implements ConnectableAsteriskClient, AsteriskMed
   }
 
   private onMessage(raw: string): void {
-    let event: Record<string, unknown>;
-    try { event = JSON.parse(raw) as Record<string, unknown>; } catch { return; }
-    const channel = event.channel as Record<string, unknown> | undefined;
-    if (!channel) return;
+    let event: unknown;
+    try { event = JSON.parse(raw); } catch { return; }
+    if (!isRecord(event) || !isRecord(event.channel)) return;
+    const channel = event.channel;
     const channelId = typeof channel.id === "string" ? channel.id : undefined;
     const occurredAt = typeof event.timestamp === "string" ? event.timestamp : new Date().toISOString();
     if (!channelId) return;
@@ -164,3 +164,5 @@ const isNotFound = (value: unknown) => typeof value === "object" && value !== nu
 const channelTechnology = (name: string): string => name.split("/", 1)[0] || "unknown";
 const isExternalMediaChannelName = (name: string): boolean => channelTechnology(name).toLowerCase() === "unicastrtp";
 const safeArgs = (args: unknown[]): string[] => args.filter((arg): arg is string => typeof arg === "string").map((arg) => arg.slice(0, 80));
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);

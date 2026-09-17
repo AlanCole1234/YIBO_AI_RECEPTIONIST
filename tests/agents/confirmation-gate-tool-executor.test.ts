@@ -80,6 +80,22 @@ describe("ConfirmationGateToolExecutor", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { tenantId: "tenant-other" }, { locationId: "south" },
+    { customerId: "customer-other" }, { developerTestModeAuthorized: true as const },
+  ])("rejects confirmation replay under changed trusted scope %j", async (changed) => {
+    const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({ toolCallId: call.toolCallId, ok: true, data: {} }));
+    const gate = new ConfirmationGateToolExecutor({ execute }, ["create_appointment"], () => "scope-token");
+    await gate.execute(context, create);
+    await expect(gate.execute({ ...context, ...changed, turnSequence: 5 }, {
+      ...create, arguments: { ...create.arguments, confirmationToken: "scope-token" },
+    })).resolves.toMatchObject({ ok: false, error: { code: "CONFIRMATION_MISMATCH" } });
+    expect(execute).not.toHaveBeenCalled();
+    await expect(gate.execute({ ...context, turnSequence: 5 }, {
+      ...create, arguments: { ...create.arguments, confirmationToken: "scope-token" },
+    })).resolves.toMatchObject({ ok: true });
+  });
+
   it("passes tools without a confirmation policy through unchanged", async () => {
     const execute = vi.fn<ToolExecutor["execute"]>(async (_context, call) => ({
       toolCallId: call.toolCallId, ok: true, data: { services: [] },
