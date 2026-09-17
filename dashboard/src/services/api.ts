@@ -1,4 +1,4 @@
-import type { EditableBusinessConfiguration, VersionedBusinessConfiguration } from "../../../src/modules/business/index.js";
+import type { EditableBusinessConfiguration, VersionedBusinessConfiguration, TenantServiceDefinition, ProfessionalDefinition, LocationProfessionalAssignment } from "../../../src/modules/business/index.js";
 
 export interface ServiceDefinition {
   id: string;
@@ -179,6 +179,21 @@ export const api = {
     request<VersionedBusinessConfiguration>("/api/admin/business-configuration", {
       method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ configuration }),
     }),
+  createService: (service: TenantServiceDefinition, version: number) => request<{ version: number; service: TenantServiceDefinition }>("/api/admin/services", {
+    method: "POST", headers: { "if-match": `"${version}"` }, body: JSON.stringify(service),
+  }),
+  updateService: (id: string, service: Omit<TenantServiceDefinition, "id">, version: number) => request<{ version: number; service: TenantServiceDefinition }>(`/api/admin/services/${encodeURIComponent(id)}`, {
+    method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify(service),
+  }),
+  createProfessional: (professional: ProfessionalDefinition, version: number) => request<{ version: number; professional: ProfessionalDefinition }>("/api/admin/professionals", {
+    method: "POST", headers: { "if-match": `"${version}"` }, body: JSON.stringify(professional),
+  }),
+  updateProfessional: (id: string, professional: Omit<ProfessionalDefinition, "id">, version: number) => request<{ version: number; professional: ProfessionalDefinition }>(`/api/admin/professionals/${encodeURIComponent(id)}`, {
+    method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify(professional),
+  }),
+  setProfessionalAssignment: (locationId: string, id: string, assignment: Omit<LocationProfessionalAssignment, "professionalId">, version: number) => request<{ version: number; assignment: LocationProfessionalAssignment }>(`/api/admin/locations/${encodeURIComponent(locationId)}/professionals/${encodeURIComponent(id)}`, {
+    method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify(assignment),
+  }),
   updateBusinessTimezone: (timezone: string) => request<Business>("/api/business/timezone", {
     method: "PUT",
     body: JSON.stringify({ timezone }),
