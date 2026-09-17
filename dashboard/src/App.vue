@@ -7,9 +7,10 @@ import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 import AdminLogin from "./components/AdminLogin.vue";
 import LocationSettings from "./components/LocationSettings.vue";
+import CalendarSettings from "./components/CalendarSettings.vue";
 import CatalogSettings from "./components/CatalogSettings.vue";
 
-type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings" | "catalog";
+type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings" | "catalog" | "calendars";
 const section = ref<Section>("overview");
 const adminSession = createAdminSession();
 const auth = adminSession.state;
@@ -45,7 +46,7 @@ const locale = computed(() => "en-US" as const);
 const copy = computed(() => messages[locale.value]);
 const navItems = computed(() => ([
   ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
-  ["availability", copy.value.availability], ["appointments", copy.value.appointments], ["settings", "Settings"], ["catalog", "Services & professionals"],
+  ["availability", copy.value.availability], ["appointments", copy.value.appointments], ["settings", "Settings"], ["catalog", "Services & professionals"], ["calendars", "Calendar mappings"],
 ] as Array<[Section, string]>).filter(([candidate]) => canAccessSection(candidate)));
 const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
 const t = (key: MessageKey): string => copy.value[key];
@@ -87,7 +88,7 @@ async function logout(): Promise<void> {
 }
 
 function canAccessSection(candidate: Section): boolean {
-  return !["agent", "settings", "catalog"].includes(candidate) || adminSession.can("tenant_admin");
+  return !["agent", "settings", "catalog", "calendars"].includes(candidate) || adminSession.can("tenant_admin");
 }
 
 function chooseSection(value: Section): void {
@@ -296,6 +297,10 @@ function statusLabel(status: string): string {
         <article v-if="createdAppointment" class="result-card success-card featured"><span class="result-label">{{ t('confirmedAppointment') }}</span><h3>{{ createdAppointment.id }}</h3><p>{{ formatDateTime(createdAppointment.startAt) }} — {{ slotTime(createdAppointment.endAt) }}</p><span class="pill success">{{ statusLabel(createdAppointment.status) }}</span><small>{{ t('externalEvent') }}: {{ createdAppointment.externalCalendarEventId }}</small></article>
         <form class="panel lookup" @submit.prevent="findAppointment"><label>{{ t('appointmentId') }}<input v-model="lookupId" placeholder="appointment-1" /></label><button class="primary" :disabled="busy">{{ t('searchAppointment') }}</button></form>
         <article v-if="lookupResult" class="panel details"><div><span>ID</span><strong>{{ lookupResult.id }}</strong></div><div><span>{{ t('customer') }}</span><strong>{{ lookupResult.customerId }}</strong></div><div><span>{{ t('service') }}</span><strong>{{ lookupResult.serviceId }}</strong></div><div><span>{{ t('professional') }}</span><strong>{{ lookupResult.employeeId }}</strong></div><div><span>{{ t('start') }}</span><strong>{{ formatDateTime(lookupResult.startAt) }}</strong></div><div><span>{{ t('status') }}</span><strong>{{ statusLabel(lookupResult.status) }}</strong></div></article>
+      </section>
+
+      <section v-else-if="section === 'calendars'" class="view">
+        <CalendarSettings @saved="locationSettingsSaved" />
       </section>
 
       <section v-else-if="section === 'catalog'" class="view">

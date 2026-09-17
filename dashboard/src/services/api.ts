@@ -1,3 +1,5 @@
+import type { LocationCalendarSnapshot } from "../../../src/modules/business/index.js";
+import type { GoogleCalendarAccessStatus } from "../../../src/modules/integrations/index.js";
 import type { EditableBusinessConfiguration, VersionedBusinessConfiguration, TenantServiceDefinition, ProfessionalDefinition, LocationProfessionalAssignment } from "../../../src/modules/business/index.js";
 
 export interface ServiceDefinition {
@@ -128,6 +130,13 @@ export interface AgentConfigurationPayload {
   secrets: { apiKeyConfigured: boolean };
 }
 
+export type VerifiedCalendarSnapshot = Omit<LocationCalendarSnapshot, "professionals"> & {
+  defaultCalendarStatus?: GoogleCalendarAccessStatus | "unconfigured";
+  professionals: Array<LocationCalendarSnapshot["professionals"][number] & {
+    effectiveCalendarStatus?: GoogleCalendarAccessStatus | "unconfigured";
+  }>;
+};
+
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) {
     super(code);
@@ -174,6 +183,13 @@ export const api = {
   me: () => request<{ principal: AdminPrincipal }>("/api/auth/me"),
   health: () => request<{ status: string }>("/api/health"),
   business: () => request<Business>("/api/business"),
+  locationCalendars: (id: string) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendars`),
+  updateLocationCalendar: (id: string, calendarId: string | null, version: number) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendar`, {
+    method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ calendarId }),
+  }),
+  updateProfessionalCalendar: (locationId: string, id: string, calendarId: string | null, version: number) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(locationId)}/professionals/${encodeURIComponent(id)}/calendar`, {
+    method: "PUT", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ calendarId }),
+  }),
   businessConfiguration: () => request<VersionedBusinessConfiguration>("/api/admin/business-configuration"),
   updateBusinessConfiguration: (configuration: EditableBusinessConfiguration, version: number) =>
     request<VersionedBusinessConfiguration>("/api/admin/business-configuration", {
