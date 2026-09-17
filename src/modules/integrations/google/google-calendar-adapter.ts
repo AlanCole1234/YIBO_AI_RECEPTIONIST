@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import { createHash } from "node:crypto";
 import { failure, success } from "../../../shared/domain/result.js";
 import type { AppointmentCalendarPort, AppointmentCalendarError } from "../../appointments/index.js";
@@ -250,7 +251,7 @@ const maskPhone = (phone: string): string => {
   return digits.length >= 4 ? `***${digits.slice(-4)}` : "***";
 };
 
-const googleLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
+const googleLog = operationalLog;
 
 const traceDateTime = (value: string, timeZone: string) => {
   const instant = new Date(value);

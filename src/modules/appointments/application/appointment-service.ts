@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import { failure, success } from "../../../shared/domain/result.js";
 import type { Clock } from "../../../shared/application/system.js";
 import type { BusinessDirectory } from "../../business/index.js";
@@ -256,4 +257,4 @@ const calendarFailure = (error: AppointmentCalendarError) => ({
   retryable: error.code === "PROVIDER_UNAVAILABLE" ? error.retryable : error.code === "RATE_LIMITED",
 });
 
-const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
+const calendarLog = operationalLog;

@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../../shared/observability/operational-log.js";
 import WebSocket from "ws";
 import type { AsteriskEvent, AsteriskMediaClient, ConnectableAsteriskClient } from "./asterisk-client.js";
 
@@ -26,7 +27,7 @@ export class AsteriskAriClient implements ConnectableAsteriskClient, AsteriskMed
     if (!options.application.trim() || !options.username.trim() || !options.password.trim()) {
       throw new Error("Asterisk ARI application, username, and password are required");
     }
-    this.log = options.logger ?? ((event, details) => console.log(JSON.stringify({ event, ...details })));
+    this.log = options.logger ?? operationalLog;
   }
 
   onEvent(handler: (event: AsteriskEvent) => Promise<void>): void { this.handlers.push(handler); }

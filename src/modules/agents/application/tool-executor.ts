@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { AppointmentService } from "../../appointments/index.js";
 import type { SchedulingService } from "../../scheduling/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
@@ -522,7 +523,7 @@ const availabilityMessage = (code: string): string => {
   return "The calendar could not be reached right now. Do not invent availability or offer a time.";
 };
 
-const calendarLog = (event: string, metadata: Record<string, unknown>): void => console.log(JSON.stringify({ event, ...metadata }));
+const calendarLog = operationalLog;
 const hasFirstAndLastName = (value: string): boolean => value.trim().split(/\s+/).length >= 2;
 const normalizeName = (value: string): string => value.trim().toLocaleLowerCase();
 const formatMoney = (amountMinor: number, currency: string, locale: string): string => {

@@ -1,3 +1,5 @@
+import { ConversationMetrics } from "../../../shared/observability/conversation-metrics.js";
+import { withOperationalContext } from "../../../shared/observability/operational-log.js";
 import type { AgentToolResult } from "../../agents/index.js";
 import type {
   ConversationRuntimeEvent,
@@ -17,7 +19,9 @@ export class ConversationService implements ConversationServiceContract {
   constructor(private readonly dependencies: ConversationServiceDependencies) {}
 
   async start(command: StartConversationCommand): Promise<ConversationSession> {
-    const runtimeSession = await this.dependencies.runtime.openSession({
+    const metrics = new ConversationMetrics(command.agent.trustedContext);
+    const started = performance.now();
+    const runtimeSession = await withOperationalContext(command.agent.trustedContext, () => this.dependencies.runtime.openSession({
       conversationId: command.conversationId,
       agent: {
         instructions: command.agent.instructions,
@@ -31,13 +35,17 @@ export class ConversationService implements ConversationServiceContract {
         parallelToolCalls: command.agent.parallelToolCalls,
         channel: command.agent.channel,
       },
+    })).catch(error => {
+      metrics.observe({ type: "error", code: "CONNECTION_FAILED", message: "", retryable: false });
+      metrics.close(); throw error;
     });
+    metrics.timing("session_startup", performance.now() - started);
 
     return new ActiveConversationSession({
       runtimeSession,
       command,
       ...(this.dependencies.usageRecorder ? { usageRecorder: this.dependencies.usageRecorder } : {}),
-    });
+    }, metrics);
   }
 }
 
@@ -51,10 +59,14 @@ class ActiveConversationSession implements ConversationSession {
   private turnSequence = 0;
   private readonly toolCalls = new Set<string>();
   private readonly deadlines = new Set<() => void>();
+  private readonly metrics: ConversationMetrics;
+  private removeMediaObserver?: () => void;
   private mutationPending = false;
   private mutationUncertain = false;
 
-  constructor(private readonly dependencies: ConversationSessionControllerDependencies) {
+  constructor(private readonly dependencies: ConversationSessionControllerDependencies, metrics: ConversationMetrics) {
+    this.metrics = metrics;
+    try { this.removeMediaObserver = dependencies.command.transport.outboundAudio.onFirstAudioSent?.(turnId => this.metrics.mediaSent(turnId)); } catch { /* Optional observation only. */ }
     this.completed = new Promise((resolve) => { this.resolveCompleted = resolve; });
     void this.forwardInboundAudio();
     void this.consumeRuntimeEvents();
@@ -183,10 +195,10 @@ class ActiveConversationSession implements ConversationSession {
     } else {
       if (mutable) this.mutationPending = true;
       try {
-        const executed = await this.bounded(this.dependencies.command.agent.toolExecutor.execute(
+        const executed = await this.bounded(withOperationalContext(this.dependencies.command.agent.trustedContext, () => this.dependencies.command.agent.toolExecutor.execute(
           { ...this.dependencies.command.agent.trustedContext, turnSequence: this.turnSequence },
           {toolCallId:event.toolCallId,name:event.name,arguments:event.arguments},
-        ), 12_000);
+        )), 12_000);
         result = toEnvelope(executed);
       } catch (error) {
         if (error instanceof CallDeadlineError && mutable) this.mutationUncertain = true;
@@ -199,11 +211,12 @@ class ActiveConversationSession implements ConversationSession {
     if (this.closePromise || this.completionSettled) return;
     try {
       await this.bounded(this.dependencies.runtimeSession.sendToolResult(result), 5_000);
-      this.observe({type:"tool.execution",phase:result.ok?"completed":"failed",toolCallId:event.toolCallId,name:event.name});
+      this.observe({type:"tool.execution",phase:result.ok?"completed":"failed",...(!result.ok ? { outcomeCode: result.error.code } : {}),toolCallId:event.toolCallId,name:event.name});
     } catch { if (!this.closePromise) await this.fail({code:"TOOL_EXECUTION_ERROR",message:"Tool result delivery failed"}); }
   }
 
   private observe(event: ConversationRuntimeEvent): void {
+    try { this.metrics.observe(event); } catch { /* Observation only. */ }
     try { this.dependencies.command.observeEvent?.(event); } catch { /* Observation cannot block or terminate a call. */ }
   }
 
@@ -222,11 +235,15 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async closeResources(): Promise<void> {
+    const cleanupStarted = performance.now();
+    try { this.removeMediaObserver?.(); } catch { /* Observation only. */ }
     for (const cancel of [...this.deadlines]) cancel();
     const results = await Promise.allSettled([
       this.bounded(Promise.resolve().then(() => this.dependencies.runtimeSession.close()), 5_000),
       this.bounded(Promise.resolve().then(() => this.dependencies.command.transport.close()), 5_000),
     ]);
+    this.metrics.timing("cleanup", performance.now() - cleanupStarted);
+    this.metrics.close();
     if (!this.completionSettled) {
       const rejection = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
       if (rejection) {

@@ -1,3 +1,4 @@
+import { operationalLog } from "../../src/shared/observability/operational-log.js";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
@@ -80,6 +81,28 @@ const start = (value: ReturnType<typeof fixture>) => value.service.start({
 });
 
 describe("ConversationService", () => {
+  it("correlates tool diagnostics and emits one summary on cleanup without caller content", async () => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    const value = fixture();
+    value.execute.mockImplementation(async (_context, call) => {
+      await Promise.resolve();
+      operationalLog("calendar.test", { transcript: "private caller words", calendarId: "private@example.com" });
+      return { toolCallId: call.toolCallId, ok: false, error: { code: "CONFIRMATION_REQUIRED", messageForAgent: "private caller words", retryable: false } };
+    });
+    const session = await start(value);
+    try {
+      value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "secret-tool-id", name: "create_appointment", arguments: { name: "Patient Secret" } });
+      await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toHaveLength(1));
+      await session.close(); await session.close();
+      const records = logged.mock.calls.map(([line]) => JSON.parse(String(line)));
+      const tool = records.find(record => record.event === "calendar.test");
+      const summary = records.filter(record => record.event === "conversation.latency_summary" && record.metric === "session_duration");
+      expect(summary).toHaveLength(1); expect(tool.call).toBe(summary[0].call); expect(tool.tenant).toBe(summary[0].tenant);
+      expect(records.some(record => record.event === "conversation.confirmation")).toBe(true);
+      expect(JSON.stringify(records)).not.toMatch(/private caller words|private@example.com|Patient Secret|secret-tool-id/);
+    } finally { await session.close(); logged.mockRestore(); }
+  });
+
   it("opens one runtime session and moves audio in both directions without assuming a codec", async () => {
     const inbound = [audio(1, "audio/custom-a"), audio(2, "audio/custom-b")];
     const value = fixture(stream(...inbound));

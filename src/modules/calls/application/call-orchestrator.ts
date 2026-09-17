@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import type { AgentDefinitionFactory } from "../../agents/index.js";
 import type {
@@ -69,6 +70,7 @@ export class CallOrchestratorService implements CallOrchestrator {
       updatedAt: event.occurredAt,
     };
     await this.calls.create(record);
+    operationalLog("call.started", {}, record);
 
     const answered = await this.telephony.answer(event.callId);
     if (!answered.ok) return this.fail(record.callId, event.occurredAt);
@@ -107,6 +109,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     this.sessions.set(record.callId, conversation);
     await this.transition(record.callId, "IN_CONVERSATION", event.occurredAt);
     void conversation.completed.then(async completion => {
+      operationalLog("call.session_ended", { phase: completion.status }, record);
       if (this.sessions.get(record.callId) !== conversation) return;
       this.sessions.delete(record.callId);
       try { await conversation.close(); }
@@ -117,12 +120,13 @@ export class CallOrchestratorService implements CallOrchestrator {
           await this.telephony.hangup(record.callId);
         }
       }
-    }).catch(() => console.error(JSON.stringify({event:"call.cleanup.failed",callId:record.callId})));
+    }).catch(() => operationalLog("call.cleanup.failed", {}, record));
   }
 
   private async shutdown(callId: string, occurredAt: string): Promise<void> {
     const record = await this.calls.findByCallId(callId);
     if (!record) return;
+    operationalLog("call.hangup", {}, record);
 
     const session = this.sessions.get(callId);
     if (session) {

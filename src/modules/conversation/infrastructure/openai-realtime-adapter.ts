@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import OpenAI from "openai";
 import { OpenAIRealtimeWS } from "openai/realtime/ws";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
@@ -526,8 +527,11 @@ const sdkConnectionFactory: RealtimeConnectionFactory = {
 };
 
 const consoleLogger: RealtimeErrorLogger = {
-  info: (message, details) => console.log(message, details ?? {}),
-  error: (message, details) => console.error(message, details ?? {}),
+  info: (message, details) => {
+    if (message === "OpenAI Realtime event received" || message === "OpenAI Realtime input_audio_buffer.append sent") return;
+    operationalLog(`realtime.${message.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, details);
+  },
+  error: (_message, details) => operationalLog("realtime.error", details),
 };
 
 function connectionErrorDetails(error: unknown): { code: string; error: string } {

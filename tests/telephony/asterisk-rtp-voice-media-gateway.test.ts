@@ -1,3 +1,5 @@
+import { createSocket } from "node:dgram";
+import { createRtpPacket } from "../../src/modules/telephony/infrastructure/asterisk/rtp.js";
 import { describe, expect, it, vi } from "vitest";
 import { AsteriskRtpVoiceMediaGateway } from "../../src/modules/telephony/index.js";
 import type { AsteriskEvent, AsteriskMediaClient } from "../../src/modules/telephony/index.js";
@@ -14,6 +16,31 @@ class FakeAriMediaClient implements AsteriskMediaClient {
 }
 
 describe("AsteriskRtpVoiceMediaGateway", () => {
+  it("observes actual first RTP once per turn and isolates listener failures", async () => {
+    const client = new FakeAriMediaClient();
+    const logger = vi.fn();
+    const gateway = new AsteriskRtpVoiceMediaGateway(client, { host: "127.0.0.1", portStart: 40110, portEnd: 40110, logger });
+    const peer = createSocket("udp4");
+    await new Promise<void>(resolve => peer.bind(0, "127.0.0.1", resolve));
+    try {
+      await gateway.prepare("observed", "caller");
+      const result = await gateway.open("observed"); if (!result.ok) throw new Error("open failed");
+      const listener = vi.fn(() => { throw new Error("observer failed"); });
+      const remove = result.value.outboundAudio.onFirstAudioSent!(listener);
+      const packet = createRtpPacket({ payload: new Uint8Array(160).fill(255), sequenceNumber: 1, timestamp: 1, ssrc: 1, marker: false });
+      peer.send(packet, 40110, "127.0.0.1");
+      await vi.waitFor(() => expect(logger.mock.calls.some(([event]) => event === "telephony.media.rtp_received")).toBe(true));
+      const received = vi.fn(); peer.on("message", received);
+      await result.value.outboundAudio.write({ codec: "pcm_s16le", sampleRate: 24000, channels: 1, data: new Uint8Array(1920) }, "turn-one");
+      await vi.waitFor(() => expect(received.mock.calls.length).toBeGreaterThanOrEqual(2));
+      expect(listener).toHaveBeenCalledTimes(1); expect(listener).toHaveBeenCalledWith("turn-one");
+      remove();
+      await result.value.outboundAudio.write({ codec: "pcm_s16le", sampleRate: 24000, channels: 1, data: new Uint8Array(960) }, "turn-two");
+      await vi.waitFor(() => expect(received.mock.calls.length).toBeGreaterThanOrEqual(3));
+      expect(listener).toHaveBeenCalledTimes(1);
+    } finally { await gateway.cleanup("observed"); peer.close(); }
+  });
+
   it("creates one mixing bridge and an External Media channel, then tears both down", async () => {
     const client = new FakeAriMediaClient();
     const gateway = new AsteriskRtpVoiceMediaGateway(client, { host: "127.0.0.1", portStart: 40_000, portEnd: 40_020, logger: () => {} });

@@ -47,7 +47,7 @@ export type ConversationRuntimeEvent =
   | { type: "assistant.response_done"; status?: string }
   | { type: "assistant.audio_completed"; assistantTurnId?: string }
   | { type: "silence.timeout" }
-  | { type: "tool.execution"; phase: "started" | "completed" | "failed"; toolCallId: string; name: AgentToolName }
+  | { type: "tool.execution"; phase: "started" | "completed" | "failed"; outcomeCode?: string; toolCallId: string; name: AgentToolName }
   | {
       type: "usage";
       inputTokens?: number;

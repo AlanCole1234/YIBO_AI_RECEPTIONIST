@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../../shared/observability/operational-log.js";
 import dgram, { type RemoteInfo, type Socket } from "node:dgram";
 import { performance } from "node:perf_hooks";
 import { failure, success } from "../../../../shared/domain/result.js";
@@ -44,7 +45,7 @@ export class AsteriskRtpVoiceMediaGateway implements VoiceMediaGateway {
       throw new Error("YIBO_ASTERISK_MEDIA_PORT_START and YIBO_ASTERISK_MEDIA_PORT_END must be a valid UDP range");
     }
     this.nextPort = options.portStart;
-    this.log = options.logger ?? ((event, details) => console.log(JSON.stringify({ event, ...details })));
+    this.log = options.logger ?? operationalLog;
   }
 
   async prepare(callId: CallId, callerChannelId: string, dialedNumber?: string): Promise<void> {
@@ -112,6 +113,8 @@ class AsteriskRtpSession {
   private readonly outboundConverter = new RealtimeToUlawStream();
   private outboundConverterTurnId?: string;
   private firstRealtimeAudioReceivedAt?: number;
+  private firstAudioListener?: (assistantTurnId: string) => void;
+  private measuredAudioTurnId?: string;
   private playbackIdleListener?: () => void;
 
   constructor(
@@ -152,6 +155,7 @@ class AsteriskRtpSession {
     return {
       inboundAudio: this.inbound,
       outboundAudio: {
+        onFirstAudioSent: listener => { this.firstAudioListener = listener; return () => { this.firstAudioListener = undefined; }; },
         write: async (frame, assistantTurnId) => this.sendRealtimeAudio(frame, assistantTurnId),
         onPlaybackIdle: (listener) => {
           this.playbackIdleListener = listener;
@@ -280,6 +284,10 @@ class AsteriskRtpSession {
     this.lastRtpSentAt = now;
     if (timing.queueBecameEmpty) this.lastPlaybackEndedAt = now;
     if (timing.talkspurtStarted) {
+      if (this.measuredAudioTurnId !== assistantTurnId) {
+        this.measuredAudioTurnId = assistantTurnId;
+        try { this.firstAudioListener?.(assistantTurnId); } catch { /* Observation only. */ }
+      }
       this.log("telephony.media.rtp_talkspurt_started", {
         callId: this.callId,
         assistantTurnNumber: this.assistantTurnNumber,
