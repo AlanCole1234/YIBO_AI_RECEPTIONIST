@@ -19,15 +19,19 @@ export class ConversationService implements ConversationServiceContract {
   constructor(private readonly dependencies: ConversationServiceDependencies) {}
 
   async start(command: StartConversationCommand): Promise<ConversationSession> {
+    const canEnd = supportsCallEnd(command);
     const metrics = new ConversationMetrics(command.agent.trustedContext);
     const started = performance.now();
     const runtimeSession = await withOperationalContext(command.agent.trustedContext, () => this.dependencies.runtime.openSession({
       conversationId: command.conversationId,
       agent: {
-        instructions: command.agent.instructions,
+        instructions: command.agent.instructions + (canEnd ? "\nWhen the caller is finished, speak one concise final farewell, then invoke end_call with {} in the same response. Do not call it before completing requested actions and stating their actual results. Do not ask another question after saying goodbye. If the caller interrupts, continue helping; end_call never confirms a booking." : ""),
         locale: command.agent.locale,
         ...(command.agent.voice ? { voice: command.agent.voice } : {}),
-        tools: command.agent.tools,
+        tools: [...command.agent.tools, ...(canEnd ? [{ name: "end_call" as const,
+          description: "End this phone conversation after your final farewell audio in this response has played. Use only when the caller is finished and all requested actions have resolved. No arguments; never claims booking success.",
+          inputSchema: { type: "object", additionalProperties: false, properties: {} },
+        }] : [])],
         conversation: structuredClone(command.agent.conversation),
         audio: structuredClone(command.agent.audio),
         behavior: structuredClone(command.agent.behavior),
@@ -61,23 +65,40 @@ class ActiveConversationSession implements ConversationSession {
   private readonly deadlines = new Set<() => void>();
   private readonly metrics: ConversationMetrics;
   private removeMediaObserver?: () => void;
+  private removePlaybackObserver?: () => void;
+  private activeTools = 0;
+  private responseSequence = 0;
+  private responseComplete = false;
+  private lastAudioTurn?: string;
+  private audioComplete = false;
+  private playbackIdle = false;
+  private ending?: { flushed: boolean; acknowledged: boolean; response: number; turn: string; deadline: ReturnType<typeof setTimeout> };
+  private endTail?: ReturnType<typeof setTimeout>;
   private mutationPending = false;
   private mutationUncertain = false;
 
   constructor(private readonly dependencies: ConversationSessionControllerDependencies, metrics: ConversationMetrics) {
     this.metrics = metrics;
     try { this.removeMediaObserver = dependencies.command.transport.outboundAudio.onFirstAudioSent?.(turnId => this.metrics.mediaSent(turnId)); } catch { /* Optional observation only. */ }
+    if (supportsCallEnd(dependencies.command)) this.removePlaybackObserver = dependencies.command.transport.outboundAudio.onPlaybackIdle!(() => {
+      this.playbackIdle = true;
+      this.checkCallEnd();
+    });
     this.completed = new Promise((resolve) => { this.resolveCompleted = resolve; });
     void this.forwardInboundAudio();
     void this.consumeRuntimeEvents();
   }
 
   interrupt(position?: import("../ports/conversation-runtime-port.js").AssistantPlaybackPosition): Promise<void> {
+    this.cancelCallEnd();
+    this.lastAudioTurn = undefined;
     if (position) this.interruptedTurnId = position.assistantTurnId;
     return this.dependencies.runtimeSession.interrupt(position);
   }
 
   async sendText(text: string): Promise<void> {
+    this.cancelCallEnd();
+    this.lastAudioTurn = undefined;
     await this.dependencies.runtimeSession.sendText(text);
     this.turnSequence += 1;
   }
@@ -125,6 +146,10 @@ class ActiveConversationSession implements ConversationSession {
       case "audio.delta":
         if (event.assistantTurnId === this.interruptedTurnId) return;
         this.interruptedTurnId = undefined;
+        if (this.ending && this.ending.turn !== event.assistantTurnId) this.cancelCallEnd();
+        this.lastAudioTurn = event.assistantTurnId;
+        this.audioComplete = false;
+        this.playbackIdle = false;
         try {
           await this.bounded(this.dependencies.command.transport.outboundAudio.write(event.frame, event.assistantTurnId), 5_000);
         } catch (error) {
@@ -132,9 +157,12 @@ class ActiveConversationSession implements ConversationSession {
         }
         return;
       case "tool.call":
-        void this.executeTool(event);
+        if (event.name === "end_call") void this.requestCallEnd(event);
+        else void this.executeTool({ ...event, name: event.name });
         return;
       case "user.speech_started":
+        this.cancelCallEnd();
+        this.lastAudioTurn = undefined;
         this.turnSequence += 1;
         await this.handleBargeIn();
         return;
@@ -149,9 +177,22 @@ class ActiveConversationSession implements ConversationSession {
         this.settle({ status: "closed", ...(event.reason ? { reason: event.reason } : {}) });
         await this.close();
         return;
-      case "assistant.response_done":
       case "assistant.response_created":
+        this.cancelCallEnd();
+        this.responseSequence += 1;
+        this.responseComplete = false;
+        this.lastAudioTurn = undefined;
+        this.audioComplete = false;
+        return;
+      case "assistant.response_done":
+        if (event.status !== "completed") { this.cancelCallEnd(); this.lastAudioTurn = undefined; this.responseComplete = false; return; }
+        this.responseComplete = true;
+        this.checkCallEnd();
+        return;
       case "assistant.audio_completed":
+        if (event.assistantTurnId === this.lastAudioTurn) this.audioComplete = true;
+        this.checkCallEnd();
+        return;
       case "assistant.transcript":
       case "silence.timeout":
         return;
@@ -184,8 +225,11 @@ class ActiveConversationSession implements ConversationSession {
     await this.dependencies.runtimeSession.interrupt(position);
   }
 
-  private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }>): Promise<void> {
+  private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }> & { name: import("../../agents/index.js").AgentToolName }): Promise<void> {
     if (this.toolCalls.has(event.toolCallId) || this.closePromise) return;
+    this.cancelCallEnd();
+    this.lastAudioTurn = undefined;
+    this.activeTools += 1;
     this.toolCalls.add(event.toolCallId);
     this.observe({type:"tool.execution",phase:"started",toolCallId:event.toolCallId,name:event.name});
     const mutable = ["create_appointment", "cancel_appointment", "reschedule_appointment", "transfer_to_human", "update_customer"].includes(event.name);
@@ -213,6 +257,60 @@ class ActiveConversationSession implements ConversationSession {
       await this.bounded(this.dependencies.runtimeSession.sendToolResult(result), 5_000);
       this.observe({type:"tool.execution",phase:result.ok?"completed":"failed",...(!result.ok ? { outcomeCode: result.error.code } : {}),toolCallId:event.toolCallId,name:event.name});
     } catch { if (!this.closePromise) await this.fail({code:"TOOL_EXECUTION_ERROR",message:"Tool result delivery failed"}); }
+    finally { this.activeTools -= 1; }
+  }
+
+  private async requestCallEnd(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }>): Promise<void> {
+    if (this.toolCalls.has(event.toolCallId) || this.closePromise || this.completionSettled) return;
+    this.toolCalls.add(event.toolCallId);
+    const valid = typeof event.arguments === "object" && event.arguments !== null
+      && !Array.isArray(event.arguments) && Object.keys(event.arguments).length === 0;
+    const accepted = supportsCallEnd(this.dependencies.command) && valid && !this.activeTools
+      && !this.mutationUncertain && !!this.lastAudioTurn;
+    if (accepted && !this.ending) {
+      this.ending = { flushed: false, acknowledged: false, response: this.responseSequence, turn: this.lastAudioTurn!,
+        deadline: setTimeout(() => { void this.fail({ code: "AUDIO_TRANSPORT_ERROR", message: "Final response playback did not complete" }); }, 45_000) };
+    }
+    const end = this.ending;
+    try {
+      await this.bounded(this.dependencies.runtimeSession.sendToolResult(accepted
+        ? { toolCallId: event.toolCallId, ok: true, data: { ending: true } }
+        : { toolCallId: event.toolCallId, ok: false, error: { code: "CALL_END_NOT_READY", message: "Continue assisting. Resolve pending actions and speak a final farewell before requesting call end. Never claim uncertain actions succeeded.", retryable: false } },
+        { requestResponse: !accepted && !end }), 5_000);
+      if (accepted && end && this.ending === end) end.acknowledged = true;
+      this.checkCallEnd();
+    } catch { if (!this.closePromise) await this.fail({ code: "TOOL_EXECUTION_ERROR", message: "Call-end result delivery failed" }); }
+  }
+
+  private checkCallEnd(): void {
+    const end = this.ending;
+    if (!end || !end.acknowledged || end.response !== this.responseSequence || end.turn !== this.lastAudioTurn
+      || !this.responseComplete || !this.audioComplete || this.activeTools
+      || this.mutationUncertain || this.closePromise || this.completionSettled) return;
+    if (!end.flushed) {
+      end.flushed = true;
+      this.dependencies.command.transport.outboundAudio.finishAudio?.(end.turn);
+    }
+    if (!this.isPlaybackIdle() || this.endTail) return;
+    // The last PCMU packet represents 20 ms of sound after local UDP send completes.
+    this.endTail = setTimeout(() => {
+      this.endTail = undefined;
+      if (this.ending !== end || !this.isPlaybackIdle() || !this.audioComplete || !this.responseComplete) return;
+      this.settle({ status: "closed", reason: "conversation_completed" });
+      void this.close();
+    }, 20);
+  }
+
+  private isPlaybackIdle(): boolean {
+    const state = this.dependencies.command.transport.outboundAudio.getBargeInDiagnostics?.();
+    return this.playbackIdle && (!state || (!state.outboundRtpPlaying && state.outboundQueueDepth === 0));
+  }
+
+  private cancelCallEnd(): void {
+    if (this.ending) clearTimeout(this.ending.deadline);
+    if (this.endTail) clearTimeout(this.endTail);
+    this.ending = undefined;
+    this.endTail = undefined;
   }
 
   private observe(event: ConversationRuntimeEvent): void {
@@ -236,6 +334,8 @@ class ActiveConversationSession implements ConversationSession {
 
   private async closeResources(): Promise<void> {
     const cleanupStarted = performance.now();
+    this.cancelCallEnd();
+    this.removePlaybackObserver?.();
     try { this.removeMediaObserver?.(); } catch { /* Observation only. */ }
     for (const cancel of [...this.deadlines]) cancel();
     const results = await Promise.allSettled([
@@ -281,3 +381,7 @@ const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : "Unexpected conversation failure";
 
 class CallDeadlineError extends Error {}
+
+const supportsCallEnd = (command: StartConversationCommand): boolean => command.agent.channel === "phone"
+  && command.agent.toolChoice !== "none" && !command.agent.parallelToolCalls
+  && typeof command.transport.outboundAudio.onPlaybackIdle === "function";

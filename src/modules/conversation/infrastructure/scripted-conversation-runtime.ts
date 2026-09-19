@@ -45,7 +45,7 @@ export class ScriptedConversationRuntimeSession implements ConversationRuntimeSe
     this.receivedAudio.push(frame);
   }
 
-  async sendToolResult(result: ToolResultEnvelope): Promise<void> {
+  async sendToolResult(result: ToolResultEnvelope, _options?: { requestResponse: boolean }): Promise<void> {
     this.receivedToolResults.push(result);
   }
 

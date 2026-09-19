@@ -13,6 +13,7 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 | [ADR-005](ADR-005-calendar-routing.md) | Aceptado | Enrutamiento de calendarios por asignación |
 | [ADR-006](ADR-006-appointment-price-snapshots.md) | Aceptado | Money y snapshot de precios en citas |
 | [ADR-007](ADR-007-ai-action-confirmation.md) | Aceptado | Confirmación de mutaciones solicitadas por IA |
+| [ADR-008](ADR-008-intentional-call-completion.md) | Aceptado | Fin intencional de llamada después de respuesta y playback |
 
 ## Lectura histórica
 

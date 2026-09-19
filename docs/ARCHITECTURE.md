@@ -278,3 +278,8 @@ carrier, credenciales live, inteligibilidad ni despedida autónoma. El guard de
 reservas verificado es de proceso único, no un lock distribuido. La restauración
 de SQLite no revierte cambios externos de Google. Ver [recuperación](MIGRATION_RECOVERY.md)
 y [operaciones](OPERATIONS_RUNBOOK.md).
+
+Fin intencional: [ADR-008](adr/ADR-008-intentional-call-completion.md) agrega
+`end_call` como capacidad de sesión phone cuando el transporte soporta drain.
+Conversation espera finalización de respuesta/audio y playback; no modifica
+catálogos ni configuración persistida de tools. Ver [CALL_COMPLETION.md](CALL_COMPLETION.md).

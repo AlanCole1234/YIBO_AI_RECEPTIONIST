@@ -716,3 +716,24 @@ async function next(
   if (result.done) throw new Error("Expected a conversation event");
   return result.value;
 }
+
+
+it("acknowledges call end without another response and cancels unsolicited silence output", async () => {
+  const value = fixture();
+  const session = await value.adapter.openSession({ conversationId: "end-test", agent });
+  value.connection.emit({ type: "response.created", response: { id: "final" } });
+  const before = value.connection.sent.length;
+  await session.sendToolResult({ toolCallId: "end", ok: true, data: { ending: true } }, { requestResponse: false });
+  value.connection.emit({ type: "response.done", response: { id: "final", status: "completed" } });
+  expect(value.connection.sent.slice(before).map(event => (event as { type: string }).type)).toEqual(["conversation.item.create"]);
+  value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+  value.connection.emit({ type: "response.created", response: { id: "unwanted" } });
+  expect(value.connection.sent.at(-1)).toEqual({ type: "response.cancel" });
+  value.connection.emit({ type: "response.done", response: { id: "unwanted", status: "cancelled" } });
+  value.connection.emit({ type: "input_audio_buffer.speech_started" });
+  value.connection.emit({ type: "input_audio_buffer.speech_stopped" });
+  const after = value.connection.sent.length;
+  value.connection.emit({ type: "response.created", response: { id: "caller-resumes" } });
+  expect(value.connection.sent.length).toBe(after);
+  await session.close();
+});

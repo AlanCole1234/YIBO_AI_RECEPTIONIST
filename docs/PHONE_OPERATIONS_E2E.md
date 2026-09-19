@@ -2,7 +2,8 @@
 
 > REL-002 audit correction (2026-09-19): these 13 scenarios passed, but the earlier
 > integration inventory also assigned final playback/end-call and changed calendar
-> mappings to this task. Those remain open as CLOSE-001/CLOSE-002; E2E-002 is reopened.
+> mappings to this task. CLOSE-001 is now implemented (see CALL_COMPLETION.md);
+> CLOSE-002 remains open, so E2E-002 is still in progress.
 > See [release audit](RELEASE_CLOSURE_AUDIT.md).
 
 Verified 2026-09-19 on the integration branch. Production implementation is unchanged.

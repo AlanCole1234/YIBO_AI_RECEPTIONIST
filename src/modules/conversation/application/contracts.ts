@@ -11,6 +11,8 @@ import type {
 import type { ConversationUsageRecorder } from "../ports/conversation-usage.js";
 
 export interface AudioSink {
+  /** Finish a completed final turn, padding a transport packet if necessary. */
+  finishAudio?(assistantTurnId: string): void;
   onFirstAudioSent?(listener: (assistantTurnId: string) => void): () => void;
   write(frame: AudioFrame, assistantTurnId: string): Promise<void>;
   /** Callback after queued audio actually drains; never inferred from model response.done. */

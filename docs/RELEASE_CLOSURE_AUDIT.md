@@ -1,7 +1,9 @@
 # REL-002 — release-closure audit
 
 Date: 2026-09-19. Audited code: `12fb73205952aef18450c82a8ec79c531e05b7e9`.
-**Outcome: roadmap closure incomplete.** No production implementation, deployment,
+**Outcome: roadmap closure incomplete.** Update after CLOSE-001 (2026-09-19):
+intentional final playback/end-call is implemented; CLOSE-002 remains open.
+See [call completion](CALL_COMPLETION.md). The findings below record the audit baseline. No production implementation, deployment,
 calendar data, or original database was changed by this audit.
 
 ## Closure rule
@@ -31,8 +33,8 @@ external person has been notified or assigned through a service.
 
 ### CLOSE-001 — final-response playback and intentional call end
 
-**Owner:** conversation/telephony implementation task. **Status:** OPEN; blocks closure
-of the behavior deferred in the integration inventory to E2E-002.
+**Owner:** conversation/telephony implementation task. **Status:** DONE under ADR-008.
+The following describes the pre-fix finding; current behavior and tests are in CALL_COMPLETION.md.
 
 Evidence: `AgentToolName` and the published tools have no modern end-call action.
 Realtime `response.output_audio.done` emits `assistant.audio_completed` and
@@ -95,7 +97,7 @@ The E2E-002 row is reopened as IN_PROGRESS for its explicitly deferred closure i
 its 13 passing operational scenarios remain valid and committed. REL-002 is BLOCKED,
 not complete. No completed tests or preserved work were discarded.
 
-Next implementation task: CLOSE-001, followed by CLOSE-002. Re-run the closure audit
+Next implementation task: CLOSE-002. CLOSE-001 is complete. Re-run the closure audit
 and full checkpoint validation once both are resolved. Live deployment acceptance
 must remain separately reported even if the software roadmap is later closed.
 

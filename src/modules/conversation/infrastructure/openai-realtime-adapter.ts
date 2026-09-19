@@ -2,7 +2,7 @@ import { operationalLog } from "../../../shared/observability/operational-log.js
 import OpenAI from "openai";
 import { OpenAIRealtimeWS } from "openai/realtime/ws";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
-import type { AgentToolName } from "../../agents/index.js";
+import type { ConversationToolName } from "../ports/conversation-runtime-port.js";
 import type {
   ConversationRuntimeEvent,
   AssistantPlaybackPosition,
@@ -111,6 +111,8 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private readonly queue = new AsyncEventQueue<ConversationRuntimeEvent>();
   private readonly allowedTools: Set<string>;
   private closed = false;
+  private endingCall = false;
+  private suppressedEndResponseId?: string;
   private readonly audioContentIndexes = new Map<string, number>();
   private readonly truncatedAssistantTurns = new Set<string>();
   private state: RealtimeTurnState = "listening";
@@ -144,6 +146,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   }
 
   async sendText(text: string): Promise<void> {
+    this.endingCall = false;
     const normalized = text.trim();
     if (!normalized) throw new Error("Conversation text must not be empty");
     this.assertOpen();
@@ -187,7 +190,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     }
   }
 
-  async sendToolResult(result: ToolResultEnvelope): Promise<void> {
+  async sendToolResult(result: ToolResultEnvelope, options?: { requestResponse: boolean }): Promise<void> {
     this.assertOpen();
     if (this.deliveredToolResults.has(result.toolCallId)) return;
     this.connection.send({
@@ -201,6 +204,8 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       },
     });
     this.deliveredToolResults.add(result.toolCallId);
+    if (options?.requestResponse === false) { this.endingCall = true; return; }
+    this.endingCall = false;
     this.toolResponsePending = true;
     this.flushToolResponse();
   }
@@ -215,6 +220,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   }
 
   async interrupt(position?: AssistantPlaybackPosition): Promise<void> {
+    this.endingCall = false;
     this.assertOpen();
     // With interrupt_response=true, OpenAI cancels the response on VAD speech start.
     // We only synchronize the amount of audio the caller actually heard.
@@ -248,6 +254,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   private handleEvent(value: unknown): void {
     if (this.closed || !isRecord(value) || typeof value.type !== "string") return;
+    if (this.suppressedEndResponseId && value.response_id === this.suppressedEndResponseId) return;
     this.logger.info?.("OpenAI Realtime event received", eventLogDetails(value));
     switch (value.type) {
       case "session.created":
@@ -318,6 +325,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.handleToolCall(value);
         return;
       case "input_audio_buffer.speech_started":
+        this.endingCall = false;
         this.logger.info?.("OpenAI Realtime speech started", eventLogDetails(value));
         this.callerIsSpeaking = true;
         this.silencePromptCount = 0;
@@ -333,6 +341,11 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         if (!this.automaticTurnResponse) this.flushToolResponse();
         return;
       case "response.created":
+        if (this.endingCall) {
+          this.suppressedEndResponseId = isRecord(value.response) && typeof value.response.id === "string" ? value.response.id : undefined;
+          this.connection.send({ type: "response.cancel" });
+          return;
+        }
         this.logger.info?.("OpenAI Realtime response created", eventLogDetails(value));
         this.activeResponseId = responseId(value);
         // A server-created turn consumes queued results; a locally requested
@@ -350,6 +363,10 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.queue.push({ type: "assistant.response_created", ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
         return;
       case "response.done":
+        if (isRecord(value.response) && value.response.id === this.suppressedEndResponseId && this.suppressedEndResponseId) {
+          this.suppressedEndResponseId = undefined;
+          return;
+        }
         this.logger.info?.("OpenAI Realtime response done", eventLogDetails(value));
         const status = responseStatus(value);
         if (status === "cancelled") this.logger.info?.("OpenAI Realtime response cancelled", eventLogDetails(value));
@@ -388,7 +405,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as AgentToolName,
+      name: event.name as ConversationToolName,
       arguments: argumentsValue,
     });
   }

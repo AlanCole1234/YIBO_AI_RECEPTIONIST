@@ -26,8 +26,9 @@ Each scenario verifies:
    professional, customer, historical price, UTC instant and original event ID.
    The Google payload carries the matching local time, timezone and 30-minute duration.
 9. Duplicate delivery of the same tool call creates no extra event or tool result.
-10. Assistant audio reaches the RTP peer, and caller hangup closes the runtime and
-    cleans up the bridge/external-media channel once.
+10. CLOSE-001 update: assistant audio reaches the RTP peer, including a padded final
+    partial packet; an explicit end_call waits for response/audio completion and drain,
+    closes the runtime and cleans up the bridge/external-media channel once.
 
 No production implementation changed. Tests use synthetic patient details only.
 

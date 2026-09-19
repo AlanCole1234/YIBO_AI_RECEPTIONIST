@@ -146,12 +146,19 @@ describe("integrated phone booking through Google Calendar", () => {
       expect(Date.parse(events[0]!.end.dateTime) - Date.parse(events[0]!.start.dateTime)).toBe(30 * 60_000);
       expect(accessToken.mock.calls.every(([tenant]) => tenant === profile.tenantId)).toBe(true);
       const output = vi.fn(); peer.on("message", output);
+      session.emit({ type: "assistant.response_created", responseId: "final" });
       session.emit({ type: "audio.delta", assistantTurnId: "confirmation-audio", frame: {
-        codec: "pcm_s16le", sampleRate: 24000, channels: 1, data: new Uint8Array(960),
+        codec: "pcm_s16le", sampleRate: 24000, channels: 1, data: new Uint8Array(1020),
       } });
       await vi.waitFor(() => expect(output).toHaveBeenCalledTimes(1));
       expect(parseRtpPacket(output.mock.calls[0]![0])?.payloadType).toBe(0);
-      await ari.emit({ type: "CHANNEL_DESTROYED", channelId: "booking-caller", occurredAt: "2026-09-17T12:05:00Z" });
+      session.emit({ type: "assistant.audio_completed", assistantTurnId: "confirmation-audio" });
+      session.emit({ type: "tool.call", toolCallId: "end-call", name: "end_call", arguments: {} });
+      session.emit({ type: "assistant.response_done", status: "completed" });
+      await vi.waitFor(() => expect(ari.hangup).toHaveBeenCalledWith("booking-caller"));
+      expect(output).toHaveBeenCalledTimes(2); // Partial final packet was padded and delivered.
+      expect((await resultFor("end-call"))).toMatchObject({ ok: true, data: { ending: true } });
+      expect((await app.callHistory.listByTenant(profile.tenantId, 10))[0]!.state).toBe("COMPLETED");
       expect(session.closeCount).toBe(1);
       expect(ari.destroyBridge).toHaveBeenCalledTimes(1);
       expect(ari.hangup).toHaveBeenCalledWith("booking-external");

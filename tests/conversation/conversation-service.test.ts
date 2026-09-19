@@ -1,5 +1,5 @@
 import { operationalLog } from "../../src/shared/observability/operational-log.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
   ConversationService,
@@ -392,3 +392,141 @@ async function eventually(assertion: () => void): Promise<void> {
   }
   throw lastError;
 }
+
+
+describe("intentional phone completion", () => {
+  let value: ReturnType<typeof fixture>;
+  let session: Awaited<ReturnType<typeof start>>;
+  let idle: () => void;
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    value = fixture();
+    value.transport.outboundAudio.onPlaybackIdle = callback => { idle = callback; return vi.fn(); };
+    session = await start(value);
+  });
+  afterEach(async () => { await session.close(); vi.useRealTimers(); });
+  const flush = () => vi.advanceTimersByTimeAsync(0);
+  async function farewell() {
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "final" });
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "farewell", frame: audio(1) });
+    await flush();
+  }
+  async function end(id = "end", args: unknown = {}) {
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: id, name: "end_call", arguments: args });
+    await flush();
+  }
+  async function done() {
+    value.runtime.latestSession.emit({ type: "assistant.audio_completed", assistantTurnId: "farewell" });
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "completed" });
+    await flush();
+  }
+
+  it.each([true, false])("waits for final generation and audio drain, idle first=%s", async idleFirst => {
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    await farewell(); await end();
+    if (idleFirst) { idle(); await flush(); } else await done();
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    if (idleFirst) await done(); else idle();
+    await vi.advanceTimersByTimeAsync(19);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await session.completed).toEqual({ status: "closed", reason: "conversation_completed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(delivery).toHaveBeenCalledWith({ toolCallId: "end", ok: true, data: { ending: true } }, { requestResponse: false });
+    expect(value.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["voice_lab", "disabled", "parallel", "no-playback-signal"])("does not expose call end for %s", async mode => {
+    await session.close();
+    if (mode === "voice_lab") value.agent.channel = "voice_lab";
+    if (mode === "disabled") value.agent.toolChoice = "none";
+    if (mode === "parallel") value.agent.parallelToolCalls = true;
+    if (mode === "no-playback-signal") delete value.transport.outboundAudio.onPlaybackIdle;
+    session = await start(value);
+    expect(value.runtime.openedInputs.at(-1)!.agent.tools.some(tool => tool.name === "end_call")).toBe(false);
+    await farewell(); await end();
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+  });
+
+  it("allows a farewell after a known failed booking without claiming booking success", async () => {
+    value.execute.mockResolvedValue({ toolCallId: "failed-booking", ok: false, error: { code: "CALENDAR_SYNC_FAILED", messageForAgent: "Not booked", retryable: false } });
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "failed-booking", name: "create_appointment", arguments: {} });
+    await flush(); await farewell(); await end(); await done(); idle();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(value.runtime.latestSession.receivedToolResults).toEqual([
+      expect.objectContaining({ ok: false }), { toolCallId: "end", ok: true, data: { ending: true } },
+    ]);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not end an ordinary completed response", async () => {
+    await farewell(); await done(); idle(); await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { callId: "foreign" }, null, []])("rejects an end request without current farewell or with hostile args %j", async args => {
+    if (JSON.stringify(args) !== "{}") await farewell();
+    await end("bad", args);
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("ignores duplicate delivery and acknowledges repeated end IDs without extra speech", async () => {
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    await farewell(); await end(); await end(); await end("repeat");
+    expect(delivery).toHaveBeenCalledTimes(2);
+    expect(delivery.mock.calls.every(([, options]) => options?.requestResponse === false)).toBe(true);
+    await done(); idle(); await vi.advanceTimersByTimeAsync(20);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["speech", "text", "interrupt"])("cancels end when caller intervenes through %s", async kind => {
+    await farewell(); await end(); await done(); idle();
+    if (kind === "speech") value.runtime.latestSession.emit({ type: "user.speech_started" });
+    if (kind === "text") await session.sendText("One more question");
+    if (kind === "interrupt") await session.interrupt();
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("does not accept an end request while a booking is pending or uncertain", async () => {
+    value.execute.mockImplementation(() => new Promise(() => {}));
+    await farewell();
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "booking", name: "create_appointment", arguments: {} });
+    await flush(); await farewell(); await end("pending");
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+    await vi.advanceTimersByTimeAsync(12_001); await farewell(); await end("uncertain");
+    expect(value.runtime.latestSession.receivedToolResults.at(-1)).toMatchObject({ ok: false });
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("waits for the end acknowledgment before closing", async () => {
+    let release!: () => void;
+    vi.spyOn(value.runtime.latestSession, "sendToolResult").mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    await farewell(); await end(); await done(); idle(); await vi.advanceTimersByTimeAsync(30);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    release(); await vi.advanceTimersByTimeAsync(20);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a pending end when the response is cancelled", async () => {
+    await farewell(); await end();
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "cancelled" });
+    idle(); await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("bounds missing completion signals and cleans up once", async () => {
+    await farewell(); await end();
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await session.completed).toMatchObject({ status: "failed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("caller hangup cancels the end deadline", async () => {
+    await farewell(); await end(); await session.close();
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(value.runtime.latestSession.closeCount).toBe(1);
+  });
+});

@@ -155,6 +155,7 @@ class AsteriskRtpSession {
     return {
       inboundAudio: this.inbound,
       outboundAudio: {
+        finishAudio: turnId => this.pacer.finishTurn(turnId),
         onFirstAudioSent: listener => { this.firstAudioListener = listener; return () => { this.firstAudioListener = undefined; }; },
         write: async (frame, assistantTurnId) => this.sendRealtimeAudio(frame, assistantTurnId),
         onPlaybackIdle: (listener) => {
@@ -445,6 +446,12 @@ export class PcmuRtpPacer {
     } else if (this.prebufferTimer && this.queuedBytes >= OUTBOUND_PREBUFFER_BYTES) {
       this.startDraining();
     }
+  }
+
+  finishTurn(assistantTurnId: string): void {
+    if (this.stopped || !this.queue.length || this.queue.at(-1)?.assistantTurnId !== assistantTurnId) return;
+    const remainder = this.queuedBytes % RTP_FRAME_BYTES;
+    if (remainder) this.enqueue(new Uint8Array(RTP_FRAME_BYTES - remainder).fill(255), assistantTurnId);
   }
 
   clear(reason: "barge_in" | "call_closed"): void {

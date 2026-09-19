@@ -4,6 +4,7 @@ import type {
   RealtimeTruncation,
   SessionUpdateEvent,
 } from "openai/resources/realtime/realtime";
+import type { AgentToolDefinition } from "../../agents/index.js";
 import { isDeveloperTestTool, RealtimeModelCapabilityRegistry } from "../../agents/index.js";
 import type { OpenConversationInput } from "../ports/conversation-runtime-port.js";
 import { REALTIME_AUDIO_TRANSPORT } from "../domain/realtime-transport-profile.js";
@@ -21,7 +22,13 @@ export function buildRealtimeSessionUpdate(
   if (agent.channel !== "voice_lab" && agent.tools.some(({ name }) => isDeveloperTestTool(name))) {
     throw new Error("Developer Test Mode tools require an authorized Voice Lab session");
   }
-  capabilities.validateRuntimeOptions(agent);
+  if (agent.tools.some(tool => tool.name === "end_call")
+    && (agent.channel !== "phone" || agent.parallelToolCalls || agent.toolChoice === "none")) {
+    throw new Error("Call completion requires a serial phone session with tools enabled");
+  }
+  capabilities.validateRuntimeOptions({ ...agent,
+    tools: agent.tools.filter((tool): tool is AgentToolDefinition => tool.name !== "end_call"),
+  });
 
   return {
     type: "session.update",
