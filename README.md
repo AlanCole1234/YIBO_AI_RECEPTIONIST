@@ -69,5 +69,5 @@ pnpm test
 pnpm build
 ```
 
-Automated E2E coverage uses simulated providers and local RTP. Live phone/provider
-acceptance and the REL-001 migration rehearsal remain outstanding; see project status.
+Automated E2E coverage uses simulated providers and local RTP. The local-copy REL-001 migration rehearsal passed; live phone/provider acceptance
+remains outstanding. See project status and the migration rehearsal report.

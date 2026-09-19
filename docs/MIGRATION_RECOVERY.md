@@ -1,7 +1,8 @@
 # Regional migration and recovery runbook
 
-Prepared 2026-09-19. **REL-001 (rehearsal on copies of both regional databases) has
-not run.** These instructions do not authorize changing a running deployment.
+Prepared 2026-09-19. REL-001 has run on private copies of both local regional
+databases; see [results and limits](REGIONAL_MIGRATION_REHEARSAL.md). These instructions
+do not authorize changing a running deployment.
 
 ## Ownership and automatic writes
 

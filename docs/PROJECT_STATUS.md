@@ -11,8 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **ninguna — DOC-003 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
-- Próxima tarea: **REL-001**, pendiente y no iniciada.
+- Tarea activa: **ninguna — REL-001 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
+- Próxima tarea: **REL-002**, pendiente y no iniciada.
+- REL-001 verificada el 19 de septiembre de 2026: ensayo en copias privadas de ambas bases locales; 443 pruebas aprobadas y 1 live omitida, ambos typechecks y build. Fuentes sin citas/clientes: preservación de esos registros sólo cubierta con fixtures. Ver `REGIONAL_MIGRATION_REHEARSAL.md`; aceptación live pendiente.
 - DOC-003 verificada el 19 de septiembre de 2026: arquitectura/diagrama actualizados, catálogo de configuración y runbooks de administración, diagnóstico, migración/recuperación; referencias históricas marcadas. 42 enlaces locales verificados, 12 pruebas focales, ambos typechecks y build aprobados. Sólo documentación; ensayo regional REL-001 y aceptación live pendientes.
 - E2E-002 verificada el 19 de septiembre de 2026: 13 escenarios nuevos y 57 pruebas focales aprobadas; ambos typechecks y build aprobados. Listado/cambios/cancelación, transferencia, fallos Google/PBX/media y competencia por slot; sin cambios de producción. Ver `PHONE_OPERATIONS_E2E.md`; validación live pendiente.
 - E2E-001 verificada el 17 de septiembre de 2026: 2 escenarios nuevos, 68 pruebas focales aprobadas; ambos typechecks y build aprobados. DID → sucursal/precio → disponibilidad → contacto → confirmación → cita → adaptador Google, con RTP local y proveedores simulados; llamada real pendiente. Ver `VOICE_BOOKING_E2E.md`.
@@ -169,7 +170,7 @@ con `pnpm test` y `pnpm build`.
 | E2E-001 | DONE | Dos sucursales/precios/zonas, fallback/override Google, gate/éxito diferido, RTP y limpieza; 68 pruebas y build; validación live pendiente |
 | E2E-002 | DONE | 13 escenarios operativos/fallos, Google/transferencia/PBX/RTP/concurrencia; 57 pruebas, typechecks y build; validación live pendiente |
 | DOC-003 | DONE | Diagramas y runbooks finales |
-| REL-001 | TODO | Ensayo de migración regional y validación completa |
+| REL-001 | DONE | Copias MX/US schema 4→9, integridad/preservación/idempotencia/restore; 443 pruebas, typechecks y build; sin migrar originales |
 | REL-002 | TODO | Cierre del roadmap sin contradicciones ni deuda declarada |
 
 ## Registro de decisiones
