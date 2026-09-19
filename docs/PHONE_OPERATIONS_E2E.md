@@ -1,5 +1,10 @@
 # E2E-002 — operational and failure scenarios
 
+> REL-002 audit correction (2026-09-19): these 13 scenarios passed, but the earlier
+> integration inventory also assigned final playback/end-call and changed calendar
+> mappings to this task. Those remain open as CLOSE-001/CLOSE-002; E2E-002 is reopened.
+> See [release audit](RELEASE_CLOSURE_AUDIT.md).
+
 Verified 2026-09-19 on the integration branch. Production implementation is unchanged.
 
 ## Coverage

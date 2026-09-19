@@ -1,5 +1,10 @@
 # Three-source integration inventory
 
+> Historical integration evidence. Deferred work and current ownership were audited
+> on 2026-09-19 in [RELEASE_CLOSURE_AUDIT.md](RELEASE_CLOSURE_AUDIT.md).
+> UI-004/OBS-001 are complete; final playback/end-call and existing-booking routing
+> remain open as CLOSE-001/CLOSE-002. Older “next task” wording below is dated.
+
 ## Preservation and verified baseline (2026-09-15)
 
 Canonical modern source: `origin/codex/recovered-work` / `1ff998b`. Published Alan source: `origin/feature/telephony-integration` / `9183e76`, unique commits `f4331a4`, `9fafd6d`, `9183e76`, merge-base `e0f4343`. Local source: remote backup `backup/alan-local-before-integration` / `54e4b9b`, preserving 63 reviewed source/example/documentation/test files over `447c667`.

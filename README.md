@@ -6,6 +6,7 @@ Fastify y un dashboard Vue.
 
 ## Documentación
 
+- [Auditoría de cierre y pendientes](docs/RELEASE_CLOSURE_AUDIT.md)
 - [Estado y roadmap](docs/PROJECT_STATUS.md)
 - [Arquitectura actual](docs/ARCHITECTURE.md)
 - [Guía para seguir construyendo](docs/BUILDING_GUIDE.md)

@@ -257,5 +257,6 @@ el motivo por el que una franja está ocupada.
 - No se persisten audio ni transcripciones.
 - El consumo guarda tokens, milisegundos de audio y conteos de tools.
 - La API key sólo procede del entorno y el panel muestra únicamente su estado.
-- Los logs operativos deben conservar tenant/call para correlación sin datos de
-  pacientes; el endurecimiento pendiente está trazado en `OBS-001`.
+- OBS-001 implementa correlación hash tenant/sucursal/llamada y allowlist sin PII;
+  ver [OBSERVABILITY.md](OBSERVABILITY.md). Loggers diagnósticos inyectados tienen
+  su propia responsabilidad de privacidad.

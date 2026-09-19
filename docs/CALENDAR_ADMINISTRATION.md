@@ -33,8 +33,9 @@ backend logic, persistence, telephony or Realtime behavior was changed.
 Changing a mapping does not migrate Google events. The existing resolver uses
 current routing; changing a route with existing bookings can affect later
 rescheduling/cancellation of those bookings. The page warns admins to review
-existing bookings first. Event migration and handling routing changes for existing
-appointments remain operational work under E2E-002; UI-007 does not claim to fix it.
+existing bookings first. Handling routing changes for existing appointments remains open as CLOSE-002;
+see [release audit](RELEASE_CLOSURE_AUDIT.md). E2E-002 tested unchanged mappings,
+so neither task establishes safe migration of an existing booking to a new route.
 
 Use a test location without existing bookings for the manual browser smoke test:
 set a default, set a provider override, verify both, clear the override and confirm

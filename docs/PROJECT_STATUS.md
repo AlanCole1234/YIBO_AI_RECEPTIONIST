@@ -11,8 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **ninguna — REL-001 terminada; Checkpoint 7 cerrado; ejecución detenida por solicitud del usuario**.
-- Próxima tarea: **REL-002**, pendiente y no iniciada.
+- Tarea activa: **REL-002 BLOCKED — auditoría detectó dos pendientes de E2E-002; no se declara cierre**.
+- Próxima tarea: **CLOSE-001** (finalización intencional tras playback), luego **CLOSE-002** (rutas de citas existentes); responsables y criterios en `RELEASE_CLOSURE_AUDIT.md`.
+- REL-002 auditada el 19 de septiembre de 2026: documentación reconciliada; E2E-002 reabierta para dos compromisos previos no cubiertos. Aceptación live y preparación del despliegue tienen responsables explícitos. Ver `RELEASE_CLOSURE_AUDIT.md`.
 - REL-001 verificada el 19 de septiembre de 2026: ensayo en copias privadas de ambas bases locales; 443 pruebas aprobadas y 1 live omitida, ambos typechecks y build. Fuentes sin citas/clientes: preservación de esos registros sólo cubierta con fixtures. Ver `REGIONAL_MIGRATION_REHEARSAL.md`; aceptación live pendiente.
 - DOC-003 verificada el 19 de septiembre de 2026: arquitectura/diagrama actualizados, catálogo de configuración y runbooks de administración, diagnóstico, migración/recuperación; referencias históricas marcadas. 42 enlaces locales verificados, 12 pruebas focales, ambos typechecks y build aprobados. Sólo documentación; ensayo regional REL-001 y aceptación live pendientes.
 - E2E-002 verificada el 19 de septiembre de 2026: 13 escenarios nuevos y 57 pruebas focales aprobadas; ambos typechecks y build aprobados. Listado/cambios/cancelación, transferencia, fallos Google/PBX/media y competencia por slot; sin cambios de producción. Ver `PHONE_OPERATIONS_E2E.md`; validación live pendiente.
@@ -81,7 +82,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Google Calendar con OAuth, FreeBusy y creación/cancelación de eventos.
 - API Fastify, dashboard Vue, persistencia SQLite regional y gateway Asterisk.
 
-## Brechas conocidas al iniciar
+## Brechas conocidas al iniciar (históricas; no pendientes actuales)
 
 - El dashboard no reconoce `update_customer`, aunque el backend lo publica.
 - Arquitectura y guía de construcción describen una versión anterior del repo.
@@ -168,10 +169,19 @@ con `pnpm test` y `pnpm build`.
 | OBS-001 | DONE | Correlación por tenant/sucursal/llamada, allowlist sin PII, VAD/tools/confirmaciones/calendario/transferencia y latencia/RTP/p50/p95; 394 pruebas, typechecks y build |
 | SEC-001 | DONE | 34 regresiones nuevas; scope completo de estado/tokens, argumentos hostiles y ARI inválido; 428 pruebas, typechecks y build |
 | E2E-001 | DONE | Dos sucursales/precios/zonas, fallback/override Google, gate/éxito diferido, RTP y limpieza; 68 pruebas y build; validación live pendiente |
-| E2E-002 | DONE | 13 escenarios operativos/fallos, Google/transferencia/PBX/RTP/concurrencia; 57 pruebas, typechecks y build; validación live pendiente |
+| E2E-002 | IN_PROGRESS | 13 escenarios aprobados preservados; faltan CLOSE-001 playback/end-call y CLOSE-002 cambios de ruta con citas existentes |
 | DOC-003 | DONE | Diagramas y runbooks finales |
 | REL-001 | DONE | Copias MX/US schema 4→9, integridad/preservación/idempotencia/restore; 443 pruebas, typechecks y build; sin migrar originales |
-| REL-002 | TODO | Cierre del roadmap sin contradicciones ni deuda declarada |
+| REL-002 | BLOCKED | Auditoría completa; cierre pendiente de CLOSE-001/002. Ver RELEASE_CLOSURE_AUDIT.md |
+
+## Seguimiento de cierre
+
+| ID | Estado | Responsable funcional y resultado requerido |
+|---|---|---|
+| CLOSE-001 | TODO | Conversation/telefonía: fin intencional después de playback, sin cierre prematuro |
+| CLOSE-002 | TODO | Appointments/calendario: rutas seguras para citas previas al cambio de mapping |
+| ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
+| DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
 
 ## Registro de decisiones
 
