@@ -1,6 +1,6 @@
 # Arquitectura actual de YIBO
 
-> Verificado el 10 de septiembre de 2026. El avance posterior se consulta en
+> Verificado contra el código el 19 de septiembre de 2026. El avance posterior se consulta en
 > [PROJECT_STATUS.md](PROJECT_STATUS.md); los cambios de arquitectura se
 > registran en [adr/](adr/README.md).
 
@@ -86,12 +86,15 @@ cambios del dashboard aplican a la conversación siguiente.
 Por llamada, `ConfirmationGateToolExecutor` precede al ejecutor de límites: liga
 las mutaciones configuradas a un token, argumentos y secuencia de turno antes de
 permitir que una solicitud alcance el dominio.
-El adaptador todavía agrega reglas conversacionales y defaults propios; el
-roadmap los moverá a una fábrica/compilador versionado.
+La fábrica versionada `createDefaultAgentConfiguration` y `AgentPromptCompiler`
+son la autoridad de defaults y reglas; el adaptador traduce el contrato del proveedor.
+Los tokens y el estado efímero de tools se ligan al scope confiable completo: tenant,
+sucursal, llamada, cliente y autorización de modo de prueba.
 
 ## Disponibilidad y citas
 
-Scheduling genera slots cada 15 minutos y cruza:
+Scheduling genera slots según `slotIncrementMinutes` de la sucursal (15 en
+los fixtures iniciales) y cruza:
 
 1. zona horaria y horario de la sucursal resuelta;
 2. profesional activo y asignado al servicio en esa sucursal;
@@ -117,9 +120,9 @@ concurrente de la sucursal. Las reservas se serializan por `{tenant, location}`
 para que profesionales distintos no excedan el último cupo durante una carrera.
 
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
-el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación crea el
-reemplazo antes de cancelar el evento anterior y compensa si falla el segundo
-paso. La cancelación y reprogramación verifican propiedad del cliente en la
+el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación Google modifica el evento original con PATCH condicional
+por etag, verificando ownership; conserva su ID y no crea un reemplazo.
+La cancelación también verifica ownership y usa el etag. La cancelación y reprogramación verifican propiedad del cliente en la
 frontera de tools. Al crear, la cita congela el nombre y `Money` de la oferta;
 reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 
@@ -163,7 +166,7 @@ la comprobación de ownership antes de invocar el dominio.
   persiste `TRANSFERRING` y luego `TRANSFERRED`; un fallo del gateway compensa el
   estado a `IN_CONVERSATION` para que el agente pueda seguir atendiendo.
 - La configuración del agente es un documento versionado. Los repositorios
-  convierten la forma histórica sin versión a la forma canónica v1 y SQLite la
+  convierten la forma histórica sin versión a la forma canónica v4 y SQLite la
   reescribe al primer acceso; versiones futuras desconocidas fallan cerradas.
 - `AgentPromptCompiler` convierte la guía editable en una sección delimitada y
   añade identidad, locale, zona de la sucursal, tools habilitadas, confirmaciones
@@ -233,10 +236,45 @@ listas locales de modelos o voces. Los campos incompatibles se ocultan o muestra
 un error específico y bloquean el guardado. El mismo editor cubre comportamiento,
 silencios, políticas por canal, confirmaciones, límites, reintentos y escalamiento;
 helpers puros mantienen sincronizadas las dependencias entre tools y políticas.
-Las vistas se filtran por rol. No
-permite todavía administrar servicios, empleados, horarios, destinos ni
-calendarios por profesional.
+Las vistas se filtran por rol. UI-005–UI-009 administran sucursales, catálogos,
+precios, profesionales, asignaciones/horarios, calendarios y citas por cliente y
+sucursal. Los editores conservan borradores ante conflictos; negocio usa versión
+numérica y agente revisión opaca con `If-Match`. Ver [runbook administrativo](OPERATIONS_RUNBOOK.md).
 
 Las brechas, orden y evidencia actual se mantienen exclusivamente en
 `PROJECT_STATUS.md` para evitar que este documento vuelva a convertirse en un
 roadmap obsoleto.
+
+
+## Telefonía integrada y límites de validación
+
+```mermaid
+sequenceDiagram
+  participant PBX as Asterisk ARI
+  participant Calls as CallOrchestrator
+  participant Media as RTP gateway
+  participant Conv as Conversation
+  participant Tools as Agent tools/domain
+  participant Google as Google Calendar
+  PBX->>Calls: ingreso con número marcado
+  Calls->>Calls: resolver tenant/sucursal activos
+  Calls->>Media: bridge y External Media
+  Calls->>Conv: una sesión con contexto confiable
+  Media->>Conv: PCMU 8 kHz a PCM16 mono 24 kHz
+  Conv->>Tools: solicitud del modelo
+  Tools->>Tools: política, confirmación, ownership y revalidación
+  Tools->>Google: operación en calendario resuelto
+  Google-->>Tools: resultado
+  Tools-->>Conv: DTO público de éxito o fallo
+  Conv->>Media: audio PCM para salida PCMU
+  PBX->>Calls: hangup
+  Calls->>Conv: cerrar sesión
+  Calls->>Media: liberar RTP, External Media y bridge
+```
+
+Sólo el proceso API habilita ARI; Voice Lab conserva su transporte local.
+Las pruebas E2E usan ARI/Realtime/HTTP simulados y RTP UDP real local; no prueban
+carrier, credenciales live, inteligibilidad ni despedida autónoma. El guard de
+reservas verificado es de proceso único, no un lock distribuido. La restauración
+de SQLite no revierte cambios externos de Google. Ver [recuperación](MIGRATION_RECOVERY.md)
+y [operaciones](OPERATIONS_RUNBOOK.md).

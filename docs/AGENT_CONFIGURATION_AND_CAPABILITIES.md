@@ -1,7 +1,9 @@
 # Configuración y capacidades actuales del agente
 
-> Estado presente verificado el 10 de septiembre de 2026. Las capacidades
-> planeadas se encuentran en `PROJECT_STATUS.md`.
+> Referencia de capacidades del registro local; sus valores de proveedor fueron
+> documentados el 10 de septiembre de 2026, no revalidados externamente en DOC-003.
+> La configuración operativa actual se describe en [CONFIGURATION_CATALOG.md](CONFIGURATION_CATALOG.md);
+> las capacidades planeadas se encuentran en `PROJECT_STATUS.md`.
 
 ## Construcción de una sesión
 

@@ -10,7 +10,10 @@ Fastify y un dashboard Vue.
 - [Arquitectura actual](docs/ARCHITECTURE.md)
 - [Guía para seguir construyendo](docs/BUILDING_GUIDE.md)
 - [Decisiones arquitectónicas](docs/adr/README.md)
-- [Contrato de arquitectura completo](YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md)
+- [Operación, administración y diagnóstico](docs/OPERATIONS_RUNBOOK.md)
+- [Catálogo de configuración](docs/CONFIGURATION_CATALOG.md)
+- [Migración y recuperación](docs/MIGRATION_RECOVERY.md)
+- [Contrato histórico de arquitectura](YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md)
 
 ## Run locally
 
@@ -44,13 +47,13 @@ $env:YIBO_TENANT_ID="tenant-yibo-demo"
 pnpm dev
 ```
 
-In production these values must come from authenticated, server-validated session claims. A browser or AI model must never be allowed to choose an arbitrary tenant or region.
+The current entry points select a bootstrap tenant using server-owned `YIBO_TENANT_ID`; its catalog profile determines the regional database. `YIBO_REGION` does not switch the current API/Voice Lab process independently. Administrative sessions must match the application tenant; phone calls resolve tenant/location from the dialed number. Browser/model arguments cannot choose this trusted scope.
 
 ## Local database model
 
 Isolation is enforced at two levels: MX and US use different database files, and every operational primary/foreign key is scoped by `region_id` plus `tenant_id`. Customers, appointments, and calendar events therefore cannot be joined across a region or tenant accidentally.
 
-Schema migration: `src/infrastructure/database/migrations/001_initial.sql`
+Schema migrations 1–9: `src/infrastructure/database/migrations/`. See the recovery runbook before starting a newer build against existing data.
 
 Regional configuration example: `.env.example`
 
@@ -65,3 +68,6 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+Automated E2E coverage uses simulated providers and local RTP. Live phone/provider
+acceptance and the REL-001 migration rehearsal remain outstanding; see project status.

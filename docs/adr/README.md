@@ -14,6 +14,12 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 | [ADR-006](ADR-006-appointment-price-snapshots.md) | Aceptado | Money y snapshot de precios en citas |
 | [ADR-007](ADR-007-ai-action-confirmation.md) | Aceptado | Confirmación de mutaciones solicitadas por IA |
 
+## Lectura histórica
+
+Los apartados de implementación por fase en ADR-001 son evidencia de esas fases,
+no pendientes actuales: la integración posterior agregó ARI y RTP. Consulte
+[arquitectura actual](../ARCHITECTURE.md) y [estado](../PROJECT_STATUS.md).
+
 ## Cuándo crear un ADR
 
 Se requiere antes de cambiar límites entre módulos, autoridad de datos,

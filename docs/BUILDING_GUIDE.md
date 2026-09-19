@@ -2,10 +2,11 @@
 
 ## Fuentes de verdad
 
-1. `YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md`: invariantes generales.
-2. `docs/adr/`: decisiones aceptadas y sus reemplazos.
-3. `docs/ARCHITECTURE.md`: estructura y comportamiento presentes.
-4. `docs/PROJECT_STATUS.md`: checkpoint, tareas y evidencia.
+1. `docs/adr/`: decisiones aceptadas y sus reemplazos.
+2. `docs/ARCHITECTURE.md`: estructura y comportamiento presentes.
+3. `docs/PROJECT_STATUS.md`: checkpoint, tareas y evidencia.
+4. `YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md`: baseline histórico; sus ejemplos
+   reemplazados no prevalecen sobre los contratos modernos.
 
 Si se contradicen, no se implementa silenciosamente: se corrige el documento
 desactualizado o se registra un ADR que cambie la decisión.
@@ -25,8 +26,11 @@ Un checkpoint exige además `pnpm test` y `pnpm build`.
 ## Acceso al dashboard local
 
 Antes de abrir el dashboard debe existir un usuario administrativo. Créalo con
-`pnpm admin:create`; el comando solicita tenant, email, contraseña y rol sin
-guardar la contraseña en argumentos de proceso. El frontend inicia en login,
+`pnpm admin:create --tenant tenant-yibo-demo --region MX --email admin@example.test`
+(opcional `--role operator`; default `tenant_admin`). Tenant, región y email son
+argumentos obligatorios; sólo la contraseña se solicita por terminal interactiva,
+sin guardarla en argumentos de proceso. La CLI admite los tenants del catálogo
+de bootstrap; no crea tenants arbitrarios. El frontend inicia en login,
 restaura la sesión con `/api/auth/me` y usa únicamente la cookie HttpOnly. Un
 `tenant_admin` ve configuración y operación; un `operator` sólo ve inicio,
 clientes, disponibilidad y citas. Para probar expiración o revocación, cualquier
@@ -88,3 +92,6 @@ pnpm test -- tests/ruta/al-archivo.test.ts
 - Typecheck aprobado y sin secretos/PII en logs o fixtures.
 - Documentación actualizada en el mismo commit.
 - `PROJECT_STATUS.md` indica resultado y siguiente tarea.
+
+Runbooks actuales: [operaciones](OPERATIONS_RUNBOOK.md),
+[configuración](CONFIGURATION_CATALOG.md), [migración y recuperación](MIGRATION_RECOVERY.md).

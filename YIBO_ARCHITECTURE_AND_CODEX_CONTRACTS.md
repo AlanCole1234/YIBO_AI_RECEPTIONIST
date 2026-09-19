@@ -1,5 +1,12 @@
 # YIBO Architecture, Module Contracts, and Codex Work Protocol
 
+> Historical architecture baseline, not a current API or deployment reference.
+> Preserve its general invariants, but use [current architecture](docs/ARCHITECTURE.md),
+> [accepted ADRs](docs/adr/README.md) and [project status](docs/PROJECT_STATUS.md) for implementation.
+> In particular, the VoiceBridge examples and old call flow below were superseded
+> by ADR-001; current sessions are owned by Conversation. Calendar rescheduling
+> updates the existing event ID, and configuration/admin behavior has evolved.
+
 **Project:** YIBO — *Your Intelligent Booking Operator*  
 **Document type:** Architecture contract / implementation guide  
 **Status:** Initial architecture baseline  
