@@ -55,3 +55,6 @@ export type {
   ProfessionalDefinition,
   TenantServiceDefinition,
 } from "./domain/multi-location-business.js";
+
+export { changesBookedCalendarRoute } from "./domain/protected-calendar-routes.js";
+export type { CalendarRouteReference } from "./domain/protected-calendar-routes.js";

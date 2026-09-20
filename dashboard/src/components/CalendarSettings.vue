@@ -20,7 +20,7 @@ onMounted(() => editor.load());
   <section class="calendar-settings" aria-labelledby="calendar-title">
     <h2 id="calendar-title">Calendar mappings</h2>
     <p>A professional’s override takes priority. Without an override, their appointments use the location’s default calendar.</p>
-    <p>Changing a mapping does not move existing Google events. Review existing bookings before changing their calendar route; later changes to those bookings may require staff help.</p>
+    <p>Mappings cannot change the effective calendar for existing non-cancelled bookings, including pending or failed bookings that need staff review. No Google events are moved. Unused routes remain editable.</p>
     <p v-if="state.error" role="alert">{{ state.error }}</p>
     <p v-if="state.saved" role="status">Mapping saved. Use Verify saved mappings to refresh access status.</p>
     <button v-if="!state.snapshot || state.conflict" type="button" :disabled="state.busy" @click="editor.load()">{{ state.conflict ? 'Discard draft and reload mappings' : 'Load mappings' }}</button>

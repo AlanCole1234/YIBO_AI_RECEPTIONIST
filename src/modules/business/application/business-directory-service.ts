@@ -107,6 +107,7 @@ export class BusinessDirectoryService implements BusinessDirectory {
     const validated = this.upgradeForAdministration(candidate);
     if (!validated.ok) return validated;
     const saved = await this.repository.saveIfVersion(validated.value, expectedVersion);
+    if (!saved.saved && saved.reason) return failure<BusinessLookupError>({ code: saved.reason });
     return saved.saved
       ? success(toVersionedConfiguration(validated.value, saved.version))
       : failure<BusinessLookupError>({

@@ -4,7 +4,8 @@ Tenant administrators open **Calendar mappings** and select a location. The page
 shows its default calendar and each assigned professional's override, effective
 calendar, and source (professional override, location fallback, or unconfigured).
 It reuses the existing calendar-assignment APIs and resolver; no routing model,
-backend logic, persistence, telephony or Realtime behavior was changed.
+backend logic, persistence, telephony or Realtime behavior was changed by UI-007.
+CLOSE-002 subsequently added the persistence guard described below.
 
 ## Editing and verification
 
@@ -30,12 +31,14 @@ backend logic, persistence, telephony or Realtime behavior was changed.
 
 ## Existing appointments and manual checks
 
-Changing a mapping does not migrate Google events. The existing resolver uses
-current routing; changing a route with existing bookings can affect later
-rescheduling/cancellation of those bookings. The page warns admins to review
-existing bookings first. Handling routing changes for existing appointments remains open as CLOSE-002;
-see [release audit](RELEASE_CLOSURE_AUDIT.md). E2E-002 tested unchanged mappings,
-so neither task establishes safe migration of an existing booking to a new route.
+CLOSE-002 rejects saves that change the effective calendar for any non-cancelled
+booking. This includes pending/failed and historical bookings; no original route
+is guessed. Professional overrides take precedence, so a fallback change remains
+allowed when all referenced professionals retain their effective calendar. Same-ID
+source changes and unused routes remain editable. Blocked saves return
+`CALENDAR_ROUTE_IN_USE`, retain the draft, and do not increment the version or write
+a success audit. Full-document saves enforce the same guard. Google events are never
+moved or recreated. See [route protection](BOOKED_CALENDAR_ROUTES.md).
 
 Use a test location without existing bookings for the manual browser smoke test:
 set a default, set a provider override, verify both, clear the override and confirm

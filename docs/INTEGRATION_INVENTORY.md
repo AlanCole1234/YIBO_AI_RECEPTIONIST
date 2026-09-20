@@ -3,7 +3,7 @@
 > Historical integration evidence. Deferred work and current ownership were audited
 > on 2026-09-19 in [RELEASE_CLOSURE_AUDIT.md](RELEASE_CLOSURE_AUDIT.md).
 > UI-004/OBS-001 are complete; final playback/end-call and existing-booking routing
-> are tracked as CLOSE-001 (now implemented) and CLOSE-002 (open). Older “next task” wording below is dated.
+> are tracked as CLOSE-001 and CLOSE-002 (both now implemented). Older “next task” wording below is dated.
 
 ## Preservation and verified baseline (2026-09-15)
 

@@ -1,3 +1,4 @@
+import { InMemoryAppointmentRepository } from "../../src/modules/appointments/infrastructure/in-memory-appointment-repository.js";
 import { expect, vi } from "vitest";
 import { buildApplication } from "../../src/bootstrap/build-application.js";
 import { DEVELOPMENT_US_BUSINESS } from "../../src/app/development-fixtures.js";
@@ -24,11 +25,13 @@ class Ari implements AsteriskMediaClient {
 type Event = { id: string; etag: string; start: { dateTime: string }; end: { dateTime: string }; extendedProperties: unknown };
 export const slot = "2026-09-21T15:30:00.000Z";
 export const booking = { service: "Consultation", employeeId: "employee-us-1", startAt: slot };
-export function phoneOperations() {
+export function phoneOperations(portStart = 50300) {
   const profile = structuredClone(DEVELOPMENT_US_BUSINESS);
   profile.locations[0]!.defaultCalendarId = "operations@example.test";
   profile.locations[0]!.transferDestination = { type: "EXTENSION", value: "204" };
-  const repository = new InMemoryBusinessRepository([profile]);
+  const appointments = new InMemoryAppointmentRepository();
+  const repository = new InMemoryBusinessRepository([profile], tenantId => appointments.calendarRouteReferences(tenantId));
+  const eventCalendars = new Map<string, string>();
   const events = new Map<string, Event>();
   const controls = { outage: false, writeOutage: false, holdCreate: undefined as Promise<void> | undefined };
   let revision = 0;
@@ -37,16 +40,18 @@ export function phoneOperations() {
     const url = new URL(String(input));
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? "GET";
-    if (url.pathname.endsWith("/freeBusy")) return Response.json({ calendars: { "operations@example.test": {
-      busy: [...events.values()].map(event => ({ start: event.start.dateTime, end: event.end.dateTime })),
+    if (url.pathname.endsWith("/freeBusy")) return Response.json({ calendars: { [body.items[0].id]: {
+      busy: [...events.values()].filter(event => eventCalendars.get(event.id) === body.items[0].id).map(event => ({ start: event.start.dateTime, end: event.end.dateTime })),
     } } });
     if (controls.writeOutage && ["POST", "PATCH", "DELETE"].includes(method)) return new Response(null, { status: 503 });
     const id = method === "POST" ? body.id : url.pathname.split("/").at(-1)!;
+    const calendarId = decodeURIComponent(url.pathname.split("/")[4]!);
     if (method === "POST") {
       await controls.holdCreate;
       if (events.has(id)) return new Response(null, { status: 409 });
+      eventCalendars.set(id, calendarId);
       events.set(id, { ...body, etag: String(++revision) });
-    } else if (!events.has(id)) return new Response(null, { status: 404 });
+    } else if (!events.has(id) || eventCalendars.get(id) !== calendarId) return new Response(null, { status: 404 });
     else if (method === "PATCH" || method === "DELETE") {
       if (new Headers(init?.headers).get("if-match") !== events.get(id)!.etag) return new Response(null, { status: 412 });
       if (method === "DELETE") { events.delete(id); return new Response(null, { status: 204 }); }
@@ -57,15 +62,15 @@ export function phoneOperations() {
   const oauth = { status: async () => ({ configured: true, connected: true }), accessToken: async () => "synthetic-token" } as unknown as GoogleOAuthService;
   const calendar = new GoogleCalendarAdapter(new BusinessCalendarAssignmentResolver(new BusinessDirectoryService(repository)), oauth, fetcher);
   const ari = new Ari();
-  const voice = new AsteriskRtpVoiceMediaGateway(ari, { host: "127.0.0.1", portStart: 50300, portEnd: 50303, logger: () => {} });
+  const voice = new AsteriskRtpVoiceMediaGateway(ari, { host: "127.0.0.1", portStart, portEnd: portStart + 3, logger: () => {} });
   let callSequence = 0;
   const telephony = new AsteriskTelephonyGateway(ari, () => `operation-call-${++callSequence}`, voice);
   const runtime = new ScriptedConversationRuntime();
   const app = buildApplication({ environment: {}, tenantId: profile.tenantId, businesses: [profile], businessRepository: repository,
-    calendar, runtime, telephonyGateway: telephony, voiceGateway: voice, clock: { now: () => new Date("2026-09-17T12:00:00Z") },
+    appointmentRepository: appointments, calendar, runtime, telephonyGateway: telephony, voiceGateway: voice, clock: { now: () => new Date("2026-09-17T12:00:00Z") },
   });
   const hangup = (channelId: string) => ari.emit({ type: "CHANNEL_DESTROYED", channelId, occurredAt: "2026-09-17T12:05:00Z" });
-  return { app, ari, voice, telephony, runtime, events, controls, fetcher, hangup,
+  return { app, appointments, eventCalendars, ari, voice, telephony, runtime, events, controls, fetcher, hangup,
     async start(channelId = "caller-1", phone = "+12025550101") {
       await ari.emit({ type: "CHANNEL_ENTERED_APPLICATION", channelId, callerNumber: phone,
         dialedNumber: profile.locations[0]!.calledNumbers[0]!, occurredAt: "2026-09-17T12:00:00Z" });

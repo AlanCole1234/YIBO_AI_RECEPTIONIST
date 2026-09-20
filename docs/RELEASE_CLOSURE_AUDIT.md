@@ -2,7 +2,8 @@
 
 Date: 2026-09-19. Audited code: `12fb73205952aef18450c82a8ec79c531e05b7e9`.
 **Outcome: roadmap closure incomplete.** Update after CLOSE-001 (2026-09-19):
-intentional final playback/end-call is implemented; CLOSE-002 remains open.
+intentional final playback/end-call is implemented. Update 2026-09-20: CLOSE-002
+is also implemented (guarded mapping policy); final REL-002 re-audit is next.
 See [call completion](CALL_COMPLETION.md). The findings below record the audit baseline. No production implementation, deployment,
 calendar data, or original database was changed by this audit.
 
@@ -52,8 +53,10 @@ string-matching goodbye text or closing on every `response.done`.
 
 ### CLOSE-002 — routing changes with existing appointments
 
-**Owner:** appointments/calendar implementation task. **Status:** OPEN; blocks the
-existing-booking routing work deferred by UI-007/integration to E2E-002.
+**Owner:** appointments/calendar implementation task. **Status:** DONE (2026-09-20).
+ADR-009 guards mapping saves atomically against non-cancelled bookings. Historical,
+pending/failed, override/fallback and integrated Google lifecycle cases pass; see
+[verification and limits](BOOKED_CALENDAR_ROUTES.md). The following is pre-fix evidence.
 
 Evidence: `BusinessCalendarAssignmentResolver` resolves the *current* location/
 professional assignment. Appointment records retain the external event ID but not
@@ -93,17 +96,18 @@ artifacts are not durable backups. Concurrency evidence covers one app instance.
 
 Historical reports retain their dated evidence. Current links/status now point to
 this audit rather than assigning unfinished work to tasks already marked DONE.
-The E2E-002 row is reopened as IN_PROGRESS for its explicitly deferred closure items;
-its 13 passing operational scenarios remain valid and committed. REL-002 is BLOCKED,
-not complete. No completed tests or preserved work were discarded.
+The audit originally reopened E2E-002 for these deferred items. With CLOSE-001 and
+CLOSE-002 complete, E2E-002 is DONE and REL-002 awaits its final re-audit. Original
+operational scenarios remain valid; no completed tests or preserved work were discarded.
 
-Next implementation task: CLOSE-002. CLOSE-001 is complete. Re-run the closure audit
-and full checkpoint validation once both are resolved. Live deployment acceptance
+Next task: re-run the REL-002 closure audit. Both implementation follow-ups are
+complete; CLOSE-002 full checkpoint validation passed. Live deployment acceptance
 must remain separately reported even if the software roadmap is later closed.
 
-## Audit validation
+## Original audit validation — 2026-09-19
 
 43 focused tests passed for configuration, prompt, dashboard controls, Realtime
 payload, conversation and calendar routing. Both typechecks and production build
 passed. No production code changed, so the 443-test REL-001 full-suite baseline
-remains the latest full run; it was not unnecessarily repeated for this audit.
+was the latest full run at that audit. CLOSE-002 later passed 477 tests and one
+optional live skip, both typechecks and build.

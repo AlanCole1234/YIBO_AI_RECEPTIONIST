@@ -22,5 +22,7 @@ export interface AppointmentRepository {
     professionalId: string;
     locationId?: string;
   }): Promise<boolean>;
+  /** Local atomic read used inside configuration persistence; includes uncertain failed bookings. */
+  calendarRouteReferences(tenantId: TenantId): Array<{ locationId: string; employeeId: string }>;
   save(appointment: Appointment): Promise<void>;
 }

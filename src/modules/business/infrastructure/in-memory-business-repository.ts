@@ -1,3 +1,4 @@
+import { changesBookedCalendarRoute, type CalendarRouteReference } from "../domain/protected-calendar-routes.js";
 import { normalizePhoneNumber } from "../domain/validate-business-profile.js";
 import { upgradeBusinessProfile, type VersionedBusinessProfile } from "../domain/upgrade-business-profile.js";
 import type { BusinessConfigurationV2 } from "../domain/multi-location-business.js";
@@ -9,7 +10,7 @@ export class InMemoryBusinessRepository implements BusinessRepository {
   private readonly versionByTenant = new Map<TenantId, number>();
   private readonly tenantByCalledNumber = new Map<string, TenantId>();
 
-  constructor(profiles: VersionedBusinessProfile[]) {
+  constructor(profiles: VersionedBusinessProfile[], private readonly references: (tenantId: TenantId) => readonly CalendarRouteReference[] = () => []) {
     for (const profile of profiles) this.add(profile);
   }
 
@@ -48,6 +49,9 @@ export class InMemoryBusinessRepository implements BusinessRepository {
     const currentVersion = this.versionByTenant.get(canonical.tenantId);
     if (currentVersion === undefined || currentVersion !== expectedVersion) {
       return { saved: false as const, currentVersion: currentVersion ?? null };
+    }
+    if (changesBookedCalendarRoute(this.byTenant.get(canonical.tenantId)!, canonical, this.references(canonical.tenantId))) {
+      return { saved: false as const, currentVersion, reason: "CALENDAR_ROUTE_IN_USE" as const };
     }
     const candidate = new Map(this.byTenant);
     candidate.set(canonical.tenantId, structuredClone(canonical));

@@ -42,6 +42,12 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
     return row?.found === 1;
   }
 
+  calendarRouteReferences(tenantId: TenantId): Array<{ locationId: string; employeeId: string }> {
+    return this.database.prepare(`SELECT DISTINCT location_id AS locationId, employee_id AS employeeId
+      FROM appointments WHERE region_id = ? AND tenant_id = ? AND status != 'CANCELLED'`)
+      .all(this.region, tenantId) as Array<{ locationId: string; employeeId: string }>;
+  }
+
   async save(value: Appointment): Promise<void> {
     this.database.prepare(`
       INSERT INTO appointments(

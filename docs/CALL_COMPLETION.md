@@ -50,5 +50,5 @@ with another request; the conversation should continue. Check the final event/ti
 call state and ARI bridge/External Media cleanup. Do not deploy/restart the working
 phone service merely to perform the automated checks.
 
-CLOSE-002 (existing-booking routing changes) remains open. This change does not close
-REL-002 or constitute production acceptance.
+CLOSE-002 subsequently added guarded mapping changes; see `BOOKED_CALENDAR_ROUTES.md`.
+REL-002 final audit and production acceptance remain separately tracked.

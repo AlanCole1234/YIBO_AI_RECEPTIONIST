@@ -158,3 +158,16 @@ describe("safe calendar verification labels", () => {
     expect(calendarStatusLabel("secret-provider-token")).toBe(calendarStatusLabel(undefined));
   });
 });
+
+it("explains a booked-route conflict and retains the unsaved calendar draft", async () => {
+  const { editor } = await fixture();
+  editor.edit(); editor.state.draft!.calendarId = "new@example.test";
+  const before = JSON.stringify(editor.state.snapshot);
+  vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "CALENDAR_ROUTE_IN_USE" } }), { status: 409 }));
+  expect(await editor.save()).toBe(false);
+  expect(editor.state.error).toContain("existing bookings");
+  expect(editor.state.draft!.calendarId).toBe("new@example.test");
+  expect(JSON.stringify(editor.state.snapshot)).toBe(before);
+  expect(editor.state.conflict).toBe(false);
+  expect(editor.state.saved).toBe(false);
+});

@@ -53,6 +53,7 @@ export async function registerBusinessRoutes(server: FastifyInstance, app: YiboA
         expectedVersion,
       );
       if (!result.ok) {
+        if (result.error.code === "CALENDAR_ROUTE_IN_USE") return reply.code(409).send({ error: { code: result.error.code } });
         if (result.error.code === "CONFIGURATION_VERSION_CONFLICT") {
           return reply.code(409).send({
             error: {

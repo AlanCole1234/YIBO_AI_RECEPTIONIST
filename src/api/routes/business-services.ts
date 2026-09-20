@@ -88,7 +88,7 @@ export const sendCatalogError = (reply: FastifyReply, error: BusinessCatalogErro
     return reply.code(409).send({ error: { code: error.code, currentVersion: error.currentVersion } });
   }
   const status = ["SERVICE_NOT_FOUND", "PROFESSIONAL_NOT_FOUND", "LOCATION_NOT_FOUND"].includes(error.code) ? 404
-    : ["SERVICE_ALREADY_EXISTS", "SERVICE_IN_USE", "PROFESSIONAL_ALREADY_EXISTS", "PROFESSIONAL_IN_USE"].includes(error.code) ? 409 : 422;
+    : ["CALENDAR_ROUTE_IN_USE", "SERVICE_ALREADY_EXISTS", "SERVICE_IN_USE", "PROFESSIONAL_ALREADY_EXISTS", "PROFESSIONAL_IN_USE"].includes(error.code) ? 409 : 422;
   return reply.code(status).send({ error: { code: error.code, ...(error.code === "BUSINESS_CONFIGURATION_INVALID" ? { message: error.message } : {}) } });
 };
 

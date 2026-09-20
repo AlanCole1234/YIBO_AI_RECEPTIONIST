@@ -102,6 +102,7 @@ export interface OpeningHoursRule {
 }
 
 export type BusinessLookupError =
+  | { code: "CALENDAR_ROUTE_IN_USE" }
   | { code: "INVALID_CALLED_NUMBER" }
   | { code: "BUSINESS_NOT_FOUND" }
   | { code: "BUSINESS_INACTIVE" }

@@ -171,7 +171,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const billing = options.billing ?? (config.openAiAdminKey
     ? new OpenAIOrganizationCostsAdapter(config.openAiAdminKey)
     : undefined);
-  const businessRepository = options.businessRepository ?? new InMemoryBusinessRepository(profiles);
+  const appointmentRepository = options.appointmentRepository ?? new InMemoryAppointmentRepository();
+  const businessRepository = options.businessRepository ?? new InMemoryBusinessRepository(profiles, tenantId => appointmentRepository.calendarRouteReferences(tenantId));
   const adminIdentityRepository = options.adminIdentityRepository ?? new InMemoryAdminIdentityRepository();
   const adminAuth = {
     credentials: new AdminCredentialService(
@@ -196,7 +197,6 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     customerRepository,
     () => ids.generate("customer"),
   );
-  const appointmentRepository = options.appointmentRepository ?? new InMemoryAppointmentRepository();
   const businessCatalog = new BusinessCatalogService(business, appointmentRepository);
   const calendar = options.calendar ?? new InMemoryCalendarAdapter();
 

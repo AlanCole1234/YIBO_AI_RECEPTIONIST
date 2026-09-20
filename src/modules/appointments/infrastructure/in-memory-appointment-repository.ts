@@ -57,6 +57,12 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
   }
 
+  calendarRouteReferences(tenantId: TenantId) {
+    return [...this.appointments.values()]
+      .filter(appointment => appointment.tenantId === tenantId && appointment.status !== "CANCELLED")
+      .map(({ locationId, employeeId }) => ({ locationId, employeeId }));
+  }
+
   async save(appointment: Appointment): Promise<void> {
     this.appointments.set(`${appointment.tenantId}:${appointment.id}`, { ...appointment });
   }

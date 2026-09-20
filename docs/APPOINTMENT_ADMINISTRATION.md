@@ -66,5 +66,6 @@ Manual browser/live-provider checks remain: with a test customer, inspect a book
 appointment, verify its stored price and location-local time, reschedule to an
 available slot, cancel, and confirm Google retains one event through rescheduling
 and removes it on cancellation. Check policy rejection and operator/admin access.
-Existing UI-007 routing-change risks still apply to bookings made before a calendar
-mapping changes. UI-009 is now complete; see `OPTIMISTIC_EDITING.md`.
+CLOSE-002 now blocks mapping changes that would change an uncancelled booking’s
+effective calendar; see `BOOKED_CALENDAR_ROUTES.md`. It cannot repair mappings
+changed before this protection was deployed. UI-009 is now complete; see `OPTIMISTIC_EDITING.md`.

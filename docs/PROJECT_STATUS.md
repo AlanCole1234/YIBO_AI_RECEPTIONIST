@@ -11,8 +11,9 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **REL-002 BLOCKED — auditoría detectó CLOSE-002 pendiente de E2E-002; no se declara cierre**.
-- Próxima tarea: **CLOSE-002** (rutas de citas existentes); responsables y criterios en `RELEASE_CLOSURE_AUDIT.md`.
+- Tarea activa: **REL-002 — pendiente de auditoría final tras CLOSE-001/CLOSE-002; no se declara cierre**.
+- Próxima tarea: **REL-002** (revisión final del cierre); aceptación live sigue a cargo del operador.
+- CLOSE-002 verificada el 20 de septiembre de 2026: guardia atómica impide cambiar calendario efectivo de citas no canceladas (incluidas pendientes/fallidas); sin migración de eventos ni esquema. 477 pruebas aprobadas, 1 live omitida; ambos typechecks y build. Ver `BOOKED_CALENDAR_ROUTES.md`.
 - CLOSE-001 verificada el 19 de septiembre de 2026: end_call de sesión phone, respuesta/audio/drain y cola RTP final; interrupción cancela cierre, acciones pendientes/inciertas bloquean cierre. 465 pruebas aprobadas, 1 live omitida; ambos typechecks y build. Ver `CALL_COMPLETION.md`.
 - REL-002 auditada el 19 de septiembre de 2026: documentación reconciliada; E2E-002 reabierta para dos compromisos previos no cubiertos. Aceptación live y preparación del despliegue tienen responsables explícitos. Ver `RELEASE_CLOSURE_AUDIT.md`.
 - REL-001 verificada el 19 de septiembre de 2026: ensayo en copias privadas de ambas bases locales; 443 pruebas aprobadas y 1 live omitida, ambos typechecks y build. Fuentes sin citas/clientes: preservación de esos registros sólo cubierta con fixtures. Ver `REGIONAL_MIGRATION_REHEARSAL.md`; aceptación live pendiente.
@@ -170,17 +171,17 @@ con `pnpm test` y `pnpm build`.
 | OBS-001 | DONE | Correlación por tenant/sucursal/llamada, allowlist sin PII, VAD/tools/confirmaciones/calendario/transferencia y latencia/RTP/p50/p95; 394 pruebas, typechecks y build |
 | SEC-001 | DONE | 34 regresiones nuevas; scope completo de estado/tokens, argumentos hostiles y ARI inválido; 428 pruebas, typechecks y build |
 | E2E-001 | DONE | Dos sucursales/precios/zonas, fallback/override Google, gate/éxito diferido, RTP y limpieza; 68 pruebas y build; validación live pendiente |
-| E2E-002 | IN_PROGRESS | 13 escenarios aprobados preservados; CLOSE-001 completada; falta CLOSE-002 cambios de ruta con citas existentes |
+| E2E-002 | DONE | 13 escenarios originales más cierre de llamada y rutas protegidas de CLOSE-001/CLOSE-002; aceptación live separada |
 | DOC-003 | DONE | Diagramas y runbooks finales |
 | REL-001 | DONE | Copias MX/US schema 4→9, integridad/preservación/idempotencia/restore; 443 pruebas, typechecks y build; sin migrar originales |
-| REL-002 | BLOCKED | Auditoría completa; cierre pendiente de CLOSE-002. Ver RELEASE_CLOSURE_AUDIT.md |
+| REL-002 | IN_PROGRESS | CLOSE-001/CLOSE-002 completadas; pendiente auditoría final. Ver RELEASE_CLOSURE_AUDIT.md |
 
 ## Seguimiento de cierre
 
 | ID | Estado | Responsable funcional y resultado requerido |
 |---|---|---|
 | CLOSE-001 | DONE | ADR-008, end_call de sesión, guardas de acciones/interrupción y flush RTP final; 465 pruebas y build |
-| CLOSE-002 | TODO | Appointments/calendario: rutas seguras para citas previas al cambio de mapping |
+| CLOSE-002 | DONE | Política de mapping protegida atómicamente por citas no canceladas; histórico/pending/fallos, override/fallback y E2E Google. Ver BOOKED_CALENDAR_ROUTES.md |
 | ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
 | DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
 

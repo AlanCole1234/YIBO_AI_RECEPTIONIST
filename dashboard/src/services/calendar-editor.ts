@@ -58,6 +58,8 @@ export function createCalendarEditor(client = api) {
       state.conflict = error instanceof ApiError && error.code === "CONFIGURATION_VERSION_CONFLICT";
       state.error = state.conflict
         ? "Mappings changed elsewhere. Your draft is retained. Copy any edits you need, then discard the draft and reload."
+        : error instanceof ApiError && error.code === "CALENDAR_ROUTE_IN_USE"
+          ? "Not saved: existing bookings use this calendar route. Keep the current route until those bookings are resolved. Your draft is retained."
         : error instanceof ApiError && error.code === "CALENDAR_ACCESS_NOT_VERIFIED"
           ? "Not saved: Google calendar access could not be verified. Check the calendar ID, connection and permissions, then try again."
           : "Mapping was not saved. Check your administrator access and calendar ID, then try again.";

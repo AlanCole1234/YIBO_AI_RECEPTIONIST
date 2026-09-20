@@ -1,6 +1,8 @@
+import { SqliteAppointmentRepository } from "./sqlite-appointment-repository.js";
 import type { DatabaseSync } from "node:sqlite";
 import {
   upgradeBusinessProfile,
+  changesBookedCalendarRoute,
   type BusinessRepository,
   type VersionedBusinessProfile,
 } from "../../modules/business/index.js";
@@ -42,6 +44,7 @@ export class SqliteBusinessRepository implements BusinessRepository {
     this.inTransaction(() => {
       const existing = this.database.prepare(`SELECT configuration_version FROM businesses
         WHERE region_id = ? AND tenant_id = ?`).get(this.region, canonical.tenantId) as { configuration_version: number } | undefined;
+      if (this.routeChangeBlocked(canonical)) throw new Error("CALENDAR_ROUTE_IN_USE");
       if (existing) {
         this.database.prepare(`UPDATE businesses SET business_id = ?, profile_json = ?,
           configuration_version = configuration_version + 1 WHERE region_id = ? AND tenant_id = ?`
@@ -58,6 +61,14 @@ export class SqliteBusinessRepository implements BusinessRepository {
   async saveIfVersion(profile: VersionedBusinessProfile, expectedVersion: number) {
     const canonical = upgradeBusinessProfile(profile);
     return this.inTransaction(() => {
+      const current = this.database.prepare(`SELECT configuration_version FROM businesses
+        WHERE region_id = ? AND tenant_id = ?`).get(this.region, canonical.tenantId) as { configuration_version: number } | undefined;
+      if (current?.configuration_version !== expectedVersion) {
+        return { saved: false as const, currentVersion: current?.configuration_version ?? null };
+      }
+      if (this.routeChangeBlocked(canonical)) {
+        return { saved: false as const, currentVersion: expectedVersion, reason: "CALENDAR_ROUTE_IN_USE" as const };
+      }
       const result = this.database.prepare(`UPDATE businesses SET business_id = ?, profile_json = ?,
         configuration_version = configuration_version + 1
         WHERE region_id = ? AND tenant_id = ? AND configuration_version = ?`
@@ -70,6 +81,13 @@ export class SqliteBusinessRepository implements BusinessRepository {
       this.syncCalledNumbers(canonical);
       return { saved: true as const, version: expectedVersion + 1 };
     });
+  }
+
+  private routeChangeBlocked(profile: VersionedBusinessProfile): boolean {
+    const row = this.database.prepare(`SELECT profile_json FROM businesses WHERE region_id = ? AND tenant_id = ?`)
+      .get(this.region, profile.tenantId) as ProfileRow | undefined;
+    return !!row && changesBookedCalendarRoute(upgradeBusinessProfile(JSON.parse(row.profile_json)),
+      upgradeBusinessProfile(profile), new SqliteAppointmentRepository(this.database, this.region).calendarRouteReferences(profile.tenantId));
   }
 
   private syncCalledNumbers(profile: VersionedBusinessProfile): void {

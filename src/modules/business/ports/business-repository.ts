@@ -8,7 +8,7 @@ export interface StoredBusinessConfiguration {
 
 export type SaveBusinessConfigurationResult =
   | { saved: true; version: number }
-  | { saved: false; currentVersion: number | null };
+  | { saved: false; currentVersion: number | null; reason?: "CALENDAR_ROUTE_IN_USE" };
 
 export interface BusinessRepository {
   findByTenantId(tenantId: TenantId): Promise<VersionedBusinessProfile | null>;

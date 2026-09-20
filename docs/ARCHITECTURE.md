@@ -283,3 +283,11 @@ Fin intencional: [ADR-008](adr/ADR-008-intentional-call-completion.md) agrega
 `end_call` como capacidad de sesión phone cuando el transporte soporta drain.
 Conversation espera finalización de respuesta/audio y playback; no modifica
 catálogos ni configuración persistida de tools. Ver [CALL_COMPLETION.md](CALL_COMPLETION.md).
+
+### Protección de rutas reservadas (CLOSE-002 / ADR-009)
+
+Business persistence rejects effective calendar-ID changes referenced by non-cancelled
+appointments, including pending and failed rows. SQLite performs the reference read
+and write in one transaction; in-memory storage uses a synchronous reference reader.
+Full-document and targeted updates share this rule. No Google event migration or
+schema change is introduced; see [route protection](BOOKED_CALENDAR_ROUTES.md).
