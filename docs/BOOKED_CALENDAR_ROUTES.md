@@ -64,5 +64,5 @@ Failed or old confirmed rows deliberately continue blocking affected route chang
 staff must reconcile them, not delete rows to bypass protection. Bulk event migration
 requires a separately designed workflow. No live data/services were changed.
 
-Next task: final REL-002 closure audit. Operator-owned live acceptance and deployment
-readiness remain separate gates.
+REL-002 final software audit is complete; see `RELEASE_CLOSURE_AUDIT.md`.
+Operator-owned live acceptance and deployment readiness remain separate gates.

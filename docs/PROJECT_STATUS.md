@@ -3,7 +3,14 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## Punto verificado
+## Estado actual — 20 de septiembre de 2026
+
+- Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
+- Checkpoint final: **477 pruebas aprobadas, 1 live omitida**, ambos typechecks y build de producción.
+- Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
+- Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
+
+## Historial de checkpoints verificados
 
 - Fecha: 10 de septiembre de 2026.
 - Rama y commit inicial: `main` en `7df03e4`.
@@ -11,8 +18,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Validación inicial: `pnpm typecheck` aprobado; 146 pruebas aprobadas y 1 omitida.
 - Checkpoint 7 — Paneles administrativos: **cerrado** (UI-001 a UI-009 completos).
 - Validación de integración: 306 pruebas aprobadas, 1 live omitida; ambos typechecks y build aprobados; reprogramación conserva el ID Google con etag y ownership.
-- Tarea activa: **REL-002 — pendiente de auditoría final tras CLOSE-001/CLOSE-002; no se declara cierre**.
-- Próxima tarea: **REL-002** (revisión final del cierre); aceptación live sigue a cargo del operador.
+- REL-002 cerrada el 20 de septiembre de 2026 tras verificar CLOSE-001/CLOSE-002 y repetir el checkpoint completo.
+- Aceptación live y preparación del despliegue siguen a cargo del operador (ACCEPT-001 / DEPLOY-001).
 - CLOSE-002 verificada el 20 de septiembre de 2026: guardia atómica impide cambiar calendario efectivo de citas no canceladas (incluidas pendientes/fallidas); sin migración de eventos ni esquema. 477 pruebas aprobadas, 1 live omitida; ambos typechecks y build. Ver `BOOKED_CALENDAR_ROUTES.md`.
 - CLOSE-001 verificada el 19 de septiembre de 2026: end_call de sesión phone, respuesta/audio/drain y cola RTP final; interrupción cancela cierre, acciones pendientes/inciertas bloquean cierre. 465 pruebas aprobadas, 1 live omitida; ambos typechecks y build. Ver `CALL_COMPLETION.md`.
 - REL-002 auditada el 19 de septiembre de 2026: documentación reconciliada; E2E-002 reabierta para dos compromisos previos no cubiertos. Aceptación live y preparación del despliegue tienen responsables explícitos. Ver `RELEASE_CLOSURE_AUDIT.md`.
@@ -29,49 +36,49 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - UI-005 verificada el 15 de septiembre de 2026: 24 pruebas focales aprobadas, ambos typechecks y build de producción aprobados.
 - Baseline recuperado verificado localmente: 270 pruebas aprobadas, 1 omitida; ambos typechecks y build aprobados el 15 de septiembre de 2026.
 - Preservación local completa: `backup/alan-local-before-integration` (`54e4b9b`), backup remoto de `edd624e`, bundle privado verificado para ambos stashes y reflog. Ver `INTEGRATION_INVENTORY.md`.
-- Último checkpoint cerrado: Checkpoint 7; 383 pruebas aprobadas, 1 live omitida,
+- Checkpoint 7 cerrado: 383 pruebas aprobadas, 1 live omitida,
   ambos typechecks y build aprobados el 17 de septiembre de 2026.
-- Última tarea verificada: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
+- Verificación histórica: AGENT-004; `pnpm typecheck`, 223 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
-- Última tarea verificada: AGENT-005; `pnpm typecheck`, 227 pruebas aprobadas y
+- Verificación histórica: AGENT-005; `pnpm typecheck`, 227 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
-- Última tarea verificada: AGENT-006; `pnpm typecheck`, 235 pruebas aprobadas y
+- Verificación histórica: AGENT-006; `pnpm typecheck`, 235 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
-- Última tarea verificada: AGENT-007; `pnpm typecheck`, 237 pruebas aprobadas y
+- Verificación histórica: AGENT-007; `pnpm typecheck`, 237 pruebas aprobadas y
   1 omitida el 14 de septiembre de 2026.
-- Última tarea verificada: AGENT-008; `pnpm typecheck` y pruebas focales de
+- Verificación histórica: AGENT-008; `pnpm typecheck` y pruebas focales de
   agente, conversación, Realtime y PCM aprobadas el 14 de septiembre de 2026.
-- Última tarea verificada: AGENT-009; payloads de ambos modelos y rechazo previo
+- Verificación histórica: AGENT-009; payloads de ambos modelos y rechazo previo
   a conexión aprobados; suite completa 243/243, 1 omitida y build aprobados el
   14 de septiembre de 2026.
-- Última tarea verificada: TOOL-001; `pnpm typecheck` y 43 pruebas focales de
+- Verificación histórica: TOOL-001; `pnpm typecheck` y 43 pruebas focales de
   tools, configuración, API, bootstrap y SQLite aprobadas el 14 de septiembre
   de 2026.
-- Última tarea verificada: TOOL-002; `pnpm typecheck` y 55 pruebas focales de
+- Verificación histórica: TOOL-002; `pnpm typecheck` y 55 pruebas focales de
   dominio, tools, configuración, API y SQLite aprobadas el 14 de septiembre de
   2026.
-- Última tarea verificada: TOOL-003; `pnpm typecheck` y 37 pruebas focales de
+- Verificación histórica: TOOL-003; `pnpm typecheck` y 37 pruebas focales de
   tools, definición, API y payload Realtime aprobadas el 14 de septiembre de
   2026.
-- Última tarea verificada: TOOL-004; `pnpm typecheck` y 38 pruebas focales de
+- Verificación histórica: TOOL-004; `pnpm typecheck` y 38 pruebas focales de
   configuración, gate, secuencia de conversación y políticas aprobadas el 14 de
   septiembre de 2026.
-- Última tarea verificada: TOOL-005; `pnpm typecheck` y 30 pruebas focales de
+- Verificación histórica: TOOL-005; `pnpm typecheck` y 30 pruebas focales de
   expiración, turno nuevo, replay, fallos y conversación aprobadas el 14 de
   septiembre de 2026.
-- Última tarea verificada: TOOL-006; `pnpm typecheck` y 34 pruebas focales de
+- Verificación histórica: TOOL-006; `pnpm typecheck` y 34 pruebas focales de
   límites, excepciones, confirmación y conversación aprobadas el 14 de septiembre
   de 2026.
-- Última tarea verificada: TOOL-007; `pnpm typecheck` y 40 pruebas focales de
+- Verificación histórica: TOOL-007; `pnpm typecheck` y 40 pruebas focales de
   prompt, tools, API, modo de prueba y flujo E2E en memoria aprobadas el 14 de
   septiembre de 2026.
-- Última tarea verificada: TOOL-008; 53 pruebas focales aprobadas; suite completa
+- Verificación histórica: TOOL-008; 53 pruebas focales aprobadas; suite completa
   261/261, 1 omitida y build aprobados el 14 de septiembre de 2026.
-- Última tarea verificada: UI-001; `pnpm typecheck`, 10 pruebas focales de sesión,
+- Verificación histórica: UI-001; `pnpm typecheck`, 10 pruebas focales de sesión,
   API y roles, y `pnpm build` aprobados el 14 de septiembre de 2026.
-- Última tarea verificada: UI-002; `pnpm typecheck`, 8 pruebas focales de registro
+- Verificación histórica: UI-002; `pnpm typecheck`, 8 pruebas focales de registro
   y API, y `pnpm build` aprobados el 14 de septiembre de 2026.
-- Última tarea verificada: UI-003; `pnpm typecheck`, 21 pruebas focales de panel,
+- Verificación histórica: UI-003; `pnpm typecheck`, 21 pruebas focales de panel,
   políticas, configuración y API, y `pnpm build` aprobados el 14 de septiembre
   de 2026.
 
@@ -174,7 +181,7 @@ con `pnpm test` y `pnpm build`.
 | E2E-002 | DONE | 13 escenarios originales más cierre de llamada y rutas protegidas de CLOSE-001/CLOSE-002; aceptación live separada |
 | DOC-003 | DONE | Diagramas y runbooks finales |
 | REL-001 | DONE | Copias MX/US schema 4→9, integridad/preservación/idempotencia/restore; 443 pruebas, typechecks y build; sin migrar originales |
-| REL-002 | IN_PROGRESS | CLOSE-001/CLOSE-002 completadas; pendiente auditoría final. Ver RELEASE_CLOSURE_AUDIT.md |
+| REL-002 | DONE | Auditoría final, documentación reconciliada, 477 pruebas + 1 live omitida, ambos typechecks/build; gates operativos con responsable |
 
 ## Seguimiento de cierre
 

@@ -51,4 +51,4 @@ call state and ARI bridge/External Media cleanup. Do not deploy/restart the work
 phone service merely to perform the automated checks.
 
 CLOSE-002 subsequently added guarded mapping changes; see `BOOKED_CALENDAR_ROUTES.md`.
-REL-002 final audit and production acceptance remain separately tracked.
+REL-002 software audit is complete; production acceptance remains separately tracked.

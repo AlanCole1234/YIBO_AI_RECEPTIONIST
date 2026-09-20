@@ -4,6 +4,9 @@ Núcleo de una recepcionista telefónica con IA, multi-tenant, construido como
 monolito modular. La aplicación local expone los módulos mediante una API
 Fastify y un dashboard Vue.
 
+Roadmap de software cerrado hasta REL-002; aceptación live y preparación del
+despliegue siguen pendientes del operador. Ver la auditoría antes de desplegar.
+
 ## Documentación
 
 - [Auditoría de cierre y pendientes](docs/RELEASE_CLOSURE_AUDIT.md)

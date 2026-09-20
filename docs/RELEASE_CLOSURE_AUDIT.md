@@ -1,113 +1,97 @@
-# REL-002 — release-closure audit
+# REL-002 — final software-roadmap closure audit
 
-Date: 2026-09-19. Audited code: `12fb73205952aef18450c82a8ec79c531e05b7e9`.
-**Outcome: roadmap closure incomplete.** Update after CLOSE-001 (2026-09-19):
-intentional final playback/end-call is implemented. Update 2026-09-20: CLOSE-002
-is also implemented (guarded mapping policy); final REL-002 re-audit is next.
-See [call completion](CALL_COMPLETION.md). The findings below record the audit baseline. No production implementation, deployment,
-calendar data, or original database was changed by this audit.
+Date: **2026-09-20**. Audited implementation:
+`506228ad4af638f5319acf5ecf462ecc068b52c2` on
+`codex/integrate-telephony-and-finish`.
 
-## Closure rule
+**Outcome: software roadmap complete through REL-002.** This is an automated
+implementation/documentation checkpoint, not deployment approval or proof of a
+successful live phone call. ACCEPT-001 and DEPLOY-001 remain open below.
+This final audit changes documentation only. No service, database, live calendar,
+original phone checkout or main branch was changed.
 
-The integration handoff permits closure only with no contradictory documentation,
-unowned open tasks, or hardcoded controls explicitly promised as configurable.
-Contract-level provider fakes are permitted. Missing live acceptance alone does not
-invalidate the automated integration work, but cannot be presented as production proof.
+## Closure rule and result
+
+The handoff requires no contradictory current documentation, unowned open tasks,
+or hardcoded controls explicitly promised as configurable. Provider-boundary fakes
+are allowed. The two implementation gaps found in the initial audit were resolved
+in separate commits; dated historical evidence is labeled and current status is
+reconciled. Remaining operational gates have an explicit owner and acceptance scope.
 
 ## Verified evidence
 
-| Area | Evidence |
+| Area | Repository evidence / conclusion |
 |---|---|
-| Integration and preservation | `INTEGRATION_INVENTORY.md`, separate ARI/media/runtime commits, baseline checkpoint `b87eeb0`; original work remains on its separate checkout/branches. |
-| UI sequence | History contains UI-004 through UI-009 in order, with separate commits, status entries and focused tests. |
-| Configurable controls | Agent schema/defaults v4, validation, prompt compiler, payload builder, policy executor and dashboard controls consume persisted model/audio/VAD, behavior, silence, tool/channel/confirmation/retry/escalation settings. Location editor exposes scheduling policies and transfer destination; catalog/calendar editors expose assignments and prices. |
-| Intentional constants | PCM16 mono 24 kHz, RTP format, bounded tool/provider deadlines and confirmation-token TTL are transport/safety contracts; the roadmap does not promise them as editable admin controls. No competing provider-control override was identified in the inspected modern payload path. |
-| Security/observability | SEC-001 and OBS-001 commits and regression suites; scope-bound tool state, privacy-filtered metrics and authenticated/CAS admin APIs. |
-| Automated E2E | E2E-001/002 cover routed booking, two locations, event identity, listing/change/cancel, transfer, outage, competing slots and PBX/media failures. Boundaries are simulated, not live providers. |
-| Migration | REL-001 migrated private local MX/US copies 4→9, checked repeatability, preserved original columns and verified backup restore. Sources had no appointments/customers. |
-| Latest full baseline | REL-001: 443 passed, one optional live test skipped; both typechecks and production build passed. |
+| Preservation and ancestry | Integration descends from `1ff998b`; `INTEGRATION_INVENTORY.md` records the three-source audit and preservation. Local backup refs remain present; original phone checkout remains on `codex/asterisk-development-phone`. No history rewrite or blind legacy merge. |
+| Modern PBX/media integration | `2147800`, `75990b8`, `84ff2c5`: bounded ARI controls, PCMU/RTP conversion/pacing, media backpressure, trusted DID routing and modern Calls/Conversation ownership. `b87eeb0` records the green baseline before UI resumed. |
+| Latency reconciliation | `51959c7`, `75a7279`: serialized response requests/tool output and bounded SDK startup. Provider settings remain canonical configuration; no global latency defaults changed and no live p50/p95 improvement is claimed. OBS-001 adds privacy-filtered measurements. |
+| Intentionally omitted legacy behavior | Old standalone VoiceBridge, duplicate provider payload/settings, caller-number diagnostic bypasses and obsolete dashboard replacement remain omitted. The useful behavior uses modern contracts; natural completion now uses ADR-008. |
+| UI sequence | UI-004 `f1f1bce`, UI-005 `aeb02e9`, UI-006 `0bc05ec`, UI-007 `5a29b64`, UI-008 `780121b`, UI-009 `6c1b9d2`, in order with separate commits and status updates. |
+| Configurable controls | Agent defaults/upgrader v4 → definition/prompt/policies → validated Realtime payload; dashboard exposes model/audio/VAD, behavior, silence, tools/channel/confirmation/retry/escalation controls. Location/catalog/calendar editors expose existing policy, price and assignment models. |
+| Intentional constants | PCM16 24 kHz, PCMU 8 kHz, RTP pacing, bounded startup/tool/cleanup/end-playback deadlines and confirmation-token TTL are internal transport/safety contracts. No competing provider setting override was found in the inspected modern path. |
+| Security and observability | SEC-001 `4032f45`, OBS-001 `641db35`: authenticated/CAS administration, scoped tools/confirmation state and redacted correlation/latency metrics. Existing regressions pass. |
+| Booking and operations E2E | `b6c5065`, `ac977cd`: two locations, booking confirmation, pricing/timezone, Google identity/ownership/etag, listing/reschedule/cancel, transfer, outages, competing slots and PBX/media failures. Real modules, simulated provider boundaries. |
+| CLOSE-001 | `f0822b9`, ADR-008: session-only end_call, final response/audio/local drain, partial RTP flush, interruption cancellation, bounded completion and no extra response request. Live model compliance/acoustic playback remains ACCEPT-001. |
+| CLOSE-002 | `506228a`, ADR-009: configuration persistence atomically rejects effective route changes referenced by non-cancelled appointments. Historical/pending/failed rows, override/fallback, versioning, repeated reschedules, cancel and new bookings covered. No implicit event migration. |
+| Migration | REL-001 `12fb732` rehearsed local MX/US copies from SQLite schema 4 to 9 with integrity, preservation, idempotence and restore checks. Sources had no appointments/customers. Current schema stays 9, business schema v2 and agent defaults/schema v4; closure fixes add no migration. |
+| Commit discipline | Integration and subsequent roadmap commits each include `docs/PROJECT_STATUS.md`; closure fixes include decisions, code and tests. Final REL-002 is a separate documentation commit. |
 
-## Open work with explicit ownership
+## Final validation
 
-Owners below are functional roles for the next implementation/deployment work; no
-external person has been notified or assigned through a service.
+Fresh checkpoint against `506228a`, 2026-09-20:
 
-### CLOSE-001 — final-response playback and intentional call end
+- Full suite: **477 passed, 1 optional live test skipped**, 75 passing test files.
+- Backend: `tsc --noEmit` passed.
+- Dashboard: `vue-tsc --noEmit -p dashboard/tsconfig.json` passed.
+- Production: `vite build --config dashboard/vite.config.ts` passed.
+- Local documentation links, diff whitespace and outgoing secret/sensitive-file
+  checks passed before committing this audit.
 
-**Owner:** conversation/telephony implementation task. **Status:** DONE under ADR-008.
-The following describes the pre-fix finding; current behavior and tests are in CALL_COMPLETION.md.
+Installed package executables were used directly (the same commands as package
+scripts); no dependency changes. UDP tests used local sockets. No live API writes,
+provider connections or deployment restart were used for acceptance evidence.
 
-Evidence: `AgentToolName` and the published tools have no modern end-call action.
-Realtime `response.output_audio.done` emits `assistant.audio_completed` and
-`response.done` emits response completion, not session termination. Conversation
-observes those events without an intentional end-call transition. The E2E tests
-close by caller hangup, injected runtime `closed`, or failure. These demonstrate
-cleanup, not a natural final-response/playback-complete end-call path.
+## Remaining gates with explicit ownership
 
-Required follow-up: define the intentional end-call contract within the modern
-architecture, distinguish ordinary response completion from conversation completion,
-wait for final playback, handle caller interruption and pending/uncertain tools,
-and test exactly-once cleanup without prematurely ending ongoing conversations.
-This needs a reviewed lifecycle decision (ADR discipline in BUILDING_GUIDE), not
-string-matching goodbye text or closing on every `response.done`.
+Owners are functional roles; no person has been contacted or assigned in an external
+service. These gates do not reopen completed software tasks, but must be completed
+before claiming production readiness.
 
-### CLOSE-002 — routing changes with existing appointments
+### ACCEPT-001 — OPEN; owner: deployment operator with test PBX/carrier/Google access
 
-**Owner:** appointments/calendar implementation task. **Status:** DONE (2026-09-20).
-ADR-009 guards mapping saves atomically against non-cancelled bookings. Historical,
-pending/failed, override/fallback and integrated Google lifecycle cases pass; see
-[verification and limits](BOOKED_CALENDAR_ROUTES.md). The following is pre-fix evidence.
+Use synthetic contacts and a test calendar. Run the scenarios in
+[voice booking](VOICE_BOOKING_E2E.md), [phone operations](PHONE_OPERATIONS_E2E.md),
+[call completion](CALL_COMPLETION.md) and [booked routes](BOOKED_CALENDAR_ROUTES.md).
+Record actual spoken confirmation/local time, one farewell then clean hangup,
+interruption continuation, transfer, original event identity and resource cleanup.
+Check browser roles, retained drafts, two-tab conflicts and unsaved-change warnings.
+Automated results do not prove live credentials, intelligibility, network reachability
+or remote acoustic playback.
 
-Evidence: `BusinessCalendarAssignmentResolver` resolves the *current* location/
-professional assignment. Appointment records retain the external event ID but not
-the calendar route used at creation. Reschedule/cancel resolve that current route;
-a later admin mapping change does not migrate the old event. UI-007 warns about it.
-E2E-002 uses an unchanged mapping, so it does not close this item.
+### DEPLOY-001 — OPEN; owner: deployment operator responsible for the target host/data
 
-Required follow-up: decide and implement safe handling (for example, a guarded
-mapping-change policy or persisted booking route with a compatible migration), then
-test old and new bookings, professional override/fallback changes, reschedule and
-cancel. Never move/delete/recreate live events implicitly. Preserve ownership/etag
-checks and define handling for historical rows without a route snapshot.
+Identify the intended target database and host. Take durable protected backups with
+required keys; provision admins and a stable session key; verify Google settings,
+HTTPS/session behavior and PBX-only ARI/RTP networking. Rehearse separately if target
+data differs from the local sources. Follow [operations](OPERATIONS_RUNBOOK.md) and
+[migration/recovery](MIGRATION_RECOVERY.md). Private temporary rehearsal artifacts are
+not durable backups. Current concurrency evidence covers one application instance.
 
-### ACCEPT-001 — live and browser acceptance
+Previously changed calendar mappings or uncertain external writes require staff
+reconciliation. Failed and old confirmed bookings deliberately protect their routes;
+do not delete rows or bypass validation to force a mapping change. Bulk event movement
+needs a separately designed migration workflow, not implicit event recreation.
 
-**Owner:** deployment operator with access to the intended test PBX/carrier, Google
-account and browser. **Status:** OPEN; production-acceptance gate.
+## Initial audit history
 
-Run the synthetic-contact/test-calendar scenarios in VOICE_BOOKING_E2E and
-PHONE_OPERATIONS_E2E, plus the UI-009 two-tab conflict and unsaved-change checks.
-Record spoken confirmation/time, transfer, cleanup, calendar permission and actual
-provider outcomes. Current tests do not prove autonomous goodbye, intelligibility,
-network reachability or valid live credentials.
+The 2026-09-19 audit at `12fb732` found roadmap closure incomplete and reopened
+E2E-002. It identified final-playback/intentional-end behavior (CLOSE-001) and safe
+handling of route changes with existing bookings (CLOSE-002). At that point the
+latest full baseline was 443 passing tests and one optional live skip; the audit's
+43 focused tests and both typechecks/build passed. These findings were retained as
+owned tasks rather than hidden beneath DONE statuses. CLOSE-001 and CLOSE-002 are
+now complete; E2E-002 and REL-002 are closed for software scope.
 
-### DEPLOY-001 — target data and operational safeguards
-
-**Owner:** deployment operator. **Status:** OPEN before rollout, not an unperformed
-part of the completed local-copy rehearsal.
-
-Identify the actual target database/host, take durable protected backups including
-required keys, provision admins, set a stable session key, verify complete Google
-settings and a PBX-only RTP network. Rehearse separately if target data differs from
-the local sources. The local copies contain no appointments and temporary `/private/tmp`
-artifacts are not durable backups. Concurrency evidence covers one app instance.
-
-## Documentation reconciliation
-
-Historical reports retain their dated evidence. Current links/status now point to
-this audit rather than assigning unfinished work to tasks already marked DONE.
-The audit originally reopened E2E-002 for these deferred items. With CLOSE-001 and
-CLOSE-002 complete, E2E-002 is DONE and REL-002 awaits its final re-audit. Original
-operational scenarios remain valid; no completed tests or preserved work were discarded.
-
-Next task: re-run the REL-002 closure audit. Both implementation follow-ups are
-complete; CLOSE-002 full checkpoint validation passed. Live deployment acceptance
-must remain separately reported even if the software roadmap is later closed.
-
-## Original audit validation — 2026-09-19
-
-43 focused tests passed for configuration, prompt, dashboard controls, Realtime
-payload, conversation and calendar routing. Both typechecks and production build
-passed. No production code changed, so the 443-test REL-001 full-suite baseline
-was the latest full run at that audit. CLOSE-002 later passed 477 tests and one
-optional live skip, both typechecks and build.
+**Next:** operator-owned ACCEPT-001 and DEPLOY-001 planning/execution on the intended
+test/deployment environment. Do not merge to main or restart the working phone
+service merely because this software audit passed.

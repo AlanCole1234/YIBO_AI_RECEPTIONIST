@@ -90,5 +90,6 @@ The restored schema-4 backup was checked logically, not started under an older b
 SQLite recovery does not undo external Google changes. Temporary private artifacts
 must not be mistaken for long-term backup storage.
 
-Next: REL-002 release-closure audit. Outstanding live acceptance and deployment limits
-must remain explicit; this rehearsal alone does not close the roadmap.
+REL-002 subsequently closed the software roadmap; see `RELEASE_CLOSURE_AUDIT.md`.
+Outstanding live acceptance and deployment limits remain explicit; this rehearsal
+alone does not establish production readiness.

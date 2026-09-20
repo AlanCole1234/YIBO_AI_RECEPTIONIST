@@ -36,7 +36,8 @@ production process supervisor or a deployment command.
   See [UI-006](CATALOG_ADMINISTRATION.md).
 - **Calendars:** connect the tenant's Google account; configure location default or
   professional override and validate access. Access validation does not prove event
-  write permission. Changing a mapping does not migrate previously booked events.
+  write permission. Changes to effective routes used by non-cancelled bookings are
+  blocked, including pending/failed bookings. No events are migrated.
   See [UI-007](CALENDAR_ADMINISTRATION.md).
 - **Agent:** edit persisted settings, save, then start a new conversation. Voice Lab
   preview is explicit and can incur provider cost; see [preview](VOICE_PREVIEW.md).
@@ -70,7 +71,7 @@ Keep recordings, patient details, tokens and full provider payloads out of diagn
 | Reschedule/cancel rejected | Customer ownership, notice policy, original event ID, current mapping and Google ownership/etag conflict. Do not delete/recreate an event blindly. |
 | Transfer failed | Trusted location destination and PBX route; failed transfer should retain the conversation. |
 | Session/bridge remains | Follow runtime completion and caller hangup separately; inspect cleanup records and PBX resources by the matching call. Do not terminate unrelated calls. |
-| Admin 401/403/409 | Login/session expiry; role/tenant and exact Origin/HTTPS cookie setup; then stale revision respectively. |
+| Admin 401/403/409 | Login/session expiry; role/tenant and exact Origin/HTTPS cookie setup; then stale revision or protected calendar route respectively. |
 
 For offline regression evidence see [booking E2E](VOICE_BOOKING_E2E.md) and
 [operations E2E](PHONE_OPERATIONS_E2E.md). They use simulated providers. Live testing
