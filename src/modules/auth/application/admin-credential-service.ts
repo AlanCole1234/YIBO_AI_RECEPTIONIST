@@ -1,5 +1,5 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
-import type { AdminRole } from "./contracts.js";
+import { isAdminRole, type AdminRole } from "./contracts.js";
 import type {
   AdminIdentity,
   AdminIdentityRepository,
@@ -55,7 +55,7 @@ const validatePassword = (value: string): void => {
 
 const normalizeRoles = (roles: AdminRole[]): AdminRole[] => {
   const unique = [...new Set(roles)];
-  if (unique.length === 0 || unique.some((role) => role !== "tenant_admin" && role !== "operator")) {
+  if (unique.length === 0 || unique.some((role) => !isAdminRole(role))) {
     throw new Error("INVALID_ADMIN_ROLES");
   }
   return unique;

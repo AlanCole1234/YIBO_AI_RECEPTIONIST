@@ -1,6 +1,10 @@
 import type { TenantId } from "../../../shared/types/identifiers.js";
 
-export type AdminRole = "owner" | "office_manager" | "secretary" | "read_only" | "tenant_admin" | "operator";
+export const ADMIN_ROLES = ["owner", "office_manager", "secretary", "read_only", "tenant_admin", "operator"] as const;
+export type AdminRole = typeof ADMIN_ROLES[number];
+
+export const isAdminRole = (value: unknown): value is AdminRole =>
+  typeof value === "string" && (ADMIN_ROLES as readonly string[]).includes(value);
 
 export interface AdminPrincipal {
   subject: string;

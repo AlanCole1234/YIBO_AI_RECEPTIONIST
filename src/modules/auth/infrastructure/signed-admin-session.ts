@@ -5,6 +5,7 @@ import type {
   AdminSessionVerification,
   IssueAdminSessionCommand,
 } from "../application/contracts.js";
+import { isAdminRole } from "../application/contracts.js";
 
 type SessionPayload = AdminPrincipal & { sessionId: string };
 
@@ -67,7 +68,7 @@ export class SignedAdminSession implements AdminSessionPort {
 const validPayload = (value: Partial<SessionPayload>): value is SessionPayload =>
   typeof value.subject === "string" && typeof value.tenantId === "string"
   && Array.isArray(value.roles) && value.roles.length > 0
-  && value.roles.every((role) => role === "tenant_admin" || role === "operator")
+  && value.roles.every(isAdminRole)
   && typeof value.issuedAt === "string" && !Number.isNaN(new Date(value.issuedAt).valueOf())
   && typeof value.expiresAt === "string" && !Number.isNaN(new Date(value.expiresAt).valueOf())
   && typeof value.sessionId === "string";

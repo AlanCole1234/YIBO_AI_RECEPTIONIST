@@ -4,7 +4,7 @@ export type {
   AdminSessionVerification,
   IssueAdminSessionCommand,
 } from "./application/contracts.js";
-export { hasAdminRole } from "./application/contracts.js";
+export { ADMIN_ROLES, hasAdminRole, isAdminRole } from "./application/contracts.js";
 export type { AdminSessionPort } from "./ports/admin-session-port.js";
 export { AdminCredentialService } from "./application/admin-credential-service.js";
 export type { AuthenticatedAdmin } from "./application/admin-credential-service.js";
