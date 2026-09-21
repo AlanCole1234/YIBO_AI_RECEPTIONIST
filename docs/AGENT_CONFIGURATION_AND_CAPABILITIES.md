@@ -25,6 +25,11 @@ El dashboard configura modelo, voz, locale, esfuerzo de razonamiento, límite de
 salida, VAD, instrucciones y herramientas. La configuración se valida, persiste
 por tenant y aplica a la próxima conversación.
 
+`locale` no cambia por sí solo la voz incorporada del proveedor. El compilador
+lo convierte en reglas inmutables de idioma, pronunciación, vocabulario y ritmo;
+para `es-MX` exige español de México con acento mexicano neutral. Los saludos
+automáticos nuevos también se crean en el idioma seleccionado.
+
 ## Registro de capacidades por modelo
 
 `RealtimeModelCapabilityRegistry` es la única fuente soportada de modelos,

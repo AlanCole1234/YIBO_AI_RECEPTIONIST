@@ -189,8 +189,14 @@ function channelCanParallel(channel: "phone" | "voice_lab"): boolean {
 function changeGreetingMode(event: Event): void {
   if (!configuration.value) return;
   configuration.value.behavior.greeting = (event.target as HTMLSelectElement).value === "automatic"
-    ? { mode: "automatic", message: "Hello, this is YIBO. How may I help you?" }
+    ? { mode: "automatic", message: defaultGreeting(configuration.value.identity.locale) }
     : { mode: "wait_for_caller" };
+}
+
+function defaultGreeting(locale: string): string {
+  if (locale.toLowerCase().startsWith("es")) return "Hola, gracias por llamar a YIBO. ¿En qué puedo ayudarle?";
+  if (locale.toLowerCase().startsWith("pt")) return "Olá, agradecemos por ligar para a YIBO. Como posso ajudar?";
+  return "Hello, thank you for calling YIBO. How may I help you?";
 }
 
 function changeFirstCollectionField(event: Event): void {

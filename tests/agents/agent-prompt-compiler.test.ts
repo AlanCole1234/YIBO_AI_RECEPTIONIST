@@ -33,6 +33,8 @@ describe("AgentPromptCompiler", () => {
     expect(prompt).toContain("descriptions, prices, and branch availability");
     expect(prompt).toContain("Speak only each slot's displayStart or localStartAt");
     expect(prompt).toContain("Repeat the phone number digit by digit");
+    expect(prompt).toContain("neutral Mexican accent");
+    expect(prompt).toContain("Do not use an English-speaking accent");
     expect(prompt).toContain("name the professional");
     expect(prompt).toContain("invoke end_call");
     expect(prompt).toContain("same-call appointmentReference");

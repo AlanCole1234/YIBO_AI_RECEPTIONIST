@@ -342,7 +342,7 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(value.connection.sent[1]).toEqual({
       type: "response.create",
       response: {
-        instructions: 'Say exactly this greeting and add nothing else: "Gracias por llamar a YIBO.".',
+        instructions: 'Use the language and regional pronunciation required by locale "es-MX". Say exactly this greeting and add nothing else: "Gracias por llamar a YIBO.".',
       },
     });
 

@@ -208,6 +208,7 @@ con `pnpm test` y `pnpm build`.
 | OPS-006 | DONE | Readiness de proveedores/sucursales y reconexión ARI; typecheck, 477 pruebas + 1 live omitida y build aprobados |
 | OPS-007 | TODO | Aceptación browser, PBX, Google y correo real con datos sintéticos; requiere operador y credenciales live |
 | OPS-008 | DONE | Hora hablada localizada, contacto confirmado antes de reservar, doctor/dirección post-reserva y cierre explícito de llamada |
+| OPS-009 | DONE | Variante oral ligada al locale: es-MX exige español y acento mexicano neutral; el saludo automático se genera en el idioma configurado |
 
 ## Registro de decisiones
 

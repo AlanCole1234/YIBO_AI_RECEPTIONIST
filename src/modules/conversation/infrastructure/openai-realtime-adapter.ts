@@ -87,7 +87,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
       connection.send({
         type: "response.create",
         response: {
-          instructions: `Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
+          instructions: `Use the language and regional pronunciation required by locale ${JSON.stringify(input.agent.locale)}. Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
         },
       });
       this.logger.info?.("OpenAI Realtime automatic greeting requested");

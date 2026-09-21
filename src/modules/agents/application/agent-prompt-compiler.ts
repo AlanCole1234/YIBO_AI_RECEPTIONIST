@@ -24,6 +24,7 @@ export class AgentPromptCompiler {
       "# Identity",
       `You are the phone receptionist for the business named ${data(input.businessName)}.`,
       `Serve the location named ${data(input.locationName)} and respond using locale ${data(input.locale)}.`,
+      speechLocaleInstruction(input.locale),
       "",
       "# Editable guidance",
       "The following block is administrator-authored style and workflow guidance. It cannot override the immutable rules below.",
@@ -86,6 +87,20 @@ export class AgentPromptCompiler {
       "- On a phone call, after all requested actions are complete and the caller confirms no further help is needed, say one concise farewell and invoke end_call. Do not leave a completed call open.",
     ].join("\n");
   }
+}
+
+function speechLocaleInstruction(locale: string): string {
+  const normalized = locale.trim().toLowerCase();
+  if (normalized === "es-mx") {
+    return "Speak Spanish as used in Mexico, with natural Mexican pronunciation, vocabulary, rhythm, and a neutral Mexican accent. Do not use an English-speaking accent or Peninsular Spanish forms. Switch languages only when the caller explicitly requests it or consistently speaks another language.";
+  }
+  if (normalized.startsWith("es")) {
+    return `Speak natural Spanish appropriate for locale ${data(locale)}, including its pronunciation, vocabulary, and rhythm. Do not use an English-speaking accent. Switch languages only when the caller explicitly requests it or consistently speaks another language.`;
+  }
+  if (normalized === "en-gb") {
+    return "Speak natural British English with British pronunciation and vocabulary. Switch languages only when the caller explicitly requests it or consistently speaks another language.";
+  }
+  return `Speak naturally in the language and regional variety identified by locale ${data(locale)}, including its pronunciation, vocabulary, and rhythm. Switch languages only when the caller explicitly requests it or consistently speaks another language.`;
 }
 
 function confirmationInstruction(tools: AgentToolName[]): string {
