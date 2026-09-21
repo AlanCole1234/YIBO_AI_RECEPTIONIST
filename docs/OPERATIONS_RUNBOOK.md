@@ -37,7 +37,8 @@ production process supervisor or a deployment command.
   See [UI-006](CATALOG_ADMINISTRATION.md).
 - **Calendars:** connect the tenant's Google account; configure location default or
   professional override and validate access. Access validation does not prove event
-  write permission. Changes to effective routes used by non-cancelled bookings are
+  write permission; it uses Google FreeBusy with the same least-privilege scope as
+  availability checks. Changes to effective routes used by non-cancelled bookings are
   blocked, including pending/failed bookings. No events are migrated.
   See [UI-007](CALENDAR_ADMINISTRATION.md).
 - **Agent:** edit persisted settings, save, then start a new conversation. Voice Lab
@@ -71,7 +72,7 @@ Keep recordings, patient details, tokens and full provider payloads out of diagn
 | Answered but no audio | Media host is bindable/reachable, UDP range/firewall and bridge/External Media channel. Check inbound RTP before model settings. Missing output peer times out after four seconds. |
 | Audio arrives but tools fail | Enabled tools and phone channel policy, required contact and location assignments. Trusted fields cannot come from the model. |
 | Repeated confirmation request | Gate needs identical action arguments/token and a later caller turn. Success should not trigger another booking. Do not bypass the gate to mask a sequence bug. |
-| Calendar not connected / unavailable | All OAuth environment settings, tenant token status and mapped calendar access; API health alone is insufficient. |
+| Calendar not connected / unavailable | All OAuth environment settings, tenant token status, Google Calendar API enablement in the OAuth project and mapped calendar access; API health alone is insufficient. |
 | Wrong local time or price | Correct DID/location, IANA zone, location offer; compare stored UTC instant, historical price and Google timezone. Do not manually append `Z` to local time. |
 | Slot lost after availability | Another booking can win before mutation revalidation. Offer newly verified alternatives; availability does not reserve a slot. |
 | `ACTION_OUTCOME_UNKNOWN` | A mutation exceeded the tool deadline. Check local appointment and Google event before any retry; timeout does not prove the write failed. |

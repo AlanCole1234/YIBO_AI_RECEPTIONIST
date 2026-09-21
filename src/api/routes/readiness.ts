@@ -27,7 +27,8 @@ export async function registerReadinessRoutes(server: FastifyInstance, app: Yibo
           .filter((calendarId): calendarId is string => Boolean(calendarId)))];
         const access = await Promise.all(effectiveCalendarIds
           .map((calendarId) => app.googleOAuth!.verifyCalendarAccess(app.tenantId, calendarId)));
-        if (access.some((status) => status !== "accessible")) issues.push("One or more calendar routes are not accessible");
+        if (access.includes("api_not_enabled")) issues.push("Google Calendar API is disabled in the OAuth project");
+        else if (access.some((status) => status !== "accessible")) issues.push("One or more calendar routes are not accessible");
       }
       if (!location.openingHours.length) issues.push("No business hours");
       return { id: location.id, name: location.name, ready: issues.length === 0, issues };
