@@ -70,6 +70,7 @@ function fixture(businessProfiles: VersionedBusinessProfile[] = [business]) {
     getAppointment,
     listUpcomingAppointments,
     updateCustomer,
+    customers,
     transferToConfiguredDestination,
     executor: new ToolExecutorImpl(scheduling, appointments, transfer, businesses, undefined, customers),
   };
@@ -176,6 +177,9 @@ describe("ToolExecutorImpl", () => {
         service: "Consultation",
         startAt: "2026-08-10T15:00:00.000Z",
         endAt: "2026-08-10T15:30:00.000Z",
+        localStartAt: "2026-08-10T09:00:00-06:00",
+        localEndAt: "2026-08-10T09:30:00-06:00",
+        displayStart: expect.stringContaining("9:00 AM"),
         timezone: "America/Denver",
         location: "YIBO Dental",
         professional: "Dr. Alex",
@@ -358,8 +362,13 @@ describe("ToolExecutorImpl", () => {
         service: "Consultation",
         startAt: "2026-08-10T15:00:00.000Z",
         endAt: "2026-08-10T15:30:00.000Z",
+        localStartAt: "2026-08-10T09:00:00-06:00",
+        localEndAt: "2026-08-10T09:30:00-06:00",
+        displayStart: expect.stringContaining("9:00 AM"),
         timezone: "America/Denver",
         location: "YIBO Dental",
+        professional: "Dr. Alex",
+        nextStep: expect.stringContaining("professional name"),
         price: { amountMinor: 0, currency: "USD", display: expect.any(String) },
       },
     });
@@ -542,7 +551,7 @@ describe("ToolExecutorImpl", () => {
     });
 
     expect(updateCustomer).toHaveBeenCalledWith({ tenantId: "tenant-a", customerId: "customer-1", name: "John Smith", phone: "915-555-1234" });
-    expect(contactResult).toEqual({ toolCallId: "tool-contact", ok: true, data: { saved: true } });
+    expect(contactResult).toEqual({ toolCallId: "tool-contact", ok: true, data: { saved: true, contactConfirmedForBooking: true } });
     expect(JSON.stringify(contactResult)).not.toContain("John Smith");
     expect(JSON.stringify(contactResult)).not.toContain("915-555-1234");
     expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({ serviceId: "cleaning-1" }));
@@ -556,6 +565,23 @@ describe("ToolExecutorImpl", () => {
     });
     expect(result).toMatchObject({ ok: false, error: { code: "INVALID_TOOL_ARGUMENTS" } });
     expect(updateCustomer).not.toHaveBeenCalled();
+  });
+
+  it("requires contact confirmation in the current call before a real booking", async () => {
+    const value = fixture();
+    value.customers.getCustomer = vi.fn(async () => success({
+      id: "customer-1", tenantId: "tenant-a", phone: "9155551234",
+    }));
+    const appointment = { toolCallId: "book", name: "create_appointment" as const,
+      arguments: { service: "Consultation", employeeId: "employee-1", startAt: confirmedAppointment.startAt } };
+
+    await expect(value.executor.execute(context, appointment)).resolves.toMatchObject({
+      ok: false, error: { code: "CONTACT_CONFIRMATION_REQUIRED" },
+    });
+    await value.executor.execute(context, {
+      toolCallId: "contact", name: "update_customer", arguments: { name: "John Smith", phone: "915-555-1234" },
+    });
+    await expect(value.executor.execute(context, appointment)).resolves.toMatchObject({ ok: true });
   });
 
   it("does not accept an arbitrary transfer destination", async () => {

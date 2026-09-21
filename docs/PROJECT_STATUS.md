@@ -207,6 +207,7 @@ con `pnpm test` y `pnpm build`.
 | OPS-005 | DONE | Roles operativos y modo read-only con guard transversal |
 | OPS-006 | DONE | Readiness de proveedores/sucursales y reconexión ARI; typecheck, 477 pruebas + 1 live omitida y build aprobados |
 | OPS-007 | TODO | Aceptación browser, PBX, Google y correo real con datos sintéticos; requiere operador y credenciales live |
+| OPS-008 | DONE | Hora hablada localizada, contacto confirmado antes de reservar, doctor/dirección post-reserva y cierre explícito de llamada |
 
 ## Registro de decisiones
 

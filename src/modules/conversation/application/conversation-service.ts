@@ -25,7 +25,7 @@ export class ConversationService implements ConversationServiceContract {
     const runtimeSession = await withOperationalContext(command.agent.trustedContext, () => this.dependencies.runtime.openSession({
       conversationId: command.conversationId,
       agent: {
-        instructions: command.agent.instructions + (canEnd ? "\nWhen the caller is finished, speak one concise final farewell, then invoke end_call with {} in the same response. Do not call it before completing requested actions and stating their actual results. Do not ask another question after saying goodbye. If the caller interrupts, continue helping; end_call never confirms a booking." : ""),
+        instructions: command.agent.instructions + (canEnd ? "\nThe end_call tool is available only for clean phone completion. After a confirmed booking, first state the clinic-local time and professional and offer the location address. When the caller says they need nothing else, speak one concise final farewell, then invoke end_call with {} in the same response. Do not call it before completing requested actions and stating their actual results. Do not ask another question after saying goodbye. If the caller interrupts, continue helping; end_call never confirms a booking." : ""),
         locale: command.agent.locale,
         ...(command.agent.voice ? { voice: command.agent.voice } : {}),
         tools: [...command.agent.tools, ...(canEnd ? [{ name: "end_call" as const,

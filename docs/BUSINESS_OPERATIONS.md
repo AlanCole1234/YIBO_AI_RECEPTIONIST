@@ -38,6 +38,19 @@ finalización y ausencia. El precio y nombre del servicio permanecen congelados 
 la cita. El resultado operativo (`COMPLETED` o `NO_SHOW`) no altera el historial
 económico ni borra el evento de calendario.
 
+En llamadas, los instantes siguen viajando en UTC entre herramientas, pero cada
+resultado de disponibilidad y reserva incluye además la fecha/hora localizada y
+una representación hablable. El agente sólo verbaliza esa hora local y copia el
+instante UTC sin reinterpretarlo al ejecutar la mutación.
+
+Antes de reservar para un caller real, el backend exige que `update_customer`
+haya guardado en esa misma llamada el nombre completo y el teléfono confirmado.
+El agente repite el número dígito por dígito antes de guardarlo. Tras una reserva
+exitosa informa la hora local y el profesional; ofrece la dirección sólo si la
+sucursal tiene una dirección real configurada. Cuando el caller confirma que no
+necesita más ayuda, la despedida usa `end_call` y espera a que termine el audio
+antes de colgar.
+
 ## Correo transaccional
 
 Las confirmaciones, reprogramaciones y cancelaciones pueden enviarse con Resend

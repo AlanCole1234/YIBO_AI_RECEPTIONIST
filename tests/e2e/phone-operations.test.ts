@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { phoneOperations, tool, available, booking, slot } from "../helpers/phone-operations.js";
+import { phoneOperations, tool, available, confirmContact, booking, slot } from "../helpers/phone-operations.js";
 
 // Real application/Google adapter and local media; controlled ARI/runtime/HTTP boundaries.
 describe("integrated phone operational and failure scenarios", () => {
@@ -7,10 +7,12 @@ describe("integrated phone operational and failure scenarios", () => {
     const f = phoneOperations();
     try {
       const session = await f.start();
+      expect(await confirmContact(session)).toMatchObject({ ok: true });
       expect(await available(session)).toMatchObject({ ok: true });
       expect(await tool(session, "create_appointment", booking)).toMatchObject({ ok: true });
       const originalId = [...f.events.keys()][0]!;
       const other = await f.start("caller-2", "+12025550102");
+      expect(await confirmContact(other, "02")).toMatchObject({ ok: true });
       expect(await available(other, "2026-09-21T18:00:00.000Z")).toMatchObject({ ok: true });
       expect(await tool(other, "create_appointment", { ...booking, startAt: "2026-09-21T18:00:00.000Z" })).toMatchObject({ ok: true });
       const neighbor = structuredClone([...f.events.values()].find(event => event.id !== originalId)!);
@@ -33,6 +35,7 @@ describe("integrated phone operational and failure scenarios", () => {
     const f = phoneOperations();
     try {
       const session = await f.start();
+      expect(await confirmContact(session)).toMatchObject({ ok: true });
       f.controls.outage = true;
       expect(await available(session)).toMatchObject({ ok: false });
       expect(await tool(session, "create_appointment", booking)).toMatchObject({ ok: false });
@@ -49,6 +52,7 @@ describe("integrated phone operational and failure scenarios", () => {
     const f = phoneOperations();
     try {
       const session = await f.start();
+      expect(await confirmContact(session)).toMatchObject({ ok: true });
       expect(await available(session)).toMatchObject({ ok: true });
       f.controls.writeOutage = true;
       expect(await tool(session, "create_appointment", booking)).toMatchObject({ ok: false, error: { code: "CALENDAR_SYNC_FAILED" } });
@@ -62,6 +66,7 @@ describe("integrated phone operational and failure scenarios", () => {
     const f = phoneOperations();
     try {
       const session = await f.start();
+      expect(await confirmContact(session)).toMatchObject({ ok: true });
       expect(await tool(session, "create_appointment", booking)).toMatchObject({ ok: true });
       expect(await tool(session, "list_customer_appointments")).toMatchObject({ ok: true });
       const original = structuredClone([...f.events.values()]);
@@ -95,6 +100,8 @@ describe("integrated phone operational and failure scenarios", () => {
     try {
       const first = await f.start();
       const second = await f.start("caller-2", "+12025550102");
+      expect(await confirmContact(first)).toMatchObject({ ok: true });
+      expect(await confirmContact(second, "02")).toMatchObject({ ok: true });
       for (const session of [first, second]) expect(await available(session)).toMatchObject({ ok: true, data: { requestedTimeAvailable: true } });
       const firstBooking = tool(first, "create_appointment", booking);
       await vi.waitFor(() => expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/events"))).toBe(true));

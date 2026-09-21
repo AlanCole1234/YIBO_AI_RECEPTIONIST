@@ -10,6 +10,7 @@ const CALL_ID = "call-e2e-1";
 const CUSTOMER_ID = "customer-e2e";
 const APPOINTMENT_ID = "appointment-e2e";
 const CHECK_TOOL_CALL_ID = "tool-check-1";
+const CONTACT_TOOL_CALL_ID = "tool-contact-1";
 const CREATE_TOOL_CALL_ID = "tool-create-1";
 
 const noAudio = async function* () {};
@@ -58,6 +59,14 @@ describe("in-memory call to appointment", () => {
     const availability = await waitForToolResult(runtimeSession.receivedToolResults, CHECK_TOOL_CALL_ID);
     if (!availability.ok) throw new Error(`Availability failed: ${availability.error.code}`);
     const selected = firstSlot(availability.data);
+
+    runtimeSession.emit({
+      type: "tool.call",
+      toolCallId: CONTACT_TOOL_CALL_ID,
+      name: "update_customer",
+      arguments: { name: "Synthetic Patient", phone: "+529991234567" },
+    });
+    expect(await waitForToolResult(runtimeSession.receivedToolResults, CONTACT_TOOL_CALL_ID)).toMatchObject({ ok: true });
 
     runtimeSession.emit({
       type: "tool.call",
