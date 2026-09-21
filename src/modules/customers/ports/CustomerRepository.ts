@@ -5,5 +5,6 @@ export interface CustomerRepository {
   findByPhone(tenantId: TenantId, phone: string): Promise<Customer | null>;
   findById(tenantId: TenantId, customerId: CustomerId): Promise<Customer | null>;
   search(tenantId: TenantId, query: string, limit: number): Promise<Customer[]>;
+  listAll(tenantId: TenantId): Promise<Customer[]>;
   save(customer: Customer): Promise<void>;
 }

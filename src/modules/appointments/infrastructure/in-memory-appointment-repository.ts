@@ -49,6 +49,11 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
       .sort((a, b) => b.startAt.localeCompare(a.startAt)).slice(0, limit).map((item) => ({ ...item }));
   }
 
+  async findByTenant(tenantId: string, limit: number) {
+    return [...this.appointments.values()].filter((item) => item.tenantId === tenantId)
+      .sort((a, b) => b.startAt.localeCompare(a.startAt)).slice(0, limit).map((item) => ({ ...item }));
+  }
+
   async listEvents(tenantId: string, appointmentId: string): Promise<AppointmentEvent[]> {
     return this.events.filter((event) => event.tenantId === tenantId && event.appointmentId === appointmentId)
       .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)).map((event) => structuredClone(event));

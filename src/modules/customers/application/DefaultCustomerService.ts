@@ -120,8 +120,12 @@ export class DefaultCustomerService implements CustomerService {
   }
 
   public searchCustomers(tenantId: string, query: string, limit = 25): Promise<Customer[]> {
-    const safeLimit = Number.isSafeInteger(limit) ? Math.min(100, Math.max(1, limit)) : 25;
+    const safeLimit = Number.isSafeInteger(limit) ? Math.min(1_000, Math.max(1, limit)) : 25;
     return this.repository.search(tenantId, query.trim(), safeLimit);
+  }
+
+  public listAllCustomers(tenantId: string): Promise<Customer[]> {
+    return this.repository.listAll(tenantId);
   }
 }
 

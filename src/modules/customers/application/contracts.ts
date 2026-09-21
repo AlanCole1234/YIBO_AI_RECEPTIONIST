@@ -40,4 +40,5 @@ export interface CustomerService {
   ): Promise<Result<Customer, CustomerError>>;
   getCustomer(tenantId: TenantId, customerId: CustomerId): Promise<Result<Customer, CustomerError>>;
   searchCustomers(tenantId: TenantId, query: string, limit?: number): Promise<Customer[]>;
+  listAllCustomers(tenantId: TenantId): Promise<Customer[]>;
 }

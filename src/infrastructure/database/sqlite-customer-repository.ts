@@ -47,6 +47,12 @@ export class SqliteCustomerRepository implements CustomerRepository {
       .map((row) => this.row(row as CustomerRow)!);
   }
 
+  async listAll(tenantId: TenantId): Promise<Customer[]> {
+    return this.database.prepare(`${SELECT_CUSTOMER} FROM customers
+      WHERE region_id = ? AND tenant_id = ? ORDER BY COALESCE(name, phone) COLLATE NOCASE`)
+      .all(this.region, tenantId).map((row) => this.row(row as CustomerRow)!);
+  }
+
   private row(value: CustomerRow | undefined): Customer | null {
     if (!value) return null;
     return {

@@ -32,6 +32,11 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       .slice(0, limit).map((customer) => ({ ...customer }));
   }
 
+  public async listAll(tenantId: TenantId): Promise<Customer[]> {
+    return [...this.customers.values()].filter((customer) => customer.tenantId === tenantId)
+      .sort((a, b) => (a.name ?? a.phone).localeCompare(b.name ?? b.phone)).map((customer) => ({ ...customer }));
+  }
+
   private key(tenantId: TenantId, customerId: CustomerId): string {
     return `${tenantId}:${customerId}`;
   }

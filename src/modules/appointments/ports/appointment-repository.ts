@@ -20,6 +20,7 @@ export interface AppointmentRepository {
   findByRange(query: { tenantId: TenantId; locationId: LocationId; rangeStart: ISODateTime; rangeEnd: ISODateTime;
     employeeId?: string; serviceId?: string; status?: string }): Promise<Appointment[]>;
   findHistoryByCustomer(tenantId: TenantId, customerId: CustomerId, limit: number): Promise<Appointment[]>;
+  findByTenant(tenantId: TenantId, limit: number): Promise<Appointment[]>;
   appendEvent(event: AppointmentEvent): Promise<void>;
   listEvents(tenantId: TenantId, appointmentId: AppointmentId): Promise<AppointmentEvent[]>;
   hasProfessionalReferences(query: {

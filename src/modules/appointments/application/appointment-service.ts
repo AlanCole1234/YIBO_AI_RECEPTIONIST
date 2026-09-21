@@ -266,6 +266,11 @@ export class AppointmentServiceImpl implements AppointmentService {
     return this.repository.findHistoryByCustomer(tenantId, customerId, Math.min(250, Math.max(1, limit)));
   }
 
+
+  listTenantHistory(tenantId: string, limit = 5_000) {
+    return this.repository.findByTenant(tenantId, Math.min(10_000, Math.max(1, limit)));
+  }
+
   private record(appointment: Appointment, type: "CREATED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED" | "NO_SHOW",
     actorType: "AI" | "OFFICE" | "SYSTEM", metadata?: Record<string, string>) {
     return this.repository.appendEvent({ id: this.createId(), tenantId: appointment.tenantId,

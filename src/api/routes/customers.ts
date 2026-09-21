@@ -6,6 +6,36 @@ import { toHttpError } from "../http-errors.js";
 interface CustomerBody { phone?: unknown; name?: unknown; email?: unknown; preferredLanguage?: unknown; emailOptIn?: unknown }
 
 export async function registerCustomerRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
+  server.get("/api/office/directory", { preHandler: createAdminGuard(app, "operator") }, async () => {
+    const [customers, appointments, business] = await Promise.all([
+      app.customers.listAllCustomers(app.tenantId),
+      app.appointments.listTenantHistory(app.tenantId),
+      app.business.getBusinessConfiguration(app.tenantId),
+    ]);
+    if (!business.ok) return { customers: [], professionals: [] };
+    const now = new Date().toISOString();
+    const byCustomer = new Map<string, typeof appointments>();
+    for (const appointment of appointments) {
+      const values = byCustomer.get(appointment.customerId) ?? [];
+      values.push(appointment); byCustomer.set(appointment.customerId, values);
+    }
+    return {
+      customers: customers.map((customer) => {
+        const history = byCustomer.get(customer.id) ?? [];
+        const active = history.filter(({ status }) => status === "CONFIRMED");
+        return { ...customer, appointmentCount: history.length,
+          professionalIds: [...new Set(history.map(({ employeeId }) => employeeId))],
+          nextAppointmentAt: active.filter(({ startAt }) => startAt >= now).sort((a, b) => a.startAt.localeCompare(b.startAt))[0]?.startAt,
+          lastAppointmentAt: history.filter(({ startAt }) => startAt < now).sort((a, b) => b.startAt.localeCompare(a.startAt))[0]?.startAt };
+      }),
+      professionals: business.value.configuration.professionals.map((professional) => ({
+        id: professional.id, name: professional.displayName, active: professional.active,
+        patientIds: [...new Set(appointments.filter(({ employeeId }) => employeeId === professional.id)
+          .map(({ customerId }) => customerId))],
+      })),
+    };
+  });
+
   server.get<{ Querystring: { q?: string; limit?: string } }>(
     "/api/customers",
     { preHandler: createAdminGuard(app, "operator") },

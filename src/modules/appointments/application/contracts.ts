@@ -96,4 +96,5 @@ export interface AppointmentService {
   listAppointmentEvents(query: GetAppointmentQuery): Promise<AppointmentEvent[]>;
   markAppointmentOutcome(command: MarkAppointmentOutcomeCommand): Promise<Result<Appointment, AppointmentLookupError>>;
   listCustomerHistory(tenantId: TenantId, customerId: CustomerId, limit?: number): Promise<Appointment[]>;
+  listTenantHistory(tenantId: TenantId, limit?: number): Promise<Appointment[]>;
 }

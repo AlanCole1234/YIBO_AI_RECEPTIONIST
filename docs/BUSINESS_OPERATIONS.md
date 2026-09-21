@@ -22,6 +22,15 @@ consentimiento de correo, fuente y marcas de creación/actualización. La búsqu
 tenant-scoped. El historial de citas también queda limitado al tenant autenticado;
 los identificadores de tenant o región enviados por el navegador se rechazan.
 
+La vista **Customers** funciona como libreta completa: carga todos los pacientes del
+tenant sin un límite de búsqueda, permite filtrar por nombre/contacto o profesional,
+muestra el equipo de atención inferido de las citas y abre la historia completa. El
+panel lateral **Doctors & patients** incluye también profesionales sin pacientes.
+
+La vista **Availability** consulta el mismo servicio de Scheduling para todos los
+profesionales asignados al servicio y presenta sus huecos en paralelo. Elegir un
+paciente en Customers permite reservar directamente desde uno de esos huecos.
+
 ## Ciclo de vida de una cita
 
 Las mutaciones registran eventos de creación, reprogramación, cancelación,

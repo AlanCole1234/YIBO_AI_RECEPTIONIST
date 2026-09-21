@@ -57,6 +57,11 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       .all(this.region, tenantId, customerId, limit).map((row) => this.row(row as AppointmentRow)!);
   }
 
+  async findByTenant(tenantId: string, limit: number): Promise<Appointment[]> {
+    return this.database.prepare(`${SELECT_APPOINTMENT} ORDER BY start_at DESC LIMIT ?`)
+      .all(this.region, tenantId, limit).map((row) => this.row(row as AppointmentRow)!);
+  }
+
   async listEvents(tenantId: string, appointmentId: string): Promise<AppointmentEvent[]> {
     return this.database.prepare(`SELECT id, appointment_id, event_type, occurred_at, actor_type, metadata_json
       FROM appointment_events WHERE region_id = ? AND tenant_id = ? AND appointment_id = ? ORDER BY occurred_at`)

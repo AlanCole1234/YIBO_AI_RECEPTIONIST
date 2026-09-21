@@ -25,6 +25,9 @@ export interface Business {
 
 export interface Customer { id: string; tenantId: string; phone: string; name?: string; email?: string;
   preferredLanguage?: string; emailOptIn?: boolean; source?: string; createdAt?: string; updatedAt?: string }
+export interface DirectoryCustomer extends Customer { appointmentCount: number; professionalIds: string[];
+  nextAppointmentAt?: string; lastAppointmentAt?: string }
+export interface DirectoryProfessional { id: string; name: string; active: boolean; patientIds: string[] }
 export interface Slot { employeeId: string; startAt: string; endAt: string }
 
 export interface AppointmentLocation { id: string; name: string; active: boolean; timezone: string;
@@ -238,7 +241,8 @@ export const api = {
     const query = new URLSearchParams(input);
     return request<{ slots: Slot[] }>(`/api/availability?${query}`);
   },
-  searchCustomers: (q: string) => request<{ customers: Customer[] }>(`/api/customers?${new URLSearchParams({ q })}`),
+  searchCustomers: (q: string, limit = 100) => request<{ customers: Customer[] }>(`/api/customers?${new URLSearchParams({ q, limit: String(limit) })}`),
+  officeDirectory: () => request<{ customers: DirectoryCustomer[]; professionals: DirectoryProfessional[] }>("/api/office/directory"),
   customer: (id: string) => request<Customer>(`/api/customers/${encodeURIComponent(id)}`),
   customerHistory: (id: string) => request<{ appointments: Appointment[] }>(`/api/customers/${encodeURIComponent(id)}/appointments`),
   updateCustomer: (id: string, input: Partial<Pick<Customer, "name" | "phone" | "email" | "preferredLanguage" | "emailOptIn">>) =>
