@@ -32,7 +32,6 @@ const business = ref<Business>();
 const apiOnline = ref(false);
 const googleCalendar = ref<GoogleCalendarStatus>({ configured: false, connected: false });
 const readiness = ref<Readiness>();
-const calendarNeedsReconnect = ref(new URLSearchParams(window.location.search).get("calendar") === "failed");
 const globalError = ref("");
 const busy = ref(false);
 const customer = ref<Customer>();
@@ -157,7 +156,7 @@ function statusLabel(status: string): string {
       <section v-else-if="section === 'overview'" class="view home-view">
         <div class="home-intro">
           <div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1><p>{{ t('homeSubtitle') }}</p></div>
-          <div class="home-actions"><span class="pill success">{{ t('systemReady') }}</span><button class="primary" @click="chooseSection('agent')">{{ t('testAgent') }} <span aria-hidden="true">→</span></button></div>
+          <div class="home-actions"><span :class="['pill', { success: readiness?.ready }]">{{ readiness?.ready ? t('systemReady') : 'Setup required' }}</span><button class="primary" @click="chooseSection('agent')">{{ t('testAgent') }} <span aria-hidden="true">→</span></button></div>
         </div>
         <div class="home-dashboard">
           <section class="home-snapshot" aria-labelledby="home-status-title">
@@ -171,7 +170,7 @@ function statusLabel(status: string): string {
           <article class="home-calendar">
             <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
             <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }}</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
-            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
+            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">Reconnect Google Calendar</button><span v-else class="pill">{{ t('notConfigured') }}</span>
           </article>
           <article v-if="readiness" class="home-calendar"><div><p class="eyebrow">Go-live readiness</p><h3>{{ readiness.ready ? 'Ready for pilot checks' : 'Setup required' }}</h3><p v-if="readiness.blockers.length">{{ readiness.blockers.join(' · ') }}</p><p v-else>Core providers and location relationships are configured.</p><ul><li v-for="item in readiness.locations" :key="item.id">{{ item.name }}: {{ item.ready ? 'Ready' : item.issues.join(', ') }}</li></ul></div><span :class="['pill', { success: readiness.ready }]">{{ readiness.ready ? 'Ready' : 'Needs setup' }}</span></article>
         </div>

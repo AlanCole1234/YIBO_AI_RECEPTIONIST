@@ -47,6 +47,9 @@ production process supervisor or a deployment command.
   outcomes. See [business operations](BUSINESS_OPERATIONS.md).
 - **Readiness:** an administrator should review `/api/admin/readiness` before live
   acceptance; resolve provider and per-location blockers without copying secrets.
+  Calendar is reported connected only when its current access token is usable or
+  its refresh succeeds. If Google expires or revokes the grant, use **Reconnect
+  Google Calendar**; an existing calendar mapping is not sufficient.
 - **Conflicts:** copy the intended draft before choosing discard/reload and reapply
   against the current version. Never bypass `If-Match` or force-save stale data.
   See [UI-009](OPTIMISTIC_EDITING.md). Session expiry can discard in-memory drafts.

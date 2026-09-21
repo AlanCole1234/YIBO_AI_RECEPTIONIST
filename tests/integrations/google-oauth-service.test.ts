@@ -49,6 +49,16 @@ describe("GoogleOAuthService", () => {
     expect(tokens.value).toMatchObject({ accessToken: "fresh", refreshToken: "refresh" });
   });
 
+  it("does not report a revoked or unreachable token as connected", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "expired", refreshToken: "revoked", expiresAt: "2020-01-01T00:00:00.000Z" };
+    const rejected = new GoogleOAuthService(config, tokens, async () => new Response(null, { status: 400 }));
+    await expect(rejected.status("tenant-1")).resolves.toEqual({ configured: true, connected: false });
+
+    const unreachable = new GoogleOAuthService(config, tokens, async () => { throw new Error("offline"); });
+    await expect(unreachable.status("tenant-1")).resolves.toEqual({ configured: true, connected: false });
+  });
+
   it("checks calendar access with the tenant token and maps safe statuses", async () => {
     const tokens = new MemoryTokenStore();
     tokens.value = { accessToken: "tenant-access", expiresAt: "2099-01-01T00:00:00.000Z" };

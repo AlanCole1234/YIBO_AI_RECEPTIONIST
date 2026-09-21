@@ -19,8 +19,12 @@ export class GoogleOAuthService {
 
   async status(tenantId: string): Promise<GoogleIntegrationStatus> {
     const configured = this.isConfigured();
-    const token = configured ? await this.tokens.get(tenantId) : null;
-    return { configured, connected: token !== null };
+    if (!configured) return { configured: false, connected: false };
+    try {
+      return { configured: true, connected: (await this.accessToken(tenantId)) !== null };
+    } catch {
+      return { configured: true, connected: false };
+    }
   }
 
   authorizationUrl(tenantId: string, returnTo: string): string | null {
@@ -66,13 +70,18 @@ export class GoogleOAuthService {
     if (new Date(current.expiresAt).valueOf() > Date.now() + 60_000) return current.accessToken;
     if (!current.refreshToken || !this.isConfigured()) return null;
 
-    const response = await this.fetcher("https://oauth2.googleapis.com/token", {
-      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
-        refresh_token: current.refreshToken, grant_type: "refresh_token",
-      }),
-    });
+    let response: Response;
+    try {
+      response = await this.fetcher("https://oauth2.googleapis.com/token", {
+        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
+          refresh_token: current.refreshToken, grant_type: "refresh_token",
+        }),
+      });
+    } catch {
+      return null;
+    }
     if (!response.ok) return null;
     const payload = await response.json() as { access_token?: string; expires_in?: number };
     if (!payload.access_token) return null;
