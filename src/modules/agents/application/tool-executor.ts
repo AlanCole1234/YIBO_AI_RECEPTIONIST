@@ -2,7 +2,7 @@ import { trustedToolScope } from "./trusted-tool-scope.js";
 import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { AppointmentService } from "../../appointments/index.js";
 import type { SchedulingService } from "../../scheduling/index.js";
-import type { BusinessDirectory } from "../../business/index.js";
+import { resolvedAiCapabilities, type BusinessDirectory } from "../../business/index.js";
 import type { CustomerService } from "../../customers/index.js";
 import type { Clock } from "../../../shared/application/system.js";
 import type { HumanTransferPort } from "../ports/agent-dependencies.js";
@@ -76,13 +76,14 @@ export class ToolExecutorImpl implements ToolExecutor {
         durationMinutes: service.durationMinutes,
         locations: activeLocations.flatMap((location) => {
           const offer = location.services.find((candidate) => candidate.active && candidate.serviceId === service.id);
+          const capabilities = resolvedAiCapabilities(location);
           return offer ? [{
             name: location.name,
-            price: {
+            ...(capabilities.quotePrices ? { price: {
               amountMinor: offer.price.amountMinor,
               currency: offer.price.currency,
               display: formatMoney(offer.price.amountMinor, offer.price.currency, location.locale),
-            },
+            } } : {}),
           }] : [];
         }),
       }))
@@ -138,10 +139,18 @@ export class ToolExecutorImpl implements ToolExecutor {
   private async updateCustomer(context: ToolExecutionContext, call: AgentToolCall) {
     if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Ask for the caller's name and phone number before booking.", false);
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["name", "phone"], ["name", "phone"]) || !text(input.name) || !hasFirstAndLastName(input.name) || !text(input.phone) || !this.customers) {
-      return invalid(call, "A first and last name and a valid phone number are required.");
+    if (!exactKeys(input, ["name", "phone", "email", "preferredLanguage"], ["name"])
+      || !text(input.name) || !hasFirstAndLastName(input.name) || !this.customers) {
+      return invalid(call, "A first and last name and at least one allowed contact field are required.");
     }
-    const updated = await this.customers.updateCustomer({ tenantId: context.tenantId, customerId: context.customerId, name: input.name, phone: input.phone });
+    const location = await this.businesses?.getLocation(context.tenantId, context.locationId);
+    if (!location?.ok) return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Contact information cannot be saved right now.", false);
+    const capabilities = resolvedAiCapabilities(location.value.location);
+    if (input.phone !== undefined && (!capabilities.collectPhone || !text(input.phone))) return invalid(call, "Phone collection is not allowed.");
+    if (input.email !== undefined && (!capabilities.collectEmail || !text(input.email))) return invalid(call, "Email collection is not allowed.");
+    const updated = await this.customers.updateCustomer({ tenantId: context.tenantId, customerId: context.customerId,
+      name: input.name, ...(text(input.phone) ? { phone: input.phone } : {}), ...(text(input.email) ? { email: input.email } : {}),
+      ...(text(input.preferredLanguage) ? { preferredLanguage: input.preferredLanguage } : {}) });
     return updated.ok ? { toolCallId: call.toolCallId, ok: true as const, data: { saved: true } }
       : toolError(call, updated.error.code, "The contact information could not be saved. Ask for the phone number again.", false);
   }

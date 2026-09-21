@@ -1,4 +1,5 @@
 import { buildAsteriskIntegration } from "./asterisk-integration.js";
+import { randomUUID } from "node:crypto";
 import {
   defaultDatabasePath,
   migrateDatabase,
@@ -14,6 +15,8 @@ import { SqliteAdminIdentityRepository } from "../infrastructure/database/sqlite
 import { SqliteAdminAuditLog } from "../infrastructure/database/sqlite-admin-audit-log.js";
 import { SqliteCustomerRepository } from "../infrastructure/database/sqlite-customer-repository.js";
 import { SqliteAppointmentRepository } from "../infrastructure/database/sqlite-appointment-repository.js";
+import { SqliteNotificationRepository } from "../infrastructure/database/sqlite-notification-repository.js";
+import { NotificationService, ResendEmailSender } from "../modules/notifications/index.js";
 import {
   AgentConfigurationService,
   DEFAULT_REALTIME_MODEL,
@@ -89,6 +92,11 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   }
 
   const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
+  const notifications = new NotificationService(new SqliteNotificationRepository(database, tenant.region),
+    customerRepository, new BusinessDirectoryService(businessRepository),
+    environment.RESEND_API_KEY?.trim() && environment.YIBO_EMAIL_FROM?.trim()
+      ? new ResendEmailSender(environment.RESEND_API_KEY.trim(), environment.YIBO_EMAIL_FROM.trim()) : undefined,
+    () => `notification-${randomUUID()}`);
   const asterisk = options.enableAsteriskTelephony && !options.telephonyGateway ? buildAsteriskIntegration(environment) : undefined;
   const application = buildApplication({
     ...options,
@@ -101,6 +109,9 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     callRepository,
     customerRepository,
     appointmentRepository,
+    appointmentNotifications: notifications,
+    providerReadiness: { email: Boolean(environment.RESEND_API_KEY?.trim() && environment.YIBO_EMAIL_FROM?.trim()),
+      telephony: Boolean(asterisk), calendar: Boolean(google), realtime: applicationRuntimeConfigured(environment) },
     adminIdentityRepository: options.adminIdentityRepository
       ?? new SqliteAdminIdentityRepository(database, tenant.region),
     adminAuditLog: options.adminAuditLog ?? new SqliteAdminAuditLog(database, tenant.region),
@@ -113,6 +124,9 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   if (asterisk) await asterisk.client.connect();
   return application;
 }
+
+const applicationRuntimeConfigured = (environment: NodeJS.ProcessEnv) =>
+  environment.YIBO_RUNTIME?.trim() === "openai-realtime" && Boolean(environment.OPENAI_API_KEY?.trim());
 
 function buildGoogleIntegration(
   environment: NodeJS.ProcessEnv,

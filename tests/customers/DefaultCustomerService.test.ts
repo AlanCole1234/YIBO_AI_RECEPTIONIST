@@ -35,6 +35,10 @@ describe("DefaultCustomerService", () => {
         phone: "+529991234567",
         name: "Ana",
         email: "ana@example.com",
+        emailOptIn: true,
+        source: "UNKNOWN",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
       },
     });
     expect(found).toEqual(created);
@@ -83,6 +87,10 @@ describe("DefaultCustomerService", () => {
         phone: "+529991112233",
         name: "Ana",
         email: "new@example.com",
+        emailOptIn: true,
+        source: "UNKNOWN",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
       },
     });
   });

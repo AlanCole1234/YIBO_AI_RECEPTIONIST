@@ -3,11 +3,14 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## Estado actual — 20 de septiembre de 2026
+## Estado actual — 21 de septiembre de 2026
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
 - Checkpoint final: **477 pruebas aprobadas, 1 live omitida**, ambos typechecks y build de producción.
 - Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
+- Plan de operaciones iniciado en `codex/yibo-business-operations`: auditoría
+  funcional e implementación agrupada completadas; typecheck, 477 pruebas y build
+  de producción aprobados. La aceptación live permanece separada.
 - Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
 
 ## Historial de checkpoints verificados
@@ -191,6 +194,19 @@ con `pnpm test` y `pnpm build`.
 | CLOSE-002 | DONE | Política de mapping protegida atómicamente por citas no canceladas; histórico/pending/fallos, override/fallback y E2E Google. Ver BOOKED_CALENDAR_ROUTES.md |
 | ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
 | DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
+
+## Plan de operaciones del negocio
+
+| ID | Estado | Resultado |
+|---|---|---|
+| OPS-000 | DONE | Auditoría y matriz de brechas de configuración contra código actual |
+| OPS-001 | DONE | Workspace día/semana/mes/agenda, filtros, huecos y reserva rápida |
+| OPS-002 | DONE | Búsqueda, perfil e historial tenant-scoped de clientes |
+| OPS-003 | DONE | Reglas estructuradas de agenda y capacidades IA por sucursal |
+| OPS-004 | DONE | Eventos, outcomes y correo Resend posterior al commit |
+| OPS-005 | DONE | Roles operativos y modo read-only con guard transversal |
+| OPS-006 | DONE | Readiness de proveedores/sucursales y reconexión ARI; typecheck, 477 pruebas + 1 live omitida y build aprobados |
+| OPS-007 | TODO | Aceptación browser, PBX, Google y correo real con datos sintéticos; requiere operador y credenciales live |
 
 ## Registro de decisiones
 

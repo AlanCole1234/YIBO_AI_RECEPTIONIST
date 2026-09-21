@@ -6,7 +6,7 @@ do not authorize changing a running deployment.
 
 ## Ownership and automatic writes
 
-`src/infrastructure/database/regional-database.ts` registers migrations 1–9.
+`src/infrastructure/database/regional-database.ts` registers migrations 1–10.
 `migrateDatabase` uses a write transaction and `schema_migrations`; already-applied
 versions are skipped. `openRegionalDatabase` enables foreign keys, a five-second
 busy timeout and WAL. Configured API/Voice Lab startup migrates and seeds the chosen
@@ -44,7 +44,9 @@ Treat starting new code against existing data as a write operation.
    tenant isolation, default-location backfill, configuration versions, appointment
    name/price snapshots, original Google event IDs, times and statuses. Count equality
    alone does not prove preservation. Opening agent configuration may upgrade JSON;
-   include that read path in the rehearsal.
+   include that read path in the rehearsal. For migration 10, also verify customer
+   metadata defaults, appointment outcomes, appointment events and notification
+   deliveries.
 5. Run relevant SQLite tests, both typechecks, full tests and production build for
    REL-001. Keep a report containing counts/checksums/results, not raw customer rows.
    Verify calendar integration on isolated test resources only.

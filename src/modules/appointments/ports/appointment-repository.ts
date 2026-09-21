@@ -6,7 +6,7 @@ import type {
   LocationId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
-import type { Appointment } from "../domain/appointment.js";
+import type { Appointment, AppointmentEvent } from "../domain/appointment.js";
 
 export interface AppointmentRepository {
   findById(tenantId: TenantId, appointmentId: AppointmentId): Promise<Appointment | null>;
@@ -17,6 +17,11 @@ export interface AppointmentRepository {
     customerId: CustomerId;
     startsAtOrAfter: ISODateTime;
   }): Promise<Appointment[]>;
+  findByRange(query: { tenantId: TenantId; locationId: LocationId; rangeStart: ISODateTime; rangeEnd: ISODateTime;
+    employeeId?: string; serviceId?: string; status?: string }): Promise<Appointment[]>;
+  findHistoryByCustomer(tenantId: TenantId, customerId: CustomerId, limit: number): Promise<Appointment[]>;
+  appendEvent(event: AppointmentEvent): Promise<void>;
+  listEvents(tenantId: TenantId, appointmentId: AppointmentId): Promise<AppointmentEvent[]>;
   hasProfessionalReferences(query: {
     tenantId: TenantId;
     professionalId: string;

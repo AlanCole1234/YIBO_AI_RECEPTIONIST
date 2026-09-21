@@ -25,13 +25,22 @@ const policyFields = [
 ] as const;
 async function load() {
   await editor.load();
+  state.draft?.locations.forEach(ensureOperationalDefaults);
   if (!state.draft?.locations.some(({ id }) => id === selectedId.value)) selectedId.value = state.draft?.locations[0]?.id ?? "";
 }
 async function save() { if (await editor.save()) emit("saved"); }
 function addLocation() {
   if (!location.value || !state.draft) return;
   const added = newLocation(location.value, crypto.randomUUID());
-  state.draft.locations.push(added); selectedId.value = added.id; state.saved = false;
+  ensureOperationalDefaults(added); state.draft.locations.push(added); selectedId.value = added.id; state.saved = false;
+}
+function ensureOperationalDefaults(value: NonNullable<typeof location.value>) {
+  value.policies.sameDayBooking ??= true; value.policies.cancellationAllowed ??= true;
+  value.policies.reschedulingAllowed ??= true; value.policies.staffOverrideAllowed ??= false;
+  value.aiCapabilities ??= { bookAppointments: true, rescheduleAppointments: true, cancelAppointments: true,
+    quotePrices: true, describeServices: true, offerEarliest: true, offerAlternatives: true,
+    collectEmail: false, collectPhone: true, sendAppointmentEmails: true, transferToHuman: true,
+    afterHoursBehavior: "INFORMATION_ONLY" };
 }
 function addClosure() {
   location.value?.closures.push({ id: crypto.randomUUID(), startLocal: "", endLocal: "", administrativeReason: "" });
@@ -94,8 +103,30 @@ onMounted(load);
           <h3>Booking policies</h3>
           <div class="fields">
             <label>Default service<select v-model="location.policies.defaultServiceId" required><option v-for="assignment in location.services.filter(item => item.active)" :key="assignment.serviceId" :value="assignment.serviceId">{{ state.draft.services.find(service => service.id === assignment.serviceId)?.name ?? assignment.serviceId }}</option></select></label>
-            <label>Slot interval (minutes)<select v-model.number="location.policies.slotIncrementMinutes"><option v-for="minutes in [5, 10, 15, 20, 30, 60]" :key="minutes" :value="minutes">{{ minutes }}</option></select></label>
+            <label>Slot interval (minutes)<select v-model.number="location.policies.slotIncrementMinutes"><option v-for="minutes in [5, 10, 15, 20, 30, 45, 60]" :key="minutes" :value="minutes">{{ minutes }}</option></select></label>
             <label v-for="field in policyFields" :key="field.key">{{ field.label }}<input v-model.number="location.policies[field.key]" type="number" :min="field.min" step="1" required></label>
+          </div>
+          <div class="fields">
+            <label class="check"><input v-model="location.policies.sameDayBooking" type="checkbox">Allow same-day booking</label>
+            <label class="check"><input v-model="location.policies.cancellationAllowed" type="checkbox">Allow cancellation</label>
+            <label class="check"><input v-model="location.policies.reschedulingAllowed" type="checkbox">Allow rescheduling</label>
+            <label class="check"><input v-model="location.policies.staffOverrideAllowed" type="checkbox">Allow authorized staff overrides</label>
+          </div>
+          <h3>AI permissions</h3>
+          <p class="help">These controls are enforced by backend tool policy. Turning a capability off removes or restricts the corresponding action.</p>
+          <div v-if="location.aiCapabilities" class="fields">
+            <label class="check"><input v-model="location.aiCapabilities.bookAppointments" type="checkbox">Book appointments</label>
+            <label class="check"><input v-model="location.aiCapabilities.rescheduleAppointments" type="checkbox">Reschedule appointments</label>
+            <label class="check"><input v-model="location.aiCapabilities.cancelAppointments" type="checkbox">Cancel appointments</label>
+            <label class="check"><input v-model="location.aiCapabilities.describeServices" type="checkbox">Describe services</label>
+            <label class="check"><input v-model="location.aiCapabilities.quotePrices" type="checkbox">Quote prices</label>
+            <label class="check"><input v-model="location.aiCapabilities.offerEarliest" type="checkbox">Offer earliest availability</label>
+            <label class="check"><input v-model="location.aiCapabilities.offerAlternatives" type="checkbox">Offer multiple alternatives</label>
+            <label class="check"><input v-model="location.aiCapabilities.collectPhone" type="checkbox">Collect callback phone</label>
+            <label class="check"><input v-model="location.aiCapabilities.collectEmail" type="checkbox">Collect email address</label>
+            <label class="check"><input v-model="location.aiCapabilities.sendAppointmentEmails" type="checkbox">Send appointment emails</label>
+            <label class="check"><input v-model="location.aiCapabilities.transferToHuman" type="checkbox">Transfer to a human</label>
+            <label>After-hours behavior<select v-model="location.aiCapabilities.afterHoursBehavior"><option value="INFORMATION_ONLY">Information only</option><option value="BOOK">Allow booking</option><option value="TRANSFER">Transfer</option></select></label>
           </div>
           <h3>Human transfer</h3>
           <div class="fields">

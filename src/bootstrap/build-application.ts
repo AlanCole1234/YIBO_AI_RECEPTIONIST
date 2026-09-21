@@ -76,6 +76,7 @@ import {
 import { loadConfiguration, type ApplicationConfiguration } from "./configuration.js";
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
 import type { OrganizationCostReader } from "../modules/billing/index.js";
+import type { AppointmentNotificationService } from "../modules/notifications/index.js";
 import type { TelephonyGateway } from "../modules/telephony/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
 import {
@@ -124,6 +125,8 @@ export interface YiboApplication {
     sessions: AdminSessionPort;
   };
   adminAudit: AdminAuditService;
+  notifications?: AppointmentNotificationService;
+  providerReadiness: { email: boolean; telephony: boolean; calendar: boolean; realtime: boolean };
   registerCallMedia(callId: string, transport: ConversationTransport): void;
 }
 
@@ -152,6 +155,8 @@ export interface BuildApplicationOptions {
   adminAuditLog?: AdminAuditLogPort;
   adminSession?: AdminSessionPort;
   adminSessionSecret?: string;
+  appointmentNotifications?: AppointmentNotificationService;
+  providerReadiness?: Partial<YiboApplication["providerReadiness"]>;
   /** Only the local development voice harness may set this true. */
   developerTestModeAuthorized?: boolean;
 }
@@ -234,6 +239,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     new InMemoryAppointmentConcurrencyGuard(),
     () => ids.generate("appointment"),
     clock,
+    options.appointmentNotifications,
   );
   // Developer Test Mode must be repeatable without touching a connected Google
   // Calendar. It uses the same scheduling and appointment services, with an
@@ -342,6 +348,9 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     ids,
     adminAuth,
     adminAudit,
+    ...(options.appointmentNotifications ? { notifications: options.appointmentNotifications } : {}),
+    providerReadiness: { email: false, telephony: false, calendar: Boolean(options.calendar),
+      realtime: config.runtime === "openai-realtime", ...options.providerReadiness },
     ...(billing ? { billing } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
     registerCallMedia: (callId, transport) => registeredVoice.register(callId, transport),

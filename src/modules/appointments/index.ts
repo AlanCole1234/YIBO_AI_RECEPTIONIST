@@ -8,10 +8,12 @@ export type {
   CreateAppointmentError,
   GetAppointmentQuery,
   ListUpcomingAppointmentsQuery,
+  ListAppointmentsQuery,
+  MarkAppointmentOutcomeCommand,
   RescheduleAppointmentCommand,
   RescheduleAppointmentError,
 } from "./application/contracts.js";
-export type { Appointment, AppointmentStatus } from "./domain/appointment.js";
+export type { Appointment, AppointmentStatus, AppointmentEvent } from "./domain/appointment.js";
 export type { AppointmentRepository } from "./ports/appointment-repository.js";
 export type {
   AppointmentCalendarError,

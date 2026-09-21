@@ -8,7 +8,7 @@ import type {
   ToolExecutor,
 } from "./contracts.js";
 import { AGENT_TOOL_DEFINITIONS, isDeveloperTestTool } from "./tool-definitions.js";
-import type { BusinessDirectory } from "../../business/index.js";
+import { resolvedAiCapabilities, type BusinessDirectory, type LocationAiCapabilities } from "../../business/index.js";
 import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
 import { PolicyEnforcingToolExecutor } from "./policy-enforcing-tool-executor.js";
 import { ConfirmationGateToolExecutor } from "./confirmation-gate-tool-executor.js";
@@ -34,11 +34,18 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       return failure<AgentDefinitionError>({ code: "CHANNEL_CONFIGURATION_INCOMPATIBLE" });
     }
     const channelPolicy = configuration.toolPolicies.channels[channel];
+    const businessCapabilities = resolvedAiCapabilities(location.value.location);
+    const behavior = structuredClone(configuration.behavior);
+    if (!businessCapabilities.offerAlternatives) behavior.slotOffering.maximumOptions = 1;
+    if (!businessCapabilities.offerEarliest && behavior.slotOffering.strategy === "earliest_first") {
+      behavior.slotOffering.strategy = "match_requested_time";
+    }
     const channelTools = new Set(channelPolicy.toolChoice === "none" ? [] : channelPolicy.enabledTools);
     const tools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
       isDeveloperTestTool(tool.name)
         ? command.developerTestModeAuthorized && channelPolicy.toolChoice !== "none"
-        : configuration.enabledTools.includes(tool.name) && channelTools.has(tool.name),
+        : configuration.enabledTools.includes(tool.name) && channelTools.has(tool.name)
+          && capabilityAllowsTool(tool.name, businessCapabilities),
     );
     const instructions = this.prompts.compile({
       editableInstructions: configuration.identity.instructions,
@@ -49,7 +56,10 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       enabledTools: tools.map(({ name }) => name),
       confirmationRequiredFor: configuration.toolPolicies.confirmations.requiredFor
         .filter((name) => tools.some((tool) => tool.name === name)),
-      behavior: configuration.behavior,
+      behavior,
+      priceDisclosureAllowed: businessCapabilities.quotePrices,
+      emailCollectionAllowed: businessCapabilities.collectEmail,
+      afterHoursBehavior: businessCapabilities.afterHoursBehavior,
     });
 
     const definition: AgentDefinition = {
@@ -58,7 +68,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       voice: configuration.audio.voice,
       conversation: structuredClone(configuration.conversation),
       audio: structuredClone(configuration.audio),
-      behavior: structuredClone(configuration.behavior),
+      behavior,
       toolChoice: channelPolicy.toolChoice,
       parallelToolCalls: channelPolicy.parallelToolCalls,
       channel,
@@ -76,3 +86,13 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     return success(definition);
   }
 }
+
+const capabilityAllowsTool = (tool: string, capabilities: LocationAiCapabilities): boolean => {
+  if (tool === "create_appointment") return capabilities.bookAppointments;
+  if (tool === "reschedule_appointment") return capabilities.rescheduleAppointments;
+  if (tool === "cancel_appointment") return capabilities.cancelAppointments;
+  if (tool === "get_service_information") return capabilities.describeServices;
+  if (tool === "update_customer") return capabilities.collectPhone || capabilities.collectEmail;
+  if (tool === "transfer_to_human") return capabilities.transferToHuman;
+  return true;
+};

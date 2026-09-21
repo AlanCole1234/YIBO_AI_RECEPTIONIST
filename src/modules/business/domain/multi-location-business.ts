@@ -11,7 +11,7 @@ import type { OpeningHoursRule } from "../application/contracts.js";
 import { validateMoney, type Money } from "./money.js";
 
 export const MULTI_LOCATION_BUSINESS_SCHEMA_VERSION = 2 as const;
-export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 60] as const;
+export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 45, 60] as const;
 
 export interface TenantServiceDefinition {
   id: ServiceId;
@@ -53,6 +53,25 @@ export interface LocationSchedulingPolicy {
   minimumCancellationNoticeMinutes: number;
   minimumRescheduleNoticeMinutes: number;
   concurrentCapacity: number;
+  sameDayBooking?: boolean;
+  cancellationAllowed?: boolean;
+  reschedulingAllowed?: boolean;
+  staffOverrideAllowed?: boolean;
+}
+
+export interface LocationAiCapabilities {
+  bookAppointments: boolean;
+  rescheduleAppointments: boolean;
+  cancelAppointments: boolean;
+  quotePrices: boolean;
+  describeServices: boolean;
+  offerEarliest: boolean;
+  offerAlternatives: boolean;
+  collectEmail: boolean;
+  collectPhone: boolean;
+  sendAppointmentEmails: boolean;
+  transferToHuman: boolean;
+  afterHoursBehavior: "INFORMATION_ONLY" | "BOOK" | "TRANSFER";
 }
 
 export interface LocationServiceAssignment {
@@ -88,7 +107,16 @@ export interface LocationDefinition {
   professionals: LocationProfessionalAssignment[];
   defaultCalendarId?: string;
   transferDestination?: LocationTransferDestination;
+  aiCapabilities?: LocationAiCapabilities;
 }
+
+export const resolvedAiCapabilities = (location: LocationDefinition): LocationAiCapabilities => ({
+  bookAppointments: true, rescheduleAppointments: true, cancelAppointments: true,
+  quotePrices: true, describeServices: true, offerEarliest: true, offerAlternatives: true,
+  collectEmail: false, collectPhone: true, sendAppointmentEmails: true,
+  transferToHuman: true, afterHoursBehavior: "INFORMATION_ONLY",
+  ...location.aiCapabilities,
+});
 
 export interface BusinessConfigurationV2 {
   schemaVersion: typeof MULTI_LOCATION_BUSINESS_SCHEMA_VERSION;
@@ -207,6 +235,9 @@ export const validateMultiLocationBusiness = (
     }
     if (location.transferDestination !== undefined && !isValidTransferDestination(location.transferDestination)) {
       errors.push({ path: `${path}.transferDestination`, message: "Invalid phone number or extension." });
+    }
+    if (location.aiCapabilities && !["INFORMATION_ONLY", "BOOK", "TRANSFER"].includes(location.aiCapabilities.afterHoursBehavior)) {
+      errors.push({ path: `${path}.aiCapabilities.afterHoursBehavior`, message: "Invalid after-hours behavior." });
     }
   }
   if (profile.active && !profile.locations.some(({ active }) => active)) {

@@ -10,6 +10,9 @@ export interface FindOrCreateCustomerByPhoneCommand {
   phone: string;
   name?: string;
   email?: string;
+  preferredLanguage?: string;
+  emailOptIn?: boolean;
+  source?: Customer["source"];
 }
 
 export interface UpdateCustomerCommand {
@@ -18,6 +21,8 @@ export interface UpdateCustomerCommand {
   phone?: string;
   name?: string;
   email?: string;
+  preferredLanguage?: string;
+  emailOptIn?: boolean;
 }
 
 export type CustomerError =
@@ -33,4 +38,6 @@ export interface CustomerService {
   updateCustomer(
     command: UpdateCustomerCommand,
   ): Promise<Result<Customer, CustomerError>>;
+  getCustomer(tenantId: TenantId, customerId: CustomerId): Promise<Result<Customer, CustomerError>>;
+  searchCustomers(tenantId: TenantId, query: string, limit?: number): Promise<Customer[]>;
 }

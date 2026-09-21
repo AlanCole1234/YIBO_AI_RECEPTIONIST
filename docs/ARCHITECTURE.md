@@ -28,6 +28,7 @@ flowchart LR
   EXEC --> SCHED["scheduling"]
   EXEC --> APPT["appointments"]
   EXEC --> CUST["customers"]
+  APPT --> NOTIFY["notifications"]
   SCHED --> CAL["Google / in-memory calendar"]
   APPT --> CAL
 ```
@@ -61,6 +62,7 @@ dueño de la sesión; Voice sólo transporta PCM mono de 24 kHz.
 | `telephony` | Contrato y gateway Asterisk |
 | `integrations` | Google OAuth/Calendar y calendario en memoria |
 | `billing` | Lectura opcional de costos de organización OpenAI |
+| `notifications` | Correo transaccional posterior al commit y registro seguro de entregas |
 
 Business ya define el contrato validado de siguiente generación: catálogos de
 servicios y profesionales compartidos y sucursales con `LocationId`, dirección,
@@ -118,6 +120,11 @@ mínimos de cancelación y reprogramación; el prompt no puede evadirlos.
 La capacidad del profesional permanece en 1 y se aplica además el límite
 concurrente de la sucursal. Las reservas se serializan por `{tenant, location}`
 para que profesionales distintos no excedan el último cupo durante una carrera.
+
+La interfaz de oficina consume el mismo servicio de Scheduling para mostrar huecos
+y el mismo servicio de Appointments para mutar. Los eventos de cita forman una línea
+de tiempo inmutable de operación. El correo es un efecto posterior al éxito: una
+falla de proveedor se registra, pero no revierte la cita ni el calendario.
 
 Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
 el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación Google modifica el evento original con PATCH condicional

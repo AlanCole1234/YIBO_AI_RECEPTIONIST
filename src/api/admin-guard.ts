@@ -25,6 +25,10 @@ export const createAdminGuard = (app: YiboApplication, requiredRole: AdminRole) 
       await reply.code(403).send({ error: { code: "ROLE_REQUIRED" } });
       return;
     }
+    if (isMutation(request.method) && verified.principal.roles.includes("read_only")) {
+      await reply.code(403).send({ error: { code: "READ_ONLY_ROLE" } });
+      return;
+    }
     if (isMutation(request.method) && request.headers.origin !== app.config.dashboardOrigin) {
       await reply.code(403).send({ error: { code: "ORIGIN_NOT_ALLOWED" } });
       return;

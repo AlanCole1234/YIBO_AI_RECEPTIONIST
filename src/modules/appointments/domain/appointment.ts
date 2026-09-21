@@ -33,4 +33,15 @@ export interface Appointment {
   source: "AI_CALL" | "DASHBOARD" | "API" | "DEVELOPER_TEST";
   sourceCallId?: CallId;
   externalCalendarEventId?: string;
+  outcomeStatus?: "COMPLETED" | "NO_SHOW";
+}
+
+export interface AppointmentEvent {
+  id: string;
+  tenantId: TenantId;
+  appointmentId: AppointmentId;
+  type: "CREATED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
+  occurredAt: ISODateTime;
+  actorType: "AI" | "OFFICE" | "SYSTEM";
+  metadata?: Record<string, string>;
 }

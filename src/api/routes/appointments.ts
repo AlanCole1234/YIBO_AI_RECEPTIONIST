@@ -4,6 +4,7 @@ import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 interface AppointmentBody {
+  locationId?: unknown;
   customerId?: unknown;
   serviceId?: unknown;
   employeeId?: unknown;
@@ -11,6 +12,25 @@ interface AppointmentBody {
 }
 
 export async function registerAppointmentRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
+  server.get<{ Querystring: { locationId?: string; rangeStart?: string; rangeEnd?: string; employeeId?: string;
+    serviceId?: string; status?: string } }>("/api/office/schedule", { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
+      const { locationId, rangeStart, rangeEnd, employeeId, serviceId, status } = request.query;
+      if (!locationId || !rangeStart || !rangeEnd || Number.isNaN(Date.parse(rangeStart))
+        || Number.isNaN(Date.parse(rangeEnd)) || rangeStart >= rangeEnd) {
+        return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
+      }
+      const appointments = await app.appointments.listAppointments({ tenantId: app.tenantId, locationId,
+        rangeStart, rangeEnd, ...(employeeId ? { employeeId } : {}), ...(serviceId ? { serviceId } : {}),
+        ...(status ? { status } : {}) });
+      let slots: Array<{ employeeId: string; startAt: string; endAt: string }> = [];
+      if (serviceId) {
+        const available = await app.scheduling.findAvailableSlots({ tenantId: app.tenantId, locationId,
+          serviceId, ...(employeeId ? { employeeId } : {}), rangeStart, rangeEnd, limit: 500 });
+        if (available.ok) slots = available.value;
+      }
+      return { appointments, slots };
+    });
   // Operator-safe metadata, using the same tenant-owned configuration as scheduling.
   server.get("/api/appointment-locations", { preHandler: createAdminGuard(app, "operator") }, async (_request, reply) => {
     const result = await app.business.getBusinessConfiguration(app.tenantId);
@@ -19,6 +39,19 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       id: location.id, name: location.name, active: location.active, timezone: location.timezone,
       minimumCancellationNoticeMinutes: location.policies.minimumCancellationNoticeMinutes,
       minimumRescheduleNoticeMinutes: location.policies.minimumRescheduleNoticeMinutes,
+      cancellationAllowed: location.policies.cancellationAllowed !== false,
+      reschedulingAllowed: location.policies.reschedulingAllowed !== false,
+      staffOverrideAllowed: location.policies.staffOverrideAllowed === true,
+      services: location.services.filter(({ active }) => active).map((assignment) => {
+        const service = result.value.configuration.services.find(({ id }) => id === assignment.serviceId)!;
+        return { id: service.id, name: service.name, durationMinutes: service.durationMinutes };
+      }),
+      professionals: location.professionals.filter(({ active }) => active).map((assignment) => ({
+        id: assignment.professionalId,
+        name: result.value.configuration.professionals.find(({ id }) => id === assignment.professionalId)?.displayName
+          ?? assignment.professionalId,
+        serviceIds: assignment.serviceIds,
+      })),
     })) };
   });
 
@@ -62,7 +95,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     "/api/appointments",
     { preHandler: createAdminGuard(app, "operator") },
     async (request, reply) => {
-    const { customerId, serviceId, employeeId, startAt } = request.body ?? {};
+    const { locationId, customerId, serviceId, employeeId, startAt } = request.body ?? {};
     if (![customerId, serviceId, employeeId, startAt].every((value) => typeof value === "string" && value.length > 0)) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
     }
@@ -72,7 +105,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       : `dashboard:${app.ids.generate("idempotency")}`;
     const result = await app.appointments.createAppointment({
       tenantId: app.tenantId,
-      locationId: "default",
+      locationId: typeof locationId === "string" && locationId.trim() ? locationId : "default",
       customerId: customerId as string,
       serviceId: serviceId as string,
       employeeId: employeeId as string,
@@ -93,6 +126,33 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       after: result.value,
     });
     return reply.code(201).send(result.value);
+    },
+  );
+
+  server.get<{ Params: { locationId: string; appointmentId: string } }>(
+    "/api/locations/:locationId/appointments/:appointmentId/events",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request) => ({
+      events: await app.appointments.listAppointmentEvents({ tenantId: app.tenantId, ...request.params }),
+      notifications: app.notifications ? await app.notifications.list(app.tenantId, request.params.appointmentId) : [],
+    }),
+  );
+
+  server.post<{ Params: { locationId: string; appointmentId: string }; Body: { outcome?: unknown } }>(
+    "/api/locations/:locationId/appointments/:appointmentId/outcome",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
+      if (request.body?.outcome !== "COMPLETED" && request.body?.outcome !== "NO_SHOW") {
+        return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
+      }
+      const before = await app.appointments.getAppointment({ tenantId: app.tenantId, ...request.params });
+      const result = await app.appointments.markAppointmentOutcome({ tenantId: app.tenantId, ...request.params,
+        outcome: request.body.outcome });
+      if (!result.ok) { const error = toHttpError(result.error); return reply.code(error.statusCode).send(error.payload); }
+      await app.adminAudit.recordMutation({ principal: adminPrincipalFor(request), entityType: "appointment",
+        entityId: result.value.id, action: request.body.outcome.toLowerCase(), before: before.ok ? before.value : null,
+        after: result.value });
+      return result.value;
     },
   );
 

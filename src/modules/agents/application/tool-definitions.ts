@@ -56,10 +56,11 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "update_customer",
-    description: "Request saving the verified caller's first and last name and best callback phone number. Use only after collecting both values one question at a time; success is the only authority that they were saved.",
+    description: "Request saving approved contact details for the verified caller. Ask only for fields allowed by the business; success is the only authority that they were saved.",
     presentation: { title: "Update customer", help: "Saves the verified caller's name and callback number without returning personal data to the model.", route: "Customers", icon: "✎", kind: "mutate" },
-    inputSchema: { type: "object", additionalProperties: false, required: ["name", "phone"], properties: {
+    inputSchema: { type: "object", additionalProperties: false, required: ["name"], properties: {
       name: { type: "string", minLength: 3 }, phone: { type: "string", minLength: 7 },
+      email: { type: "string", format: "email" }, preferredLanguage: { type: "string", minLength: 2 },
       confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
     } },
   },

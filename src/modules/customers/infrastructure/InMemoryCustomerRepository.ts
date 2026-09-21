@@ -23,6 +23,15 @@ export class InMemoryCustomerRepository implements CustomerRepository {
     this.customers.set(this.key(customer.tenantId, customer.id), { ...customer });
   }
 
+  public async search(tenantId: TenantId, query: string, limit: number): Promise<Customer[]> {
+    const needle = query.toLowerCase();
+    return [...this.customers.values()]
+      .filter((customer) => customer.tenantId === tenantId && (!needle
+        || [customer.name, customer.phone, customer.email].some((value) => value?.toLowerCase().includes(needle))))
+      .sort((a, b) => (a.name ?? a.phone).localeCompare(b.name ?? b.phone))
+      .slice(0, limit).map((customer) => ({ ...customer }));
+  }
+
   private key(tenantId: TenantId, customerId: CustomerId): string {
     return `${tenantId}:${customerId}`;
   }

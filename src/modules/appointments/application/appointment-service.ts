@@ -1,6 +1,7 @@
 import { operationalLog } from "../../../shared/observability/operational-log.js";
 import { failure, success } from "../../../shared/domain/result.js";
 import type { Clock } from "../../../shared/application/system.js";
+import type { AppointmentNotificationService } from "../../notifications/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import type { SchedulingError, SchedulingService } from "../../scheduling/index.js";
 import type { Appointment } from "../domain/appointment.js";
@@ -20,6 +21,8 @@ import type {
   CreateAppointmentError,
   GetAppointmentQuery,
   ListUpcomingAppointmentsQuery,
+  ListAppointmentsQuery,
+  MarkAppointmentOutcomeCommand,
   RescheduleAppointmentCommand,
   RescheduleAppointmentError,
 } from "./contracts.js";
@@ -34,6 +37,7 @@ export class AppointmentServiceImpl implements AppointmentService {
     private readonly guard: AppointmentConcurrencyGuard,
     private readonly createId: () => string,
     private readonly clock: Clock = { now: () => new Date() },
+    private readonly notifications?: AppointmentNotificationService,
   ) {}
 
   async createAppointment(command: CreateAppointmentCommand) {
@@ -55,6 +59,11 @@ export class AppointmentServiceImpl implements AppointmentService {
     const offer = configuration.value.location.services.find((service) => service.serviceId === command.serviceId && service.active);
     if (!offer || !configuration.value.business.services.some((service) => service.id === command.serviceId && service.active)) {
       return failure<CreateAppointmentError>({ code: "SERVICE_NOT_FOUND" });
+    }
+    if (configuration.value.location.policies.sameDayBooking === false
+      && localDay(command.startAt, configuration.value.location.timezone)
+        === localDay(this.clock.now().toISOString(), configuration.value.location.timezone)) {
+      return failure<CreateAppointmentError>({ code: "VALIDATION_ERROR", message: "Same-day booking is disabled" });
     }
     const assigned = configuration.value.location.professionals.some((professional) =>
       professional.professionalId === command.employeeId && professional.active && professional.serviceIds.includes(command.serviceId));
@@ -127,6 +136,8 @@ export class AppointmentServiceImpl implements AppointmentService {
         externalCalendarEventId: external.value.externalEventId,
       };
       await this.repository.save(confirmed);
+      await this.record(confirmed, "CREATED", command.source === "AI_CALL" ? "AI" : "OFFICE");
+      await this.notify("CONFIRMATION", confirmed);
       calendarLog("calendar.booking.completed", { tenantId: confirmed.tenantId, appointmentId: confirmed.id, externalEventId: confirmed.externalCalendarEventId });
       return success(confirmed);
     });
@@ -139,7 +150,8 @@ export class AppointmentServiceImpl implements AppointmentService {
       return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
     }
     const cancellationPolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
-    if (!cancellationPolicy.ok || minutesUntil(appointment.startAt, this.clock.now())
+    if (!cancellationPolicy.ok || cancellationPolicy.value.location.policies.cancellationAllowed === false
+      || minutesUntil(appointment.startAt, this.clock.now())
       < cancellationPolicy.value.location.policies.minimumCancellationNoticeMinutes) {
       return failure<CancelAppointmentError>({ code: "CANCELLATION_NOTICE_NOT_MET" });
     }
@@ -155,6 +167,8 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
     const result: Appointment = { ...appointment, status: "CANCELLED" };
     await this.repository.save(result);
+    await this.record(result, "CANCELLED", "OFFICE");
+    await this.notify("CANCELLATION", result);
     return success(result);
   }
 
@@ -168,7 +182,8 @@ export class AppointmentServiceImpl implements AppointmentService {
       return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
     }
     const reschedulePolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
-    if (!reschedulePolicy.ok || minutesUntil(appointment.startAt, this.clock.now())
+    if (!reschedulePolicy.ok || reschedulePolicy.value.location.policies.reschedulingAllowed === false
+      || minutesUntil(appointment.startAt, this.clock.now())
       < reschedulePolicy.value.location.policies.minimumRescheduleNoticeMinutes) {
       return failure<RescheduleAppointmentError>({ code: "RESCHEDULE_NOTICE_NOT_MET" });
     }
@@ -206,6 +221,8 @@ export class AppointmentServiceImpl implements AppointmentService {
         externalCalendarEventId: appointment.externalCalendarEventId,
       };
       await this.repository.save(updated);
+      await this.record(updated, "RESCHEDULED", "OFFICE", { previousStartAt: appointment.startAt });
+      await this.notify("RESCHEDULE", updated);
       return success(updated);
     });
   }
@@ -223,6 +240,42 @@ export class AppointmentServiceImpl implements AppointmentService {
       startsAtOrAfter: this.clock.now().toISOString(),
     });
   }
+
+  listAppointments(query: ListAppointmentsQuery): Promise<Appointment[]> {
+    return this.repository.findByRange(query);
+  }
+
+  async listAppointmentEvents(query: GetAppointmentQuery) {
+    const appointment = await this.repository.findById(query.tenantId, query.appointmentId);
+    return appointment?.locationId === query.locationId
+      ? this.repository.listEvents(query.tenantId, query.appointmentId) : [];
+  }
+
+  async markAppointmentOutcome(command: MarkAppointmentOutcomeCommand) {
+    const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
+    if (!appointment || appointment.locationId !== command.locationId || appointment.status !== "CONFIRMED") {
+      return failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
+    }
+    const updated: Appointment = { ...appointment, outcomeStatus: command.outcome };
+    await this.repository.save(updated);
+    await this.record(updated, command.outcome, "OFFICE");
+    return success(updated);
+  }
+
+  listCustomerHistory(tenantId: string, customerId: string, limit = 100) {
+    return this.repository.findHistoryByCustomer(tenantId, customerId, Math.min(250, Math.max(1, limit)));
+  }
+
+  private record(appointment: Appointment, type: "CREATED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED" | "NO_SHOW",
+    actorType: "AI" | "OFFICE" | "SYSTEM", metadata?: Record<string, string>) {
+    return this.repository.appendEvent({ id: this.createId(), tenantId: appointment.tenantId,
+      appointmentId: appointment.id, type, occurredAt: this.clock.now().toISOString(), actorType, ...(metadata ? { metadata } : {}) });
+  }
+
+  private async notify(kind: "CONFIRMATION" | "RESCHEDULE" | "CANCELLATION", appointment: Appointment) {
+    try { await this.notifications?.appointmentChanged(kind, appointment); }
+    catch { /* Appointment/calendar success remains authoritative; delivery status is secondary. */ }
+  }
 }
 
 const validateCreate = (command: CreateAppointmentCommand): string | null => {
@@ -234,6 +287,9 @@ const validateCreate = (command: CreateAppointmentCommand): string | null => {
 
 const validDate = (value: string): boolean => !Number.isNaN(new Date(value).valueOf());
 const minutesUntil = (value: string, now: Date): number => (new Date(value).valueOf() - now.valueOf()) / 60_000;
+const localDay = (value: string, timezone: string) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date(value));
 
 const sameRequest = (appointment: Appointment, command: CreateAppointmentCommand): boolean =>
   appointment.customerId === command.customerId &&

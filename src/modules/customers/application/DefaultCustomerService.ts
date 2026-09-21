@@ -15,6 +15,7 @@ export class DefaultCustomerService implements CustomerService {
   public constructor(
     private readonly repository: CustomerRepository,
     private readonly createId: CustomerIdFactory,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   public async findOrCreateByPhone(
@@ -25,7 +26,35 @@ export class DefaultCustomerService implements CustomerService {
 
     const phone = normalizePhone(command.phone);
     const existing = await this.repository.findByPhone(command.tenantId, phone);
-    if (existing) return { ok: true, value: existing };
+    if (existing) {
+      const enrichment = {
+        ...existing,
+        ...optionalText("name", existing.name ?? command.name),
+        ...optionalText("email", existing.email ?? command.email?.toLowerCase()),
+        ...(existing.preferredLanguage
+          ? { preferredLanguage: existing.preferredLanguage }
+          : command.preferredLanguage?.trim()
+            ? { preferredLanguage: command.preferredLanguage.trim() }
+            : {}),
+        ...(existing.emailOptIn === undefined && command.emailOptIn !== undefined
+          ? { emailOptIn: command.emailOptIn }
+          : {}),
+      };
+      const changed = enrichment.name !== existing.name
+        || enrichment.email !== existing.email
+        || enrichment.preferredLanguage !== existing.preferredLanguage
+        || enrichment.emailOptIn !== existing.emailOptIn;
+      if (!changed) return { ok: true, value: existing };
+
+      const enriched: Customer = {
+        ...enrichment,
+        updatedAt: this.now().toISOString(),
+      };
+      await this.repository.save(enriched);
+      return { ok: true, value: enriched };
+    }
+
+    const timestamp = this.now().toISOString();
 
     const customer: Customer = {
       id: this.createId(),
@@ -33,6 +62,11 @@ export class DefaultCustomerService implements CustomerService {
       phone,
       ...optionalText("name", command.name),
       ...optionalText("email", command.email?.toLowerCase()),
+      ...(command.preferredLanguage?.trim() ? { preferredLanguage: command.preferredLanguage.trim() } : {}),
+      emailOptIn: command.emailOptIn ?? true,
+      source: command.source ?? "UNKNOWN",
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
 
     await this.repository.save(customer);
@@ -45,7 +79,8 @@ export class DefaultCustomerService implements CustomerService {
     if (!command.tenantId.trim()) {
       return validationError("tenantId", "tenantId is required");
     }
-    if (command.phone === undefined && command.name === undefined && command.email === undefined) {
+    if (command.phone === undefined && command.name === undefined && command.email === undefined
+      && command.preferredLanguage === undefined && command.emailOptIn === undefined) {
       return validationError("update", "At least one field must be provided");
     }
     if (command.phone !== undefined && !isValidPhone(command.phone)) {
@@ -69,9 +104,24 @@ export class DefaultCustomerService implements CustomerService {
       phone,
       ...updatedOptionalText("name", existing.name, command.name),
       ...updatedOptionalText("email", existing.email, command.email?.toLowerCase()),
+      ...(command.preferredLanguage === undefined
+        ? (existing.preferredLanguage ? { preferredLanguage: existing.preferredLanguage } : {})
+        : optionalLanguage(command.preferredLanguage)),
+      emailOptIn: command.emailOptIn ?? existing.emailOptIn,
+      updatedAt: this.now().toISOString(),
     };
     await this.repository.save(updated);
     return { ok: true, value: updated };
+  }
+
+  public async getCustomer(tenantId: string, customerId: CustomerId): Promise<Result<Customer, CustomerError>> {
+    const customer = await this.repository.findById(tenantId, customerId);
+    return customer ? { ok: true, value: customer } : { ok: false, error: { code: "CUSTOMER_NOT_FOUND" } };
+  }
+
+  public searchCustomers(tenantId: string, query: string, limit = 25): Promise<Customer[]> {
+    const safeLimit = Number.isSafeInteger(limit) ? Math.min(100, Math.max(1, limit)) : 25;
+    return this.repository.search(tenantId, query.trim(), safeLimit);
   }
 }
 
@@ -128,3 +178,8 @@ function updatedOptionalText<K extends "name" | "email">(
   if (next === undefined) return optionalText(key, current);
   return optionalText(key, next);
 }
+
+const optionalLanguage = (value: string): { preferredLanguage?: string } => {
+  const normalized = value.trim();
+  return normalized ? { preferredLanguage: normalized } : {};
+};

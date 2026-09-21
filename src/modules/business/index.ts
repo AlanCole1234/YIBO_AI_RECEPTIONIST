@@ -34,6 +34,7 @@ export {
   validateMultiLocationBusiness,
   isValidCalendarId,
   isValidTransferDestination,
+  resolvedAiCapabilities,
 } from "./domain/multi-location-business.js";
 export { validateMoney } from "./domain/money.js";
 export type { Money } from "./domain/money.js";
@@ -50,6 +51,7 @@ export type {
   LocationProfessionalAssignment,
   LocationSchedulingPolicy,
   LocationTransferDestination,
+  LocationAiCapabilities,
   LocationServiceAssignment,
   MultiLocationBusinessValidationError,
   ProfessionalDefinition,

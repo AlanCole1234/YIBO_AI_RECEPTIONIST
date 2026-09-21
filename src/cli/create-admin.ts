@@ -42,10 +42,10 @@ function parseArguments(values: string[]): { tenantId: string; email: string; re
   const region = valueFor("--region")?.toUpperCase();
   const role = valueFor("--role") ?? "tenant_admin";
   if (!tenantId || !email || (region !== "MX" && region !== "US")
-    || (role !== "tenant_admin" && role !== "operator")) {
-    throw new Error("Usage: pnpm admin:create --tenant <id> --region <MX|US> --email <email> [--role tenant_admin|operator]");
+    || !["owner", "office_manager", "secretary", "read_only", "tenant_admin", "operator"].includes(role)) {
+    throw new Error("Usage: pnpm admin:create --tenant <id> --region <MX|US> --email <email> [--role owner|office_manager|secretary|read_only]");
   }
-  return { tenantId, email, region, role };
+  return { tenantId, email, region, role: role as AdminRole };
 }
 
 async function readSecret(prompt: string): Promise<string> {

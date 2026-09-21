@@ -14,8 +14,9 @@ not evidence that a deployment or live-provider acceptance test has run.
    Lab startup also migrate and seed automatically.
 4. In an interactive terminal, create a user:
    `pnpm admin:create --tenant tenant-yibo-demo --region MX --email admin@example.test`.
-   Only the password is prompted. Add `--role operator` for operational access;
-   default is `tenant_admin`. The CLI supports bootstrap-catalog tenants, not arbitrary
+   Only the password is prompted. Roles include `owner`, `office_manager`,
+   `secretary`, `read_only` and the compatible historical roles `tenant_admin` and
+   `operator`; default is `tenant_admin`. The CLI supports bootstrap-catalog tenants, not arbitrary
    tenant creation. US uses `--tenant tenant-yibo-demo-us --region US`.
 5. Run `pnpm dev` for API, dashboard and local Voice Lab. Default endpoints are
    `http://localhost:3000`, `http://localhost:5173` and `http://localhost:4317`.
@@ -41,8 +42,11 @@ production process supervisor or a deployment command.
   See [UI-007](CALENDAR_ADMINISTRATION.md).
 - **Agent:** edit persisted settings, save, then start a new conversation. Voice Lab
   preview is explicit and can incur provider cost; see [preview](VOICE_PREVIEW.md).
-- **Appointments:** choose the location and customer ID to list upcoming appointments,
-  reschedule or cancel. This is not a full customer directory. See [UI-008](APPOINTMENT_ADMINISTRATION.md).
+- **Office schedule:** use the day/week/month/agenda workspace to filter appointments,
+  inspect open slots, search/create customers, reserve, reschedule, cancel and record
+  outcomes. See [business operations](BUSINESS_OPERATIONS.md).
+- **Readiness:** an administrator should review `/api/admin/readiness` before live
+  acceptance; resolve provider and per-location blockers without copying secrets.
 - **Conflicts:** copy the intended draft before choosing discard/reload and reapply
   against the current version. Never bypass `If-Match` or force-save stale data.
   See [UI-009](OPTIMISTIC_EDITING.md). Session expiry can discard in-memory drafts.

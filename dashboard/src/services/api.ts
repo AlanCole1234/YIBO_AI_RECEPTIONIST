@@ -23,10 +23,15 @@ export interface Business {
   openingHours: OpeningHoursRule[];
 }
 
-export interface Customer { id: string; tenantId: string; phone: string; name?: string; email?: string }
+export interface Customer { id: string; tenantId: string; phone: string; name?: string; email?: string;
+  preferredLanguage?: string; emailOptIn?: boolean; source?: string; createdAt?: string; updatedAt?: string }
 export interface Slot { employeeId: string; startAt: string; endAt: string }
 
-export interface AppointmentLocation { id: string; name: string; active: boolean; timezone: string; minimumCancellationNoticeMinutes: number; minimumRescheduleNoticeMinutes: number }
+export interface AppointmentLocation { id: string; name: string; active: boolean; timezone: string;
+  minimumCancellationNoticeMinutes: number; minimumRescheduleNoticeMinutes: number;
+  cancellationAllowed: boolean; reschedulingAllowed: boolean; staffOverrideAllowed: boolean;
+  services: Array<{ id: string; name: string; durationMinutes: number }>;
+  professionals: Array<{ id: string; name: string; serviceIds: string[] }> }
 
 export interface Appointment {
   locationId: string;
@@ -41,9 +46,14 @@ export interface Appointment {
   endAt: string;
   status: string;
   externalCalendarEventId?: string;
+  outcomeStatus?: "COMPLETED" | "NO_SHOW";
 }
+export interface AppointmentEvent { id: string; appointmentId: string; type: string; occurredAt: string; actorType: string; metadata?: Record<string, string> }
+export interface NotificationDelivery { id: string; kind: string; status: string; destinationMasked: string; createdAt: string; errorCode?: string }
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean }
-export type AdminRole = "tenant_admin" | "operator";
+export interface Readiness { ready: boolean; blockers: string[]; providers: Record<string, boolean>;
+  locations: Array<{ id: string; name: string; ready: boolean; issues: string[] }> }
+export type AdminRole = "owner" | "office_manager" | "secretary" | "read_only" | "tenant_admin" | "operator";
 export interface AdminPrincipal {
   subject: string;
   tenantId: string;
@@ -189,6 +199,7 @@ export const api = {
   logout: () => request<{ loggedOut: true }>("/api/auth/logout", { method: "POST" }),
   me: () => request<{ principal: AdminPrincipal }>("/api/auth/me"),
   health: () => request<{ status: string }>("/api/health"),
+  readiness: () => request<Readiness>("/api/admin/readiness"),
   business: () => request<Business>("/api/business"),
   locationCalendars: (id: string) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendars`),
   updateLocationCalendar: (id: string, calendarId: string | null, version: number) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendar`, {
@@ -221,19 +232,28 @@ export const api = {
     method: "PUT",
     body: JSON.stringify({ timezone }),
   }),
-  findOrCreateCustomer: (input: { name: string; phone: string }) =>
+  findOrCreateCustomer: (input: { name: string; phone: string; email?: string; preferredLanguage?: string; emailOptIn?: boolean }) =>
     request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(input) }),
   availability: (input: { locationId?: string; serviceId: string; employeeId: string; rangeStart: string; rangeEnd: string }) => {
     const query = new URLSearchParams(input);
     return request<{ slots: Slot[] }>(`/api/availability?${query}`);
   },
-  createAppointment: (input: { customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
+  searchCustomers: (q: string) => request<{ customers: Customer[] }>(`/api/customers?${new URLSearchParams({ q })}`),
+  customer: (id: string) => request<Customer>(`/api/customers/${encodeURIComponent(id)}`),
+  customerHistory: (id: string) => request<{ appointments: Appointment[] }>(`/api/customers/${encodeURIComponent(id)}/appointments`),
+  updateCustomer: (id: string, input: Partial<Pick<Customer, "name" | "phone" | "email" | "preferredLanguage" | "emailOptIn">>) =>
+    request<Customer>(`/api/customers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) }),
+  createAppointment: (input: { locationId?: string; customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
     request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
   appointmentLocations: () => request<{ locations: AppointmentLocation[] }>("/api/appointment-locations"),
+  officeSchedule: (input: { locationId: string; rangeStart: string; rangeEnd: string; employeeId?: string; serviceId?: string; status?: string }) =>
+    request<{ appointments: Appointment[]; slots: Slot[] }>(`/api/office/schedule?${new URLSearchParams(input)}`),
   customerAppointments: (locationId: string, customerId: string) => request<{ appointments: Appointment[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments?${new URLSearchParams({ customerId })}`),
   locationAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}`),
   cancelAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),
   rescheduleAppointment: (locationId: string, id: string, startAt: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify({ startAt }) }),
+  appointmentTimeline: (locationId: string, id: string) => request<{ events: AppointmentEvent[]; notifications: NotificationDelivery[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/events`),
+  markAppointmentOutcome: (locationId: string, id: string, outcome: "COMPLETED" | "NO_SHOW") => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/outcome`, { method: "POST", body: JSON.stringify({ outcome }) }),
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
