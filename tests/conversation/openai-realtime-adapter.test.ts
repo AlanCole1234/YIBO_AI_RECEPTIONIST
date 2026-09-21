@@ -173,6 +173,26 @@ describe("OpenAIRealtimeAdapter", () => {
     await expect(events.next()).resolves.toMatchObject({ value: { type: "assistant.response_done", status: "completed" } });
   });
 
+  it("reports detailed billable Realtime usage", async () => {
+    const value = fixture();
+    const session = await open(value);
+    const events = session.events()[Symbol.asyncIterator]();
+    value.connection.emit({ type: "response.done", response: { status: "completed", usage: {
+      input_tokens: 130, output_tokens: 50, total_tokens: 180,
+      input_token_details: { text_tokens: 100, audio_tokens: 30, cached_tokens: 25,
+        cached_tokens_details: { text_tokens: 20, audio_tokens: 5 } },
+      output_token_details: { text_tokens: 10, audio_tokens: 40 },
+    } } });
+
+    await events.next();
+    await expect(events.next()).resolves.toEqual({ value: {
+      type: "usage", inputTokens: 130, outputTokens: 50, totalTokens: 180,
+      inputTextTokens: 100, inputAudioTokens: 30, outputTextTokens: 10, outputAudioTokens: 40,
+      cachedInputTokens: 25, cachedInputTextTokens: 20, cachedInputAudioTokens: 5,
+      inputAudioMs: 3_000, outputAudioMs: 2_000, toolCalls: 0,
+    }, done: false });
+  });
+
   it("logs the Realtime lifecycle, audio appends, and safe provider event metadata", async () => {
     const connection = new FakeRealtimeConnection();
     const diagnostics: Array<{ message: string; details?: Record<string, unknown> }> = [];

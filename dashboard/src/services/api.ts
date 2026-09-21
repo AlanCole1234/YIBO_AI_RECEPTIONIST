@@ -108,6 +108,7 @@ export interface RealtimeModelCapability {
   badge: string;
   description: string;
   voices: string[];
+  pricing: RealtimeModelPricing;
   limits: {
     contextWindowTokens: number;
     modelMaxOutputTokens: number;
@@ -131,6 +132,15 @@ export interface RealtimeModelCapability {
     tracing: boolean;
     truncation: boolean;
   };
+}
+
+export interface RealtimeModelPricing {
+  currency: "USD";
+  unitTokens: 1_000_000;
+  verifiedAt: string;
+  sourceUrl: string;
+  text: { input: number; cachedInput: number; output: number };
+  audio: { input: number; cachedInput: number; output: number };
 }
 
 export interface AgentConfigurationPayload {

@@ -13,6 +13,13 @@ incur API charges. The UI states this before either action. This is a browser
 voice preview, not an Asterisk phone call.
 
 The harness reports its configured tenant, runtime, saved model and voice.
+
+The dashboard also estimates the current test-session cost after each Realtime
+response. It uses the provider-reported text, audio and cached token breakdown
+and the versioned USD rates published with the selected model capability. The
+counter resets for each Voice Lab conversation and shows duration, token mix,
+tool calls and the current per-minute pace. This is an operational estimate;
+the OpenAI organization billing result remains authoritative.
 Microphone and WAV starts are disabled until those match the authenticated
 tenant and a real OpenAI Realtime runtime. This readiness check prevents an
 accidental preview of another local tenant; it is not an authentication mechanism.

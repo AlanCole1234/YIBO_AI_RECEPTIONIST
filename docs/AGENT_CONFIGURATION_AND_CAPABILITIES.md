@@ -33,7 +33,7 @@ automáticos nuevos también se crean en el idioma seleccionado.
 ## Registro de capacidades por modelo
 
 `RealtimeModelCapabilityRegistry` es la única fuente soportada de modelos,
-voces, límites y controles. `GET /api/configuration` publica una copia de ese
+voces, límites, controles y tarifas estimativas versionadas. `GET /api/configuration` publica una copia de ese
 registro; el panel construye sus opciones desde la respuesta y vuelve a validar
 la combinación antes de enviarla. `AgentConfigurationService` aplica la misma
 validación en backend, por lo que un cliente modificado no puede guardar un

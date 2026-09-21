@@ -209,6 +209,7 @@ con `pnpm test` y `pnpm build`.
 | OPS-007 | TODO | Aceptación browser, PBX, Google y correo real con datos sintéticos; requiere operador y credenciales live |
 | OPS-008 | DONE | Hora hablada localizada, contacto confirmado antes de reservar, doctor/dirección post-reserva y cierre explícito de llamada |
 | OPS-009 | DONE | Variante oral ligada al locale: es-MX exige español y acento mexicano neutral; el saludo automático se genera en el idioma configurado |
+| OPS-010 | DONE | Voice Lab muestra duración, uso detallado y costo estimado en vivo con tarifas versionadas por modelo; la factura del proveedor sigue siendo autoritativa |
 
 ## Registro de decisiones
 
