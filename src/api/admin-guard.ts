@@ -29,7 +29,7 @@ export const createAdminGuard = (app: YiboApplication, requiredRole: AdminRole) 
       await reply.code(403).send({ error: { code: "READ_ONLY_ROLE" } });
       return;
     }
-    if (isMutation(request.method) && request.headers.origin !== app.config.dashboardOrigin) {
+    if (isMutation(request.method) && !isAllowedDashboardOrigin(request.headers.origin, app.config.dashboardOrigin)) {
       await reply.code(403).send({ error: { code: "ORIGIN_NOT_ALLOWED" } });
       return;
     }
@@ -47,7 +47,22 @@ export const adminPrincipalFor = (request: FastifyRequest): AdminPrincipal => {
 };
 
 export const isAllowedLoginOrigin = (request: FastifyRequest, app: YiboApplication): boolean =>
-  request.headers.origin === app.config.dashboardOrigin;
+  isAllowedDashboardOrigin(request.headers.origin, app.config.dashboardOrigin);
+
+const isAllowedDashboardOrigin = (origin: string | undefined, configuredOrigin: string): boolean => {
+  if (origin === configuredOrigin) return true;
+  if (!origin) return false;
+  try {
+    const actual = new URL(origin);
+    const configured = new URL(configuredOrigin);
+    const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    return actual.protocol === "http:" && configured.protocol === "http:"
+      && actual.port === configured.port
+      && loopbackHosts.has(actual.hostname) && loopbackHosts.has(configured.hostname);
+  } catch {
+    return false;
+  }
+};
 
 const isMutation = (method: string): boolean => !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 
