@@ -3,10 +3,11 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## Estado actual — 20 de septiembre de 2026
+## Estado actual — 22 de septiembre de 2026
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
-- Checkpoint final: **477 pruebas aprobadas, 1 live omitida**, ambos typechecks y build de producción.
+- Auditoría focal de negocio: **482 pruebas aprobadas, 1 live omitida**, ambos typechecks y build; guardia de rutas cubre desactivación.
+- **Prueba real todavía bloqueada** por OAuth y ruta telefónica aislada; riesgos de edición simultánea y búsqueda por IDs documentados en [readiness](BUSINESS_TEST_READINESS.md).
 - Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
 - Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
 
@@ -191,6 +192,8 @@ con `pnpm test` y `pnpm build`.
 | CLOSE-002 | DONE | Política de mapping protegida atómicamente por citas no canceladas; histórico/pending/fallos, override/fallback y E2E Google. Ver BOOKED_CALENDAR_ROUTES.md |
 | ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
 | DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
+| RISK-001 | TODO | Appointments: coherencia de cambios/cancelaciones simultáneos antes de pruebas multioperador; BUSINESS_TEST_READINESS.md |
+| RISK-002 | TODO | Producto/secretaría: validar flujo por IDs y necesidad de agenda/búsqueda antes de uso diario; BUSINESS_TEST_READINESS.md |
 
 ## Registro de decisiones
 
