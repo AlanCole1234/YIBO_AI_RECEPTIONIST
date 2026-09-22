@@ -48,7 +48,7 @@ live skipped**, 75 passing files. Both typechecks and production build passed.
 
 | Gate | Evidence and next step | Owner |
 |---|---|---|
-| Google test authorization | Last isolated preflight returned HTTP 400 `invalid_grant`; the separate callback then produced `redirect_uri_mismatch`. Google Cloud console access was blocked by required MFA. Complete MFA, register only the additional test callback and authorize a test calendar. Do not replace live redirects/tokens. | Operator / Google account owner |
+| Google test authorization | Updated September 22: stale isolated grant rejected; newer original grant refreshed successfully and restored only to isolated storage. Scope-compatible access probe now reports accessible; 13 focused tests pass. Cloud MFA and registering the additional port-3101 callback remain necessary for fresh authorization. Real writes remain unverified. See [diagnosis](GOOGLE_AUTH_DIAGNOSIS.md). | Operator / Google account owner |
 | Dedicated test phone path | Isolated API/dashboard were started with telephony disabled. No dedicated test DID/extension or reachable test RTP path was established. Live routing changes still require explicit user approval. | PBX/carrier operator |
 | Natural speech and timing | No real phone call has yet established sufficient answer time, no repeated questions, accurate confirmation, graceful interruptions, intelligibility or complete goodbye playback. | Operator/caller, ACCEPT-001 |
 | Real Google operations | No live acceptance booking/reschedule/cancel sequence has run against the new branch. Provider fakes do not establish current write permission, authorization or network reliability. | Operator, ACCEPT-001 |

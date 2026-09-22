@@ -7,7 +7,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
 - Auditoría focal de negocio: **482 pruebas aprobadas, 1 live omitida**, ambos typechecks y build; guardia de rutas cubre desactivación.
-- **Prueba real todavía bloqueada** por OAuth y ruta telefónica aislada; riesgos de edición simultánea y búsqueda por IDs documentados en [readiness](BUSINESS_TEST_READINESS.md).
+- OAuth aislado recuperado desde autorización vigente; verificación corregida para scopes de eventos, 13 pruebas focales aprobadas. Callback nuevo y acceso a Cloud/MFA pendientes: [diagnóstico](GOOGLE_AUTH_DIAGNOSIS.md).
+- **Prueba real todavía bloqueada** por ruta telefónica aislada; operaciones Google reales aún no verificadas. Riesgos de edición simultánea y búsqueda por IDs documentados en [readiness](BUSINESS_TEST_READINESS.md).
 - Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
 - Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
 

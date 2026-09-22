@@ -59,6 +59,54 @@ describe("GoogleOAuthService", () => {
     });
     await expect(service.verifyCalendarAccess("tenant-1", "team@example.com")).resolves.toBe("accessible");
     await expect(service.verifyCalendarAccess("tenant-1", "missing@example.com")).resolves.toBe("not_found");
-    expect(requests[0]).toContain("team%40example.com:Bearer tenant-access");
+    expect(requests[0]).toBe("https://www.googleapis.com/calendar/v3/calendars/team%40example.com/events?maxResults=1&fields=kind:Bearer tenant-access");
+  });
+
+  it("verifies access with event-only authorization instead of requesting calendar metadata", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "events-scope", expiresAt: "2099-01-01T00:00:00.000Z" };
+    const service = new GoogleOAuthService(config, tokens, async input => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("fields")).toBe("kind");
+      expect(url.searchParams.get("maxResults")).toBe("1");
+      return url.pathname.endsWith("/events")
+        ? new Response(JSON.stringify({ kind: "calendar#events" }), { status: 200 })
+        : new Response(JSON.stringify({ error: { message: "Request had insufficient authentication scopes." } }), { status: 403 });
+    });
+    await expect(service.verifyCalendarAccess("tenant-1", "calendar@example.com")).resolves.toBe("accessible");
+  });
+
+  it.each([[401, "disconnected"], [403, "forbidden"], [404, "not_found"], [503, "unavailable"]] as const)(
+    "preserves authorization failure status %s", async (status, expected) => {
+      const tokens = new MemoryTokenStore();
+      tokens.value = { accessToken: "access", expiresAt: "2099-01-01T00:00:00.000Z" };
+      const service = new GoogleOAuthService(config, tokens, async () => new Response(null, { status }));
+      await expect(service.verifyCalendarAccess("tenant-1", "calendar")).resolves.toBe(expected);
+    },
+  );
+
+  it("reports disconnected for invalid_grant without probing the calendar or overwriting the token", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "expired", refreshToken: "revoked", expiresAt: "2020-01-01T00:00:00.000Z" };
+    const original = tokens.value;
+    const requests: string[] = [];
+    const service = new GoogleOAuthService(config, tokens, async input => {
+      requests.push(String(input));
+      return new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+    });
+    await expect(service.verifyCalendarAccess("tenant-1", "calendar")).resolves.toBe("disconnected");
+    expect(requests).toEqual(["https://oauth2.googleapis.com/token"]);
+    expect(tokens.value).toBe(original);
+  });
+
+  it("uses the configured isolated callback in both authorization and code exchange", async () => {
+    const redirectUri = "http://localhost:3101/api/integrations/google/callback";
+    const service = new GoogleOAuthService({ ...config, redirectUri }, new MemoryTokenStore(), async (_input, init) => {
+      expect(new URLSearchParams(String(init?.body)).get("redirect_uri")).toBe(redirectUri);
+      return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh" }), { status: 200 });
+    });
+    const url = new URL(service.authorizationUrl("tenant-1", "http://localhost:5274")!);
+    expect(url.searchParams.get("redirect_uri")).toBe(redirectUri);
+    await expect(service.completeAuthorization("code", url.searchParams.get("state")!)).resolves.toMatchObject({ tenantId: "tenant-1" });
   });
 });

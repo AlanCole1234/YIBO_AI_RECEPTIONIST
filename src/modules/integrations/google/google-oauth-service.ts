@@ -89,8 +89,10 @@ export class GoogleOAuthService {
     const token = await this.accessToken(tenantId);
     if (!token) return "disconnected";
     try {
+      // Use the calendar.events scope we request; calendar metadata needs a
+      // different scope. Return only the collection kind, never event details.
       const response = await this.fetcher(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?maxResults=1&fields=kind`,
         { headers: { authorization: `Bearer ${token}` } },
       );
       if (response.ok) return "accessible";
