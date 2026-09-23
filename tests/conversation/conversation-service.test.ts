@@ -436,9 +436,12 @@ describe("intentional phone completion", () => {
     expect(value.execute).not.toHaveBeenCalled();
   });
 
-  it.each(["voice_lab", "disabled", "parallel", "no-playback-signal"])("does not expose call end for %s", async mode => {
+  it.each(["voice_lab_without_playback", "disabled", "parallel", "no-playback-signal"])("does not expose call end for %s", async mode => {
     await session.close();
-    if (mode === "voice_lab") value.agent.channel = "voice_lab";
+    if (mode === "voice_lab_without_playback") {
+      value.agent.channel = "voice_lab";
+      delete value.transport.outboundAudio.onPlaybackIdle;
+    }
     if (mode === "disabled") value.agent.toolChoice = "none";
     if (mode === "parallel") value.agent.parallelToolCalls = true;
     if (mode === "no-playback-signal") delete value.transport.outboundAudio.onPlaybackIdle;
@@ -446,6 +449,21 @@ describe("intentional phone completion", () => {
     expect(value.runtime.openedInputs.at(-1)!.agent.tools.some(tool => tool.name === "end_call")).toBe(false);
     await farewell(); await end();
     expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+  });
+
+  it("allows Voice Lab to reuse farewell completion when the browser reports playback idle", async () => {
+    await session.close();
+    value.closeTransport.mockClear();
+    value.agent.channel = "voice_lab";
+    session = await start(value);
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    expect(value.runtime.openedInputs.at(-1)!.agent.tools.some(tool => tool.name === "end_call")).toBe(true);
+    await farewell(); await end(); await done();
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    idle(); await vi.advanceTimersByTimeAsync(20);
+    expect(await session.completed).toEqual({ status: "closed", reason: "conversation_completed" });
+    expect(delivery).toHaveBeenCalledWith({ toolCallId: "end", ok: true, data: { ending: true } }, { requestResponse: false });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
   });
 
   it("allows a farewell after a known failed booking without claiming booking success", async () => {

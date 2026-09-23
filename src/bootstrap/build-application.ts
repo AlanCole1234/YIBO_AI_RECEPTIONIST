@@ -124,7 +124,7 @@ export interface YiboApplication {
     sessions: AdminSessionPort;
   };
   adminAudit: AdminAuditService;
-  registerCallMedia(callId: string, transport: ConversationTransport): void;
+  registerCallMedia(callId: string, transport: ConversationTransport): () => void;
 }
 
 export interface BuildApplicationOptions {

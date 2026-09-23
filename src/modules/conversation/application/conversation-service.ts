@@ -382,6 +382,6 @@ const errorMessage = (error: unknown): string => error instanceof Error ? error.
 
 class CallDeadlineError extends Error {}
 
-const supportsCallEnd = (command: StartConversationCommand): boolean => command.agent.channel === "phone"
+const supportsCallEnd = (command: StartConversationCommand): boolean => (command.agent.channel === "phone" || command.agent.channel === "voice_lab")
   && command.agent.toolChoice !== "none" && !command.agent.parallelToolCalls
   && typeof command.transport.outboundAudio.onPlaybackIdle === "function";

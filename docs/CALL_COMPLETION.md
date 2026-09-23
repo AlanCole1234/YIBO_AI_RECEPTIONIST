@@ -4,8 +4,10 @@
 
 Phone conversations with tools enabled, serial tool calls and a playback-idle-capable
 transport now receive an `end_call` session capability. It is not an appointment
-mutation or a persisted/admin tool. Voice Lab and transports without playback signals
-are unchanged; the validated Realtime payload rejects this capability on other channels.
+mutation or a persisted/admin tool. Product/UX Checkpoint B extends the same capability
+to Voice Lab with a browser playback-idle signal. Transports without playback signals
+remain unchanged; the validated payload still requires an eligible serial audio session.
+See [Checkpoint B](PRODUCT_UX_CHECKPOINT_B.md) for the browser lifecycle and validation.
 See [ADR-008](adr/ADR-008-intentional-call-completion.md).
 
 YIBO is instructed to finish the requested work, report its actual outcome, speak a
