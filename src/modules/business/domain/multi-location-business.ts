@@ -8,7 +8,7 @@ import type {
   TenantId,
 } from "../../../shared/types/identifiers.js";
 import type { OpeningHoursRule } from "../application/contracts.js";
-import { validateMoney, type Money } from "./money.js";
+import { DISPLAY_CURRENCIES, validateMoney, type DisplayCurrency, type Money } from "./money.js";
 
 export const MULTI_LOCATION_BUSINESS_SCHEMA_VERSION = 2 as const;
 export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 60] as const;
@@ -44,7 +44,28 @@ export interface LocationClosure {
   administrativeReason: string;
 }
 
+export interface AvailabilitySuggestionsPolicy {
+  enabled: boolean;
+  expansionDays: number;
+  maximumAlternatives: number;
+}
+
+export const isAvailabilitySuggestionsPolicy = (value: unknown): value is AvailabilitySuggestionsPolicy => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as Record<string, unknown>;
+  return Object.keys(policy).length === 3
+    && Object.keys(policy).every(key => ["enabled", "expansionDays", "maximumAlternatives"].includes(key))
+    && typeof policy.enabled === "boolean"
+    && typeof policy.expansionDays === "number" && Number.isInteger(policy.expansionDays) && policy.expansionDays >= 1 && policy.expansionDays <= 14
+    && typeof policy.maximumAlternatives === "number" && Number.isInteger(policy.maximumAlternatives) && policy.maximumAlternatives >= 1 && policy.maximumAlternatives <= 5;
+};
+
+export const DEFAULT_AVAILABILITY_SUGGESTIONS: Readonly<AvailabilitySuggestionsPolicy> = {
+  enabled: false, expansionDays: 1, maximumAlternatives: 3,
+};
+
 export interface LocationSchedulingPolicy {
+  availabilitySuggestions?: AvailabilitySuggestionsPolicy;
   defaultServiceId: ServiceId;
   slotIncrementMinutes: typeof SLOT_INCREMENT_MINUTES[number];
   minimumLeadTimeMinutes: number;
@@ -91,6 +112,8 @@ export interface LocationDefinition {
 }
 
 export interface BusinessConfigurationV2 {
+  /** Default for currency-unspecified presentation/new prices; never converts existing Money. */
+  displayCurrency?: DisplayCurrency;
   schemaVersion: typeof MULTI_LOCATION_BUSINESS_SCHEMA_VERSION;
   region: RegionId;
   tenantId: TenantId;
@@ -108,6 +131,9 @@ export const validateMultiLocationBusiness = (
   profile: BusinessConfigurationV2,
 ): MultiLocationBusinessValidationError[] => {
   const errors: MultiLocationBusinessValidationError[] = [];
+  if (profile.displayCurrency !== undefined && !(DISPLAY_CURRENCIES as readonly string[]).includes(profile.displayCurrency)) {
+    errors.push({ path: "displayCurrency", message: "Choose USD, MXN or EUR." });
+  }
   required(errors, "tenantId", profile.tenantId);
   required(errors, "businessId", profile.businessId);
   required(errors, "name", profile.name);
@@ -187,6 +213,10 @@ export const validateMultiLocationBusiness = (
     }
     if (!(SLOT_INCREMENT_MINUTES as readonly number[]).includes(location.policies.slotIncrementMinutes)) {
       errors.push({ path: `${path}.policies.slotIncrementMinutes`, message: "Unsupported slot increment." });
+    }
+    const suggestions = location.policies.availabilitySuggestions;
+    if (suggestions !== undefined && !isAvailabilitySuggestionsPolicy(suggestions)) {
+      errors.push({ path: `${path}.policies.availabilitySuggestions`, message: "Use enabled boolean, expansionDays 1–14 and maximumAlternatives 1–5." });
     }
     for (const field of ["minimumLeadTimeMinutes", "maximumBookingHorizonDays", "maximumResults",
       "minimumCancellationNoticeMinutes", "minimumRescheduleNoticeMinutes", "concurrentCapacity"] as const) {

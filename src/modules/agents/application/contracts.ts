@@ -92,6 +92,7 @@ export interface AgentConversationConfiguration {
 }
 
 export interface AgentBehaviorConfiguration {
+  phoneReadback?: "natural_grouped" | "digit_by_digit";
   greeting:
     | { mode: "wait_for_caller" }
     | { mode: "automatic"; message: string };

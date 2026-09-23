@@ -1,3 +1,4 @@
+import { PhoneReadbackToolExecutor } from "./phone-readback.js";
 import { failure, success } from "../../../shared/domain/result.js";
 import type { AgentConfigurationSource } from "../ports/agent-dependencies.js";
 import type {
@@ -65,7 +66,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
       tools,
       toolExecutor: new ConfirmationGateToolExecutor(
         new PolicyEnforcingToolExecutor(
-          this.toolExecutor,
+          new PhoneReadbackToolExecutor(this.toolExecutor, configuration.behavior.phoneReadback ?? "natural_grouped"),
           tools.map(({ name }) => name),
           configuration.toolPolicies,
         ),

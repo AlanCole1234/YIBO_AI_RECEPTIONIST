@@ -277,6 +277,7 @@ function errorMessage(caught: unknown): string {
             <label class="prompt-field compact-prompt">Message after silence<input v-model="configuration.behavior.silence.message" maxlength="500"></label>
             <div class="field-grid behavior-fields">
               <label>Slot strategy<select v-model="configuration.behavior.slotOffering.strategy"><option value="earliest_first">Earliest first</option><option value="spread_across_day">Spread across day</option><option value="match_requested_time">Closest to requested time</option></select></label>
+              <label>Phone readback<select v-model="configuration.behavior.phoneReadback"><option value="natural_grouped">Natural / grouped</option><option value="digit_by_digit">Digit by digit</option></select><small>Presentation only; stored phone numbers do not change.</small></label>
               <label>Collection order<small>{{ configuration.behavior.dataCollectionOrder.join(' → ') }}</small><select :value="configuration.behavior.dataCollectionOrder[0]" @change="changeFirstCollectionField"><option value="full_name">Full name first</option><option value="phone_number">Phone first</option><option value="service">Service first</option></select><small>The remaining fields keep their relative order.</small></label>
             </div>
           </section>

@@ -33,6 +33,8 @@ export class AgentPromptCompiler {
       responseStyleInstruction(input.behavior.responseStyle),
       `After caller silence, say ${data(input.behavior.silence.message)} at most ${input.behavior.silence.maxPrompts} time(s) before waiting silently.`,
       slotOfferingInstruction(input.behavior.slotOffering),
+      "Prefer slots within requestedPeriod. Slots marked outsideRequestedRange are supplemental alternatives: offer the returned alternatives as well as preferred choices even when the normal per-response option limit is lower; explicitly explain they are outside the request, never silently substitute them or book without the caller choosing.",
+      `Read phone numbers using ${input.behavior.phoneReadback ?? "natural_grouped"} style. ${input.behavior.phoneReadback === "digit_by_digit" ? "Speak every digit separately, including country-code digits." : "Read in natural groups with pauses, preserving every digit and the country code."} Use phoneReadback from successful customer updates when available. Never change the stored number or read it as one large number.`,
       `When collecting booking data, ask one item at a time in this exact order: ${input.behavior.dataCollectionOrder.map(dataCollectionLabel).join("; ")}.`,
       "These structured controls override conflicting style or workflow guidance in the editable block.",
       "",

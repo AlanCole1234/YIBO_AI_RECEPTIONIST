@@ -3,6 +3,18 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — Checkpoint A — 23 de septiembre de 2026
+
+- Rama separada: `codex/product-ux-improvements`, base `46ce713`.
+- **Checkpoint A completo**: alternativas de disponibilidad configurables por sucursal,
+  lectura de teléfono agrupada/dígito a dígito consumida por el agente y moneda de
+  presentación USD/MXN/EUR sin conversión ni cambios de precios históricos.
+- **136 pruebas focales aprobadas (27 nuevas)**, ambos typechecks y build de producción.
+- Aceptación manual de voz/UI e integración con el trabajo del compañero pendientes.
+  Ver [alcance, configuración y resultados](PRODUCT_UX_CHECKPOINT_A.md).
+- Sin cambios de Asterisk/7001, servicio telefónico, OAuth ni `main`. No se inició
+  Checkpoint B. El estado de integración siguiente se conserva como checkpoint previo.
+
 ## Estado actual — 22 de septiembre de 2026
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.

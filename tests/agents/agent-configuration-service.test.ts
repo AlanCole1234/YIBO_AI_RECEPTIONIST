@@ -154,6 +154,7 @@ describe("AgentConfigurationService", () => {
     const service = new AgentConfigurationService(new InMemoryAgentConfigurationSource([]));
     const configured = service.recommended("es-MX", "YIBO", "gpt-realtime-2.1");
     configured.behavior = {
+      phoneReadback: "natural_grouped",
       greeting: { mode: "automatic", message: "Gracias por llamar a YIBO." },
       responseStyle: { brevity: "balanced", tone: "professional", pace: "slow" },
       silence: { message: "¿Sigue en la línea?", maxPrompts: 2 },
