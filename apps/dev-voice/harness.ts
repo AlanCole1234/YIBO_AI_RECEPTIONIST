@@ -277,7 +277,7 @@ function observeRuntimeEvent(
       log("realtime.tool.requested", { toolCallId: event.toolCallId, name: event.name });
       return;
     case "tool.execution":
-      log(event.phase === "completed" ? "realtime.tool.completed" : "realtime.tool.failed", { toolCallId: event.toolCallId, name: event.name });
+      log(`realtime.tool.${event.phase}`, { toolCallId: event.toolCallId, name: event.name });
       return;
     case "error":
       log(event.type, { code: event.code, retryable: event.retryable, error: event.message });

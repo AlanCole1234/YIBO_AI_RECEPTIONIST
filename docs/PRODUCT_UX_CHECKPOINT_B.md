@@ -46,7 +46,7 @@ also discarded all but six activity entries instead of making history scrollable
 
 The existing Conversation `end_call` capability now also supports `voice_lab` when
 its sink reports playback idle. The existing serial-tool, pending/uncertain-action,
-current-response audio, response completion, deadline and interruption checks remain.
+matching farewell audio, response completion, deadline and interruption checks remain.
 The Realtime payload validator accepts this same Voice Lab capability; sessions with
 no product channel, disabled tools or parallel tool calls remain rejected.
 
@@ -56,10 +56,13 @@ playback has finished. The harness ignores an acknowledgment for a different req
 or turn. An interruption invalidates queued audio and the old acknowledgment.
 Conversation then performs its existing close; the harness informs the browser.
 
-An accepted end tool returns with `requestResponse: false`. There is no transcript
-matching, silence heuristic, new model request, or hangup after ordinary response/tool
-completion. Existing phone eligibility and cleanup behavior are unchanged. A live
-model must still choose the end tool after its farewell. Manual End remains available
+An accepted end tool with farewell audio returns with `requestResponse: false`.
+September 24 isolated acceptance also found function-only end requests: these now
+request one following farewell response, then wait for its matching audio/drain.
+Failures close as failed tests. See [call completion](CALL_COMPLETION.md).
+There is no transcript matching, silence heuristic, or hangup after ordinary
+response/tool completion. Existing phone eligibility and cleanup ownership remain.
+A live model must still choose the end tool. Manual End remains available
 when tools are disabled, parallel tool policy prevents automatic ending, or the model
 does not end naturally.
 
@@ -74,6 +77,8 @@ height and now respects an older scroll position instead of forcing the bottom.
 
 No server logging semantics were removed to achieve the layout. As before, audio bytes
 are not shown and transcript text appears only when the server explicitly enables it.
+September 24 acceptance corrected tool activity labels: `started`, `completed` and
+`failed` are distinct. Starting a successful tool no longer appears as a failure.
 
 ## Automated checks
 

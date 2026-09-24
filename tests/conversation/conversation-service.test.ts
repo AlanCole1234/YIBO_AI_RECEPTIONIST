@@ -482,11 +482,56 @@ describe("intentional phone completion", () => {
     expect(value.closeTransport).not.toHaveBeenCalled();
   });
 
-  it.each([{}, { callId: "foreign" }, null, []])("rejects an end request without current farewell or with hostile args %j", async args => {
-    if (JSON.stringify(args) !== "{}") await farewell();
+  it.each([{ callId: "foreign" }, null, []])("rejects an end request with hostile args %j", async args => {
+    await farewell();
     await end("bad", args);
     expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
     expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it.each(["phone", "voice_lab"] as const)("completes a function-only end request after exactly one following farewell (%s)", async channel => {
+    await session.close(); value.closeTransport.mockClear(); value.agent.channel = channel; session = await start(value);
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "end-tool" });
+    await end(); await end(); await end("repeat");
+    expect(delivery.mock.calls.filter(([, options]) => options?.requestResponse)).toHaveLength(1);
+    expect(delivery.mock.calls[0]).toEqual([expect.objectContaining({ ok: true, data: expect.objectContaining({ farewellRequired: true }) }), { requestResponse: true }]);
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "completed" });
+    idle(); await flush(); expect(value.closeTransport).not.toHaveBeenCalled();
+    await farewell(); await done();
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    idle(); await vi.advanceTimersByTimeAsync(20);
+    expect(await session.completed).toEqual({ status: "closed", reason: "conversation_completed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["caller", "tool", "cancelled", "extra-response"])("cancels a requested following farewell on %s", async cause => {
+    await end();
+    if (cause === "caller") value.runtime.latestSession.emit({ type: "user.speech_started" });
+    if (cause === "tool") value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "lookup", name: "check_availability", arguments: {} });
+    if (cause === "cancelled") value.runtime.latestSession.emit({ type: "assistant.response_done", status: "cancelled" });
+    if (cause === "extra-response") value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "unexpected" });
+    await flush(); await farewell(); await done(); idle(); await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("bounds a function-only end request when no farewell audio follows", async () => {
+    await end();
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "silent" });
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "completed" });
+    idle(); await vi.advanceTimersByTimeAsync(45_000);
+    expect(await session.completed).toMatchObject({ status: "failed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up a failed farewell response instead of silently waiting for another caller turn", async () => {
+    await end();
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "failed-farewell" });
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "failed" });
+    await flush();
+    expect(await session.completed).toMatchObject({ status: "failed", error: { code: "RUNTIME_ERROR" } });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("ignores duplicate delivery and acknowledges repeated end IDs without extra speech", async () => {

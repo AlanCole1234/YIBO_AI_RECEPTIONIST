@@ -77,6 +77,9 @@ function observeEvent(message: Record<string, unknown>): void {
     "conversation.interrupted": "Response interrupted",
     "playback.cleared": "Previous audio stopped",
     "fixture.sent": "WAV sent",
+    "realtime.tool.started": "Tool started",
+    "realtime.tool.completed": "Tool completed",
+    "realtime.tool.failed": "Tool failed",
   };
   if (name === "audio.in" || name === "audio.out") return;
   let text = labels[name] ?? name;

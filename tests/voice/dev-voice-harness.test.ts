@@ -60,6 +60,19 @@ beforeEach(() => { vi.spyOn(console, "log").mockImplementation(() => {}); });
 afterEach(async () => { for (const socket of sockets.splice(0)) socket.close(); await flush(); vi.restoreAllMocks(); });
 
 describe("Dev Voice harness lifecycle with the real call orchestrator", () => {
+  it("reports tool start, success and failure as distinct activity events", async () => {
+    const f = fixture(), socket = f.connect(); await f.start(socket);
+    const execution = { type: "tool.execution" as const, toolCallId: "service-info", name: "get_service_information" as const };
+    f.transport().observeEvent?.({ ...execution, phase: "started" });
+    expect(socket.events("realtime.tool.started")).toHaveLength(1);
+    expect(socket.events("realtime.tool.failed")).toHaveLength(0);
+    f.transport().observeEvent?.({ ...execution, phase: "completed" });
+    expect(socket.events("realtime.tool.completed")).toHaveLength(1);
+    expect(socket.events("realtime.tool.failed")).toHaveLength(0);
+    f.transport().observeEvent?.({ ...execution, phase: "failed" });
+    expect(socket.events("realtime.tool.failed")).toHaveLength(1);
+  });
+
   it("starts audio, closes once on manual end, drains the queue and releases media", async () => {
     const f = fixture(), socket = f.connect(); const id = await f.start(socket);
     socket.audio(); await until(() => expect(f.runtime.latestSession.receivedAudio).toHaveLength(1));
@@ -108,6 +121,30 @@ describe("Dev Voice harness lifecycle with the real call orchestrator", () => {
     await expect(f.app.voice.open(id)).resolves.toMatchObject({ ok: false });
   });
 
+  it("drains a farewell generated after a function-only end request and closes once", async () => {
+    const f = fixture(), socket = f.connect(); const id = await f.start(socket);
+    const session = f.runtime.latestSession;
+    session.emit({ type: "assistant.response_created", responseId: "end-tool" });
+    session.emit({ type: "tool.call", toolCallId: "end", name: "end_call", arguments: {} });
+    session.emit({ type: "assistant.response_done", status: "completed" });
+    await flush(); expect(socket.events("playback.finish")).toHaveLength(0);
+    session.emit({ type: "assistant.response_created", responseId: "farewell-response" });
+    session.emit({ type: "audio.delta", assistantTurnId: "farewell", frame: {
+      data: new Uint8Array([1, 2, 3, 4]), codec: "pcm16", sampleRate: 24_000, channels: 1,
+    } });
+    session.emit({ type: "assistant.audio_completed", assistantTurnId: "farewell" });
+    session.emit({ type: "assistant.response_done", status: "completed" });
+    await flush();
+    const finish = socket.events("playback.finish")[0]!;
+    expect(finish).toMatchObject({ assistantTurnId: "farewell" });
+    expect(socket.events("conversation.closed")).toHaveLength(0);
+    socket.request({ type: "playback.idle", assistantTurnId: "farewell", requestId: finish.requestId });
+    await until(() => expect(socket.events("conversation.closed")).toHaveLength(1));
+    await expect(f.callRepository.findByCallId(id)).resolves.toMatchObject({ state: "COMPLETED" });
+    expect(session.closeCount).toBe(1);
+    expect(session.receivedToolResults).toHaveLength(1);
+  });
+
   it("manual completion racing with a runtime close finalizes once", async () => {
     const f = fixture(), socket = f.connect(); await f.start(socket);
     f.runtime.latestSession.emit({ type: "closed", reason: "finished" });
@@ -124,6 +161,21 @@ describe("Dev Voice harness lifecycle with the real call orchestrator", () => {
     expect(socket.events("conversation.closed")).toEqual([expect.objectContaining({ failed: true, reason: "runtime_failed" })]);
     expect(f.runtime.latestSession.closeCount).toBe(1);
     await expect(f.callRepository.findByCallId(id)).resolves.toMatchObject({ state: "FAILED" });
+  });
+
+  it("reports a failed following farewell as a failed test and releases the call", async () => {
+    const f = fixture(), socket = f.connect(); const id = await f.start(socket);
+    f.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "end-tool" });
+    f.runtime.latestSession.emit({ type: "tool.call", toolCallId: "end", name: "end_call", arguments: {} });
+    f.runtime.latestSession.emit({ type: "assistant.response_done", status: "completed" });
+    await flush();
+    f.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "farewell" });
+    f.runtime.latestSession.emit({ type: "assistant.response_done", status: "failed" });
+    await flush();
+    expect(socket.events("error")).toEqual([expect.objectContaining({ code: "RUNTIME_ERROR", retryable: false })]);
+    expect(socket.events("conversation.closed")).toEqual([expect.objectContaining({ failed: true, reason: "runtime_failed" })]);
+    await expect(f.callRepository.findByCallId(id)).resolves.toMatchObject({ state: "FAILED" });
+    expect(f.runtime.latestSession.closeCount).toBe(1);
   });
 
   it("gives the next test a new call ID and media queue, preserving call history and saved settings", async () => {
