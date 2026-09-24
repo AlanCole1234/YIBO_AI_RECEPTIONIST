@@ -139,7 +139,12 @@ Also verified in the in-app browser:
 6. No browser error/warning logs during these checks. Header height was fixed at 40px
    after observing the Show latest button otherwise causing a small layout jump.
 
-## Remaining manual acceptance
+## Manual acceptance procedure
+
+**Acceptance complete, September 23, 2026.** Compact/mobile and keyboard checks
+passed, and the user reported the manual Voice Lab test passed and accepted the
+remaining A/B checks. See [A/B acceptance](PRODUCT_UX_AB_ACCEPTANCE.md) for evidence
+and limits. The checklist below is retained for repeat testing.
 
 - Test the dashboard and standalone Voice Lab with real browser microphone permissions:
   allow, deny, pause/resume, end while permission is pending, and start again immediately.

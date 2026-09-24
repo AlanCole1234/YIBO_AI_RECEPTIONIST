@@ -3,6 +3,15 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — aceptación A/B — 23 de septiembre de 2026
+
+- **Aceptación A/B completa**: UI de moneda/readback, conflictos entre pestañas,
+  historial móvil/teclado verificados; el usuario confirmó que Voice Lab manual pasó.
+- Corregido el título del editor de moneda a “Display currency”, sin cambiar precios.
+- Evidencia y límites: [aceptación A/B](PRODUCT_UX_AB_ACCEPTANCE.md). Entorno aislado
+  con datos sintéticos/calendario local; no implica aceptación telefónica o despliegue.
+- Checkpoint C — Availability UI autorizado como siguiente trabajo en esta rama.
+
 ## Product/UX — Checkpoint B — 23 de septiembre de 2026
 
 - **Checkpoint B completo** en `codex/product-ux-improvements`; `5e578fe` se conserva.
@@ -14,7 +23,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   terminó la reproducción; eventos repetidos/manuales no generan otra respuesta.
 - **96 pruebas focales aprobadas (33 nuevas)**, ambos typechecks y build de producción.
   Fixture de navegador verificado con 304 entradas, cierre automático/manual y reinicio.
-- Aceptación de micrófono/modelo reales y UI móvil pendiente. Ver
+- Aceptación de micrófono/modelo y UI móvil cerrada; ver [evidencia A/B](PRODUCT_UX_AB_ACCEPTANCE.md) y
   [alcance, estados, pruebas y riesgos](PRODUCT_UX_CHECKPOINT_B.md).
 - Sin cambios a Asterisk/7001, servicio telefónico, OAuth, Calendar o `main`.
   Próximo checkpoint sugerido: Availability UI; no iniciado.
@@ -26,7 +35,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   lectura de teléfono agrupada/dígito a dígito consumida por el agente y moneda de
   presentación USD/MXN/EUR sin conversión ni cambios de precios históricos.
 - **136 pruebas focales aprobadas (27 nuevas)**, ambos typechecks y build de producción.
-- Aceptación manual de voz/UI e integración con el trabajo del compañero pendientes.
+- Aceptación manual de voz/UI cerrada. Integración con el trabajo del compañero pendiente.
   Ver [alcance, configuración y resultados](PRODUCT_UX_CHECKPOINT_A.md).
 - Sin cambios de Asterisk/7001, servicio telefónico, OAuth ni `main`. No se inició
   Checkpoint B dentro de A; B se documenta arriba. El estado de integración siguiente se conserva como checkpoint previo.

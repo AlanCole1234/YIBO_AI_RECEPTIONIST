@@ -122,6 +122,11 @@ passed. The full suite and live external-provider calls were not run for this ch
 
 ## Manual acceptance and integration risks
 
+**Acceptance complete, September 23, 2026.** Browser checks and the user's manual
+Voice Lab pass are recorded in [A/B acceptance](PRODUCT_UX_AB_ACCEPTANCE.md).
+The following checklist is retained as the procedure used; teammate integration
+remains a separate task.
+
 1. In a separate development environment, enable expansion for a location, ask for
    a narrow unavailable period, and verify that the model labels alternatives and
    still prioritizes any preferred slots. Check disabling restores exact-range behavior.

@@ -84,7 +84,7 @@ onMounted(load);
       </fieldset>
       <form v-if="draft" @submit.prevent="save">
         <fieldset :disabled="state.busy">
-          <legend>{{ draft.kind === 'service' ? 'Service details' : draft.kind === 'professional' ? 'Professional details' : `Assignment at ${location?.name}` }}</legend>
+          <legend>{{ draft.kind === 'service' ? 'Service details' : draft.kind === 'professional' ? 'Professional details' : draft.kind === 'currency' ? 'Display currency' : `Assignment at ${location?.name}` }}</legend>
           <template v-if="draft.kind === 'service'">
             <label>Name<input v-model="draft.value.name" maxlength="120" required></label>
             <label>Description<textarea v-model="draft.value.description" maxlength="1000" rows="3"></textarea></label>
