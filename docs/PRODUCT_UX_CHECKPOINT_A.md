@@ -66,8 +66,8 @@ tool executor with `PhoneReadbackToolExecutor`. Only a successful `update_custom
 gets an additional `phoneReadback` field derived from the validated caller input.
 Failed updates do not generate a readback. The original tool arguments, customer
 normalization/storage and authorization/confirmation wrappers remain unchanged.
-The same definition path is used for phone and Voice Lab sessions. Actual audible
-model delivery still needs manual verification.
+The same definition path is used for phone and Voice Lab sessions. Manual speech
+acceptance was subsequently reported passed; see [A/B acceptance](PRODUCT_UX_AB_ACCEPTANCE.md).
 
 ## Currency presentation
 

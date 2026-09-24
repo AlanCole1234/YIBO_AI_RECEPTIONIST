@@ -1,6 +1,8 @@
 import type { LocationCalendarSnapshot } from "../../../src/modules/business/index.js";
 import type { GoogleCalendarAccessStatus } from "../../../src/modules/integrations/index.js";
 import type { EditableBusinessConfiguration, VersionedBusinessConfiguration, TenantServiceDefinition, ProfessionalDefinition, LocationProfessionalAssignment } from "../../../src/modules/business/index.js";
+import type { AvailableSlot } from "../../../src/modules/scheduling/index.js";
+import type { AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
 
 export interface ServiceDefinition {
   id: string;
@@ -24,9 +26,14 @@ export interface Business {
 }
 
 export interface Customer { id: string; tenantId: string; phone: string; name?: string; email?: string }
-export interface Slot { employeeId: string; startAt: string; endAt: string }
+export type Slot = AvailableSlot;
 
 export interface AppointmentLocation { id: string; name: string; active: boolean; timezone: string; minimumCancellationNoticeMinutes: number; minimumRescheduleNoticeMinutes: number }
+export interface AvailabilityLocation extends AppointmentLocation {
+  services: ServiceDefinition[];
+  professionals: Array<{ id: string; displayName: string }>;
+  availabilitySuggestions: AvailabilitySuggestionsPolicy;
+}
 
 export interface Appointment {
   locationId: string;
@@ -224,13 +231,13 @@ export const api = {
   }),
   findOrCreateCustomer: (input: { name: string; phone: string }) =>
     request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(input) }),
-  availability: (input: { locationId?: string; serviceId: string; employeeId: string; rangeStart: string; rangeEnd: string }) => {
+  availability: (input: { locationId?: string; serviceId: string; employeeId?: string; rangeStart: string; rangeEnd: string }) => {
     const query = new URLSearchParams(input);
     return request<{ slots: Slot[] }>(`/api/availability?${query}`);
   },
-  createAppointment: (input: { customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
+  createAppointment: (input: { locationId?: string; customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
     request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
-  appointmentLocations: () => request<{ locations: AppointmentLocation[] }>("/api/appointment-locations"),
+  appointmentLocations: () => request<{ locations: AvailabilityLocation[] }>("/api/appointment-locations"),
   customerAppointments: (locationId: string, customerId: string) => request<{ appointments: Appointment[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments?${new URLSearchParams({ customerId })}`),
   locationAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}`),
   cancelAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),

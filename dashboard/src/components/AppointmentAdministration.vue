@@ -3,7 +3,7 @@ import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import { createAppointmentEditor, appointmentTime } from "../services/appointment-editor";
 import { priceText } from "../services/catalog-editor";
-const props = defineProps<{ initialCustomerId?: string; initialAppointmentId?: string }>();
+const props = defineProps<{ initialCustomerId?: string; initialAppointmentId?: string; initialLocationId?: string }>();
 const editor = createAppointmentEditor(); const { state } = editor;
 useUnsavedChanges(() => Boolean(state.pending), () => state.busy);
 const day = ref("");
@@ -11,7 +11,10 @@ const location = computed(() => state.locations.find(item => item.id === state.l
 const time = (value: string) => appointmentTime(value, location.value?.timezone ?? "UTC");
 onMounted(async () => {
   state.customerId = props.initialCustomerId ?? ""; state.appointmentId = props.initialAppointmentId ?? "";
-  if (await editor.load() && state.appointmentId) await editor.lookup();
+  state.locationId = props.initialLocationId ?? "";
+  if (await editor.load() && state.appointmentId && await editor.lookup() && state.selected?.status === "CONFIRMED") {
+    state.message = "Appointment confirmed. The details below use its location's time zone.";
+  }
 });
 </script>
 <template>

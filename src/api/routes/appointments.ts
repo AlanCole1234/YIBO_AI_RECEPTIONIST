@@ -2,8 +2,10 @@ import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
+import { DEFAULT_AVAILABILITY_SUGGESTIONS } from "../../modules/business/domain/multi-location-business.js";
 
 interface AppointmentBody {
+  locationId?: unknown;
   customerId?: unknown;
   serviceId?: unknown;
   employeeId?: unknown;
@@ -15,10 +17,25 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
   server.get("/api/appointment-locations", { preHandler: createAdminGuard(app, "operator") }, async (_request, reply) => {
     const result = await app.business.getBusinessConfiguration(app.tenantId);
     if (!result.ok) { const error = toHttpError(result.error); return reply.code(error.statusCode).send(error.payload); }
-    return { locations: result.value.configuration.locations.map(location => ({
+    const configuration = result.value.configuration;
+    return { locations: configuration.locations.map(location => ({
       id: location.id, name: location.name, active: location.active, timezone: location.timezone,
       minimumCancellationNoticeMinutes: location.policies.minimumCancellationNoticeMinutes,
       minimumRescheduleNoticeMinutes: location.policies.minimumRescheduleNoticeMinutes,
+      // Explicit operator-safe projection; never expose calendar IDs, phone routes or closure reasons.
+      services: configuration.services.filter(service => service.active
+        && location.services.some(offering => offering.active && offering.serviceId === service.id))
+        .map(service => ({ id: service.id, name: service.name, durationMinutes: service.durationMinutes,
+          bufferMinutes: service.bufferMinutes,
+          eligibleEmployeeIds: location.professionals.filter(assignment => assignment.active
+            && assignment.serviceIds.includes(service.id)
+            && configuration.professionals.some(professional => professional.active && professional.id === assignment.professionalId))
+            .map(assignment => assignment.professionalId),
+        })),
+      professionals: configuration.professionals.filter(professional => professional.active
+        && location.professionals.some(assignment => assignment.active && assignment.professionalId === professional.id))
+        .map(professional => ({ id: professional.id, displayName: professional.displayName })),
+      availabilitySuggestions: location.policies.availabilitySuggestions ?? DEFAULT_AVAILABILITY_SUGGESTIONS,
     })) };
   });
 
@@ -62,8 +79,9 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     "/api/appointments",
     { preHandler: createAdminGuard(app, "operator") },
     async (request, reply) => {
-    const { customerId, serviceId, employeeId, startAt } = request.body ?? {};
-    if (![customerId, serviceId, employeeId, startAt].every((value) => typeof value === "string" && value.length > 0)) {
+    const { locationId, customerId, serviceId, employeeId, startAt } = request.body ?? {};
+    if (![customerId, serviceId, employeeId, startAt].every((value) => typeof value === "string" && value.length > 0)
+      || (locationId !== undefined && (typeof locationId !== "string" || !locationId.trim()))) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
     }
     const idempotencyHeader = request.headers["idempotency-key"];
@@ -72,7 +90,7 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       : `dashboard:${app.ids.generate("idempotency")}`;
     const result = await app.appointments.createAppointment({
       tenantId: app.tenantId,
-      locationId: "default",
+      locationId: (locationId as string | undefined) ?? "default",
       customerId: customerId as string,
       serviceId: serviceId as string,
       employeeId: employeeId as string,

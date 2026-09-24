@@ -1,6 +1,11 @@
 import { computed, reactive } from "vue";
 import type { EditableBusinessConfiguration, VersionedBusinessConfiguration, LocationDefinition } from "../../../src/modules/business/index.js";
 import { api, ApiError } from "./api.js";
+import { DEFAULT_AVAILABILITY_SUGGESTIONS, type AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
+
+export function updateAvailabilitySuggestions(location: LocationDefinition, patch: Partial<AvailabilitySuggestionsPolicy>): void {
+  location.policies.availabilitySuggestions = { ...(location.policies.availabilitySuggestions ?? DEFAULT_AVAILABILITY_SUGGESTIONS), ...patch };
+}
 
 export function createLocationEditor(client = api) {
   const state = reactive({
@@ -46,7 +51,7 @@ export function newLocation(source: LocationDefinition, id: string): LocationDef
     id, name: "New location", active: false,
     address: { line1: "", city: "", countryCode: source.address.countryCode },
     timezone: source.timezone, locale: source.locale, calledNumbers: [], openingHours: [], closures: [],
-    policies: { ...source.policies },
+    policies: JSON.parse(JSON.stringify(source.policies)),
     // Keep a valid default service without copying professional/calendar routes.
     services: JSON.parse(JSON.stringify(source.services)), professionals: [],
   };

@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
-import { createLocationEditor, newLocation } from "../services/location-editor";
+import { createLocationEditor, newLocation, updateAvailabilitySuggestions } from "../services/location-editor";
+import { DEFAULT_AVAILABILITY_SUGGESTIONS, type AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
 
+const props = defineProps<{ initialLocationId?: string }>();
 const emit = defineEmits<{ saved: [] }>();
 const editor = createLocationEditor();
 const { state } = editor;
 useUnsavedChanges(() => editor.dirty.value, () => state.busy);
-const selectedId = ref("");
+const selectedId = ref(props.initialLocationId ?? "");
 const location = computed(() => state.draft?.locations.find(({ id }) => id === selectedId.value));
+const suggestions = computed(() => location.value?.policies.availabilitySuggestions ?? DEFAULT_AVAILABILITY_SUGGESTIONS);
+function changeSuggestions(patch: Partial<AvailabilitySuggestionsPolicy>) {
+  if (location.value) updateAvailabilitySuggestions(location.value, patch);
+}
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const addressFields = [
   { key: "line1", label: "Street address", required: true }, { key: "line2", label: "Address line 2", required: false },
@@ -97,6 +103,14 @@ onMounted(load);
             <label>Slot interval (minutes)<select v-model.number="location.policies.slotIncrementMinutes"><option v-for="minutes in [5, 10, 15, 20, 30, 60]" :key="minutes" :value="minutes">{{ minutes }}</option></select></label>
             <label v-for="field in policyFields" :key="field.key">{{ field.label }}<input v-model.number="location.policies[field.key]" type="number" :min="field.min" step="1" required></label>
           </div>
+          <h3>Availability suggestions</h3>
+          <p class="help">Keep the requested period first. When it has few or no options, optionally offer verified alternatives after that period. These settings apply to availability searches and the agent at this location.</p>
+          <label class="check"><input type="checkbox" :checked="suggestions.enabled" @change="changeSuggestions({ enabled: ($event.target as HTMLInputElement).checked })">Offer alternatives outside the requested period</label>
+          <div class="fields">
+            <label>Search ahead (days)<input type="number" min="1" max="14" step="1" required :disabled="!suggestions.enabled" :value="suggestions.expansionDays" @input="changeSuggestions({ expansionDays: Number(($event.target as HTMLInputElement).value) })"></label>
+            <label>Maximum alternative options<input type="number" min="1" max="5" step="1" required :disabled="!suggestions.enabled" :value="suggestions.maximumAlternatives" @input="changeSuggestions({ maximumAlternatives: Number(($event.target as HTMLInputElement).value) })"></label>
+          </div>
+          <p class="help">Search ahead uses 24-hour periods after the requested end. Business hours, provider schedules, booking limits and Calendar conflicts still apply. No appointment is chosen automatically.</p>
           <h3>Human transfer</h3>
           <div class="fields">
             <label>Destination type<select :value="location.transferDestination?.type ?? ''" @change="changeTransfer"><option value="">No destination</option><option value="PHONE_NUMBER">Phone number</option><option value="EXTENSION">Extension</option></select></label>

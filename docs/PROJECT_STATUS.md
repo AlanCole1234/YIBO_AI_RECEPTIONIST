@@ -3,6 +3,22 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — Checkpoint C — 23 de septiembre de 2026
+
+- **Checkpoint C completo**: Availability UI usa sucursal/servicio/profesional,
+  fecha y rango horario local; separa opciones solicitadas y alternativas con fecha/zona.
+- Estados vacío/error/carga, selección explícita, limpieza al cambiar filtros y
+  rechazo de respuestas antiguas. Reserva con la sucursal/instante seleccionados;
+  abre la cita correcta y conserva la revalidación del dominio.
+- Settings expone la política de sugerencias existente (habilitar, 1–14 días,
+  1–5 alternativas) mediante el mismo API, permisos y CAS. Sin motor duplicado.
+- **67 pruebas focales aprobadas (28 nuevas)**, ambos typechecks y build. Browser
+  con datos sintéticos: dos sucursales, reserva/reprogramación/cancelación,
+  persistencia de controles, teclado y ancho móvil verificados.
+- [Alcance, contratos, pruebas y límites](PRODUCT_UX_CHECKPOINT_C.md). Sin cambios
+  de producción, Calendar/OAuth, telefonía, `main` ni rama del compañero.
+- Próximo checkpoint propuesto: Model Configuration Pipeline; no iniciado.
+
 ## Product/UX — aceptación A/B — 23 de septiembre de 2026
 
 - **Aceptación A/B completa**: UI de moneda/readback, conflictos entre pestañas,
@@ -10,7 +26,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Corregido el título del editor de moneda a “Display currency”, sin cambiar precios.
 - Evidencia y límites: [aceptación A/B](PRODUCT_UX_AB_ACCEPTANCE.md). Entorno aislado
   con datos sintéticos/calendario local; no implica aceptación telefónica o despliegue.
-- Checkpoint C — Availability UI autorizado como siguiente trabajo en esta rama.
+- Checkpoint C — Availability UI autorizado después de este cierre; completado arriba.
 
 ## Product/UX — Checkpoint B — 23 de septiembre de 2026
 
@@ -26,7 +42,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Aceptación de micrófono/modelo y UI móvil cerrada; ver [evidencia A/B](PRODUCT_UX_AB_ACCEPTANCE.md) y
   [alcance, estados, pruebas y riesgos](PRODUCT_UX_CHECKPOINT_B.md).
 - Sin cambios a Asterisk/7001, servicio telefónico, OAuth, Calendar o `main`.
-  Próximo checkpoint sugerido: Availability UI; no iniciado.
+  Availability UI no se incluyó en B; se completó después como Checkpoint C.
 
 ## Product/UX — Checkpoint A — 23 de septiembre de 2026
 
