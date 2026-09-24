@@ -84,6 +84,7 @@ export interface AgentConfiguration {
     greeting: { mode: "wait_for_caller" } | { mode: "automatic"; message: string };
     responseStyle: { brevity: "brief" | "balanced" | "detailed"; tone: "warm" | "professional" | "direct"; pace: "slow" | "balanced" | "fast" };
     silence: { message: string; maxPrompts: number };
+    allowPriceDisclosure?: boolean;
     phoneReadback?: "natural_grouped" | "digit_by_digit";
     slotOffering: { maximumOptions: number; strategy: "earliest_first" | "spread_across_day" | "match_requested_time" };
     dataCollectionOrder: Array<"full_name" | "phone_number" | "service">;

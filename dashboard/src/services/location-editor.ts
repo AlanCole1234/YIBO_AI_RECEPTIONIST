@@ -39,7 +39,7 @@ export function createLocationEditor(client = api) {
         ? "Settings changed on the server. Your edits are still here. Copy any edits you need, then discard this draft and load the latest settings before saving."
         : error instanceof ApiError && error.status === 403
           ? "Only a tenant administrator can save location settings."
-          : "Location settings were not saved. Check required fields, unique phone numbers, time zones, hours, closure dates and policies, then try again.";
+          : "Location settings were not saved. Check required fields, unique phone numbers, time zones, hours, closure dates, policies and AI rules, then try again.";
       return false;
     } finally { state.busy = false; }
   }

@@ -3,6 +3,26 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — Model Configuration Pipeline — 24 de septiembre de 2026
+
+- **Checkpoint completo** en `codex/product-ux-improvements`; `25eb2f4` y `904dc11`
+  se conservan. Auditoría reutiliza AgentConfiguration v4 y negocio/sucursales v2.
+- AI agent → Business rules expone precios y reserva/cancelación/reprogramación
+  usando los permisos existentes. Precios permitidos por default para conservar
+  comportamiento; al deshabilitarlos, prompt y resultados de herramientas lo aplican.
+- Settings → Locations añade overrides opcionales de acciones, precios, idioma y
+  readback. Herencia por default; una sucursal no puede habilitar permisos denegados
+  por negocio/canal. Disponibilidad conserva las políticas ya implementadas en A/C.
+- Persistencia, validación, tenant/contexto confiable, versiones y conflictos en los
+  mismos APIs; sin nuevo almacén ni cambios a Customer Profiles/Email Notifications.
+- **105 pruebas focales aprobadas (27 nuevas)**, ambos typechecks y build. Browser
+  sintético: guardado/reload, aislamiento entre sucursales, validación, herencia,
+  teclado y ancho móvil. Sin llamada/modelo live, Calendar/OAuth ni telefonía.
+- [Campos/defaults/consumidores, evidencia y límites](MODEL_CONFIGURATION_PIPELINE.md).
+  Falta escuchar las nuevas reglas en Voice Lab aislado. Siguiente checkpoint
+  recomendado: aceptación de reglas de voz; acordar alcance de Appointments Calendar
+  con el compañero antes de iniciarlo. No se inició otro checkpoint ni se mezcló main.
+
 ## Product/UX — Checkpoint C — 23 de septiembre de 2026
 
 - **Checkpoint C completo**: Availability UI usa sucursal/servicio/profesional,
@@ -17,7 +37,7 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   persistencia de controles, teclado y ancho móvil verificados.
 - [Alcance, contratos, pruebas y límites](PRODUCT_UX_CHECKPOINT_C.md). Sin cambios
   de producción, Calendar/OAuth, telefonía, `main` ni rama del compañero.
-- Próximo checkpoint propuesto: Model Configuration Pipeline; no iniciado.
+- Model Configuration Pipeline se completó después de C; ver el checkpoint superior.
 
 ## Product/UX — aceptación A/B — 23 de septiembre de 2026
 

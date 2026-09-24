@@ -3,6 +3,7 @@ import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import { createLocationEditor, newLocation, updateAvailabilitySuggestions } from "../services/location-editor";
 import { DEFAULT_AVAILABILITY_SUGGESTIONS, type AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
+import LocationAgentRules from "./LocationAgentRules.vue";
 
 const props = defineProps<{ initialLocationId?: string }>();
 const emit = defineEmits<{ saved: [] }>();
@@ -63,7 +64,7 @@ onMounted(load);
         <legend>Location settings · version {{ state.version }}</legend>
         <label>Location<select v-model="selectedId"><option v-for="item in state.draft.locations" :key="item.id" :value="item.id">{{ item.name }}{{ item.active ? '' : ' (inactive)' }}</option></select></label>
         <button type="button" @click="addLocation">Add inactive location based on this one</button>
-        <p class="help">A new location copies service offerings and booking policies, but starts with no phone numbers, professionals or calendar mapping. Set up those assignments before activating it.</p>
+        <p class="help">A new location copies service offerings and booking policies, but starts with no phone numbers, professionals or calendar mapping. AI rules inherit business settings. Set up those assignments before activating it.</p>
         <template v-if="location">
           <div class="fields">
             <label>Name<input v-model="location.name" required></label>
@@ -111,6 +112,7 @@ onMounted(load);
             <label>Maximum alternative options<input type="number" min="1" max="5" step="1" required :disabled="!suggestions.enabled" :value="suggestions.maximumAlternatives" @input="changeSuggestions({ maximumAlternatives: Number(($event.target as HTMLInputElement).value) })"></label>
           </div>
           <p class="help">Search ahead uses 24-hour periods after the requested end. Business hours, provider schedules, booking limits and Calendar conflicts still apply. No appointment is chosen automatically.</p>
+          <LocationAgentRules :location="location" />
           <h3>Human transfer</h3>
           <div class="fields">
             <label>Destination type<select :value="location.transferDestination?.type ?? ''" @change="changeTransfer"><option value="">No destination</option><option value="PHONE_NUMBER">Phone number</option><option value="EXTENSION">Extension</option></select></label>

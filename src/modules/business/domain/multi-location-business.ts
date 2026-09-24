@@ -9,6 +9,7 @@ import type {
 } from "../../../shared/types/identifiers.js";
 import type { OpeningHoursRule } from "../application/contracts.js";
 import { DISPLAY_CURRENCIES, validateMoney, type DisplayCurrency, type Money } from "./money.js";
+import { isLocationAgentOverrides, type LocationAgentOverrides } from "./location-agent-overrides.js";
 
 export const MULTI_LOCATION_BUSINESS_SCHEMA_VERSION = 2 as const;
 export const SLOT_INCREMENT_MINUTES = [5, 10, 15, 20, 30, 60] as const;
@@ -95,6 +96,7 @@ export type LocationTransferDestination =
   | { type: "EXTENSION"; value: string };
 
 export interface LocationDefinition {
+  agentOverrides?: LocationAgentOverrides;
   id: LocationId;
   name: string;
   active: boolean;
@@ -161,6 +163,9 @@ export const validateMultiLocationBusiness = (
     required(errors, `${path}.id`, location.id);
     required(errors, `${path}.name`, location.name);
     required(errors, `${path}.locale`, location.locale);
+    if (location.agentOverrides !== undefined && !isLocationAgentOverrides(location.agentOverrides)) {
+      errors.push({ path: `${path}.agentOverrides`, message: "Use supported appointment restrictions, a price-disclosure boolean, phone readback style and a valid language tag." });
+    }
     required(errors, `${path}.address.line1`, location.address.line1);
     required(errors, `${path}.address.city`, location.address.city);
     if (!/^[A-Z]{2}$/.test(location.address.countryCode)) {
