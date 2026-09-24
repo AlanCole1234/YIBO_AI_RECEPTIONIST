@@ -37,6 +37,9 @@ describe("AgentPromptCompiler", () => {
     expect(prompt).toContain("Backend confirmation is required for: create_appointment, cancel_appointment");
     expect(prompt).toContain("Retry only after a new caller turn, with identical action arguments and that token");
     expect(prompt).toContain("Never claim a mutation succeeded until its tool returns success");
+    expect(prompt).toContain('Location timezone: "America/Mexico_City"');
+    expect(prompt).toContain("Tool timestamps ending in Z are UTC: convert them before speaking");
+    expect(prompt).toContain("copying their original values unchanged into later tool calls");
   });
 
   it("does not advertise authority for disabled capabilities", () => {

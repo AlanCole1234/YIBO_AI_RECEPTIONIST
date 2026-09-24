@@ -3,6 +3,23 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — aceptación aislada de reglas de voz — 24 de septiembre de 2026
+
+- `1184fff` se conserva. Siete conversaciones de audio sintético con Realtime real
+  verifican precios/permisos, overrides, idioma, readback y configuración nueva por sesión.
+- Reserva → reprogramación → cancelación local aprobadas sin revelar precios;
+  ninguna cita de esta aceptación queda activa. No se utilizó Google ni telefonía live.
+- `0994bf1` corrige eventos started etiquetados como failed y cierre cuando end_call
+  precede al audio de despedida; fallo de despedida termina como error, sin espera infinita.
+  Cuatro conversaciones posteriores terminaron automáticamente una sola vez.
+- Guía de tools aclara fecha/rango ya soportados; prompt exige hablar en hora local
+  conservando timestamps originales. Sin cambios al motor de agenda o parser.
+- **127 checks focales aprobados**, ambos typechecks y build. Configuración sintética
+  restaurada exactamente; captura deshabilitada; `main`, servicio telefónico y OAuth intactos.
+- **Pendiente manual**: escuchar cadencia, micrófono, barge-in y reinicio/audio en navegador.
+  [Matriz PASS / MANUAL REQUIRED, fallos observados y guion exacto](MODEL_CONFIGURATION_VOICE_ACCEPTANCE.md).
+  No se inició otro checkpoint. Después: acordar Appointments Calendar UI con el compañero.
+
 ## Product/UX — Model Configuration Pipeline — 24 de septiembre de 2026
 
 - **Checkpoint completo** en `codex/product-ux-improvements`; `25eb2f4` y `904dc11`
@@ -19,8 +36,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   sintético: guardado/reload, aislamiento entre sucursales, validación, herencia,
   teclado y ancho móvil. Sin llamada/modelo live, Calendar/OAuth ni telefonía.
 - [Campos/defaults/consumidores, evidencia y límites](MODEL_CONFIGURATION_PIPELINE.md).
-  Falta escuchar las nuevas reglas en Voice Lab aislado. Siguiente checkpoint
-  recomendado: aceptación de reglas de voz; acordar alcance de Appointments Calendar
+  Aceptación de audio sintético completada después; escuchar/micrófono manual pendiente arriba.
+  Siguiente checkpoint recomendado: acordar alcance de Appointments Calendar
   con el compañero antes de iniciarlo. No se inició otro checkpoint ni se mezcló main.
 
 ## Product/UX — Checkpoint C — 23 de septiembre de 2026

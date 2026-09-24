@@ -165,10 +165,11 @@ API 3112), with no Google/phone integration:
 
 ### Remaining acceptance / limits
 
-- Run an isolated Voice Lab conversation to hear denied price/action responses,
-  language and grouped/digit phone readback. No new live model/audio or phone call
-  was performed in this checkpoint. Deterministic tool enforcement and compiled
-  instructions are tested; spontaneous speech remains model behavior.
+- Follow-up [isolated Voice Lab acceptance](MODEL_CONFIGURATION_VOICE_ACCEPTANCE.md)
+  ran seven real-model synthetic audio conversations, verified the saved business
+  rules and corrected narrow completion/activity/date-guidance issues separately.
+  Human microphone, readback cadence and browser barge-in checks remain pending.
+  No live phone or Google operation was performed in that follow-up.
 - Price filtering covers structured public `price` fields, not arbitrary free text
   in service descriptions, caller speech or custom instructions. Do not embed
   prices in an exact scripted greeting when disclosure is disabled. Saved custom
@@ -178,6 +179,6 @@ API 3112), with no Google/phone integration:
   existing authorization and are not restricted by AI tool permissions.
 - No live Calendar/OAuth, Asterisk, ARI, Telnyx, routing, `main`, deployment or merge.
 
-Recommended next checkpoint: isolated Voice Lab acceptance of these saved business
-rules, then agree on the Appointments Calendar UI scope with the teammate before
-starting that product checkpoint. No next checkpoint has been started.
+Recommended next step: finish the manual Voice Lab checks linked above, then agree
+on the Appointments Calendar UI scope with the teammate before starting that product
+checkpoint. No next checkpoint has been started.
