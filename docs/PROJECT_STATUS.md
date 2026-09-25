@@ -3,6 +3,36 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — integración — 25 de septiembre de 2026
+
+- Plan autorizado: `YIBO_Alan_Codex_Instructions.pdf`, leído completo (6 páginas).
+  Rama dedicada **`codex/yibo-launch-candidate`**, creada desde Product/UX.
+- Remotos verificados con fetch y `ls-remote`: Product/UX
+  `7078d49e8ad312f2f4ab797ee184d2e933818297`; Business Operations
+  `785389f3c6aea89c2f4d26ec1a7b433669f6b668`; integración telefónica
+  `46ce7135a6e6118c14c387b103957868a672645e`, ya ancestro de Product/UX.
+  Divergencia real al integrar: **10 commits Product/UX / 9 Operations**.
+- Se conserva el checkout telefónico con sus cambios locales, ambos branches fuente,
+  `main`, configuración de 7001, proveedores live y credenciales. Merge con dos
+  padres; sin squash, reset, force-push ni despliegue.
+- Integración conserva Appointments/Availability de Product/UX y Office schedule,
+  Customers, Team availability, outcomes, notificaciones y roles de Operations.
+  Mantiene políticas/overrides, precios redactados, readback configurable, locale,
+  contacto confirmado, lifecycle Voice Lab y costos por sesión.
+- Correcciones de integración: timeline verifica sucursal antes de devolver emails;
+  controles legacy se normalizan antes del baseline de cambios sin guardar;
+  acciones de oficina respetan estados/permisos visibles. OAuth conserva la sonda
+  de eventos ya verificada e incorpora diagnóstico de revocación/API deshabilitada.
+- **291 pruebas focales distintas aprobadas (18 nuevas)**, ambos typechecks y build.
+  Browser aislado 3113/5381, SQLite sintético/calendario en memoria: crear en Office →
+  historial Customers → reprogramar en Appointments → cancelar en Office;
+  mismo registro, timeline/notifications `SKIPPED`, slot liberado y layout 390 px.
+  No se iniciaron Google, Resend, Asterisk ni Realtime live.
+- **Checkpoint 1 completo**; las verificaciones live históricas no certifican esta
+  combinación. Próximo gate: regresión completa del candidato (checkpoint 2), después
+  **RISK-001** (checkpoint 3). Google real, ACCEPT-001, despliegue/restore y piloto
+  siguen pendientes según el PDF. [Evidencia y decisiones](LAUNCH_CANDIDATE.md).
+
 ## Product/UX — Appointments Calendar UI — 24 de septiembre de 2026
 
 - **Checkpoint completo** en `codex/product-ux-improvements`; conserva `7510f7a`
@@ -118,13 +148,16 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Sin cambios de Asterisk/7001, servicio telefónico, OAuth ni `main`. No se inició
   Checkpoint B dentro de A; B se documenta arriba. El estado de integración siguiente se conserva como checkpoint previo.
 
-## Estado actual — 22 de septiembre de 2026
+## Estado histórico — 22 de septiembre de 2026
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
 - Auditoría focal de negocio: **482 pruebas aprobadas, 1 live omitida**, ambos typechecks y build; guardia de rutas cubre desactivación.
 - OAuth aislado recuperado desde autorización vigente; verificación corregida para scopes de eventos, 13 pruebas focales aprobadas. Callback nuevo y acceso a Cloud/MFA pendientes: [diagnóstico](GOOGLE_AUTH_DIAGNOSIS.md).
 - **Prueba real todavía bloqueada** por ruta telefónica aislada; operaciones Google reales aún no verificadas. Riesgos de edición simultánea y búsqueda por IDs documentados en [readiness](BUSINESS_TEST_READINESS.md).
 - Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
+- Plan de operaciones iniciado en `codex/yibo-business-operations`: auditoría
+  funcional e implementación agrupada completadas; typecheck, 477 pruebas y build
+  de producción aprobados. La aceptación live permanece separada.
 - Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
 
 ## Historial de checkpoints verificados
@@ -310,6 +343,22 @@ con `pnpm test` y `pnpm build`.
 | DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
 | RISK-001 | TODO | Appointments: coherencia de cambios/cancelaciones simultáneos antes de pruebas multioperador; BUSINESS_TEST_READINESS.md |
 | RISK-002 | TODO | Producto/secretaría: validar flujo por IDs y necesidad de agenda/búsqueda antes de uso diario; BUSINESS_TEST_READINESS.md |
+
+## Plan de operaciones del negocio
+
+| ID | Estado | Resultado |
+|---|---|---|
+| OPS-000 | DONE | Auditoría y matriz de brechas de configuración contra código actual |
+| OPS-001 | DONE | Workspace día/semana/mes/agenda, filtros, huecos y reserva rápida |
+| OPS-002 | DONE | Búsqueda, perfil e historial tenant-scoped de clientes |
+| OPS-003 | DONE | Reglas estructuradas de agenda y capacidades IA por sucursal |
+| OPS-004 | DONE | Eventos, outcomes y correo Resend posterior al commit |
+| OPS-005 | DONE | Roles operativos y modo read-only con guard transversal |
+| OPS-006 | DONE | Readiness de proveedores/sucursales y reconexión ARI; typecheck, 477 pruebas + 1 live omitida y build aprobados |
+| OPS-007 | TODO | Aceptación browser, PBX, Google y correo real con datos sintéticos; requiere operador y credenciales live |
+| OPS-008 | DONE | Hora hablada localizada, contacto confirmado antes de reservar, doctor/dirección post-reserva y cierre explícito de llamada |
+| OPS-009 | DONE | Variante oral ligada al locale: es-MX exige español y acento mexicano neutral; el saludo automático se genera en el idioma configurado |
+| OPS-010 | DONE | Voice Lab muestra duración, uso detallado y costo estimado en vivo con tarifas versionadas por modelo; la factura del proveedor sigue siendo autoritativa |
 
 ## Registro de decisiones
 

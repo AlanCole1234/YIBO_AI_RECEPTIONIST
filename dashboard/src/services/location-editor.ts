@@ -1,10 +1,18 @@
 import { computed, reactive } from "vue";
 import type { EditableBusinessConfiguration, VersionedBusinessConfiguration, LocationDefinition } from "../../../src/modules/business/index.js";
 import { api, ApiError } from "./api.js";
-import { DEFAULT_AVAILABILITY_SUGGESTIONS, type AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
+import { DEFAULT_AVAILABILITY_SUGGESTIONS, resolvedAiCapabilities, type AvailabilitySuggestionsPolicy } from "../../../src/modules/business/domain/multi-location-business.js";
 
 export function updateAvailabilitySuggestions(location: LocationDefinition, patch: Partial<AvailabilitySuggestionsPolicy>): void {
   location.policies.availabilitySuggestions = { ...(location.policies.availabilitySuggestions ?? DEFAULT_AVAILABILITY_SUGGESTIONS), ...patch };
+}
+
+export function initializeLocationControls(location: LocationDefinition): void {
+  location.policies.sameDayBooking ??= true;
+  location.policies.cancellationAllowed ??= true;
+  location.policies.reschedulingAllowed ??= true;
+  location.policies.staffOverrideAllowed ??= false;
+  location.aiCapabilities = resolvedAiCapabilities(location);
 }
 
 export function createLocationEditor(client = api) {
@@ -14,6 +22,8 @@ export function createLocationEditor(client = api) {
   });
   const accept = (document: VersionedBusinessConfiguration) => {
     state.draft = JSON.parse(JSON.stringify(document.configuration));
+    // Display optional legacy defaults before capturing the clean editor baseline.
+    state.draft?.locations.forEach(initializeLocationControls);
     state.baseline = JSON.stringify(state.draft);
     state.version = document.version;
     state.conflict = false;

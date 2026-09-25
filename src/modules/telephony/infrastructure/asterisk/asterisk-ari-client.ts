@@ -18,6 +18,10 @@ export class AsteriskAriClient implements ConnectableAsteriskClient, AsteriskMed
   private readonly handlers: Array<(event: AsteriskEvent) => Promise<void>> = [];
   private readonly externalMediaChannelIds = new Set<string>();
   private socket?: WebSocket;
+  private connecting?: Promise<void>;
+  private reconnectTimer?: NodeJS.Timeout;
+  private reconnectAttempt = 0;
+  private closing = false;
   private readonly baseUrl: URL;
   private readonly log: (event: string, details?: Record<string, unknown>) => void;
 
@@ -34,6 +38,13 @@ export class AsteriskAriClient implements ConnectableAsteriskClient, AsteriskMed
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
+    if (this.connecting) return this.connecting;
+    this.closing = false;
+    this.connecting = this.openSocket();
+    try { await this.connecting; } finally { this.connecting = undefined; }
+  }
+
+  private async openSocket(): Promise<void> {
     this.log("telephony.ari.websocket_connecting", { application: this.options.application, host: this.baseUrl.host });
     const url = new URL("/ari/events", this.baseUrl);
     url.searchParams.set("app", this.options.application);
@@ -41,20 +52,34 @@ export class AsteriskAriClient implements ConnectableAsteriskClient, AsteriskMed
     const socket = new WebSocket(url);
     this.socket = socket;
     await new Promise<void>((resolve, reject) => {
-      const opened = () => { cleanup(); resolve(); };
+      const timeout = setTimeout(() => { cleanup(); socket.terminate(); reject(new Error("Asterisk ARI websocket connection timed out")); }, 10_000);
+      const opened = () => { cleanup(); this.reconnectAttempt = 0; resolve(); };
       const failed = (error: Error) => { cleanup(); reject(error); };
-      const cleanup = () => { socket.off("open", opened); socket.off("error", failed); };
+      const cleanup = () => { clearTimeout(timeout); socket.off("open", opened); socket.off("error", failed); };
       socket.once("open", opened);
       socket.once("error", failed);
     });
     socket.on("message", (message) => this.onMessage(message.toString()));
-    socket.on("close", () => this.log("telephony.ari.disconnected"));
+    socket.on("close", () => { this.log("telephony.ari.disconnected"); if (this.socket === socket) this.socket = undefined; this.scheduleReconnect(); });
     socket.on("error", (error) => this.log("telephony.ari.error", { error: safeError(error) }));
     this.log("telephony.ari.connected", { application: this.options.application, host: this.baseUrl.host });
     this.log("telephony.ari.application_subscribed", { application: this.options.application });
   }
 
-  close(): void { this.socket?.close(); }
+  close(): void { this.closing = true; if (this.reconnectTimer) clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined; this.socket?.close(); }
+
+  private scheduleReconnect(): void {
+    if (this.closing || this.reconnectTimer) return;
+    const delay = Math.min(30_000, 1_000 * (2 ** this.reconnectAttempt++));
+    this.log("telephony.ari.reconnect_scheduled", { durationMs: delay });
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect().catch((error) => {
+        this.log("telephony.ari.reconnect_failed", { error: safeError(error) });
+        this.scheduleReconnect();
+      });
+    }, delay);
+  }
   async answer(channelId: string): Promise<void> { await this.request(`/ari/channels/${encodeURIComponent(channelId)}/answer`, { method: "POST" }); }
   async hangup(channelId: string): Promise<void> {
     try { await this.request(`/ari/channels/${encodeURIComponent(channelId)}`, { method: "DELETE" }); }

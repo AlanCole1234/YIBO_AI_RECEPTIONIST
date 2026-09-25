@@ -15,6 +15,8 @@ despliegue siguen pendientes del operador. Ver la auditoría antes de desplegar.
 - [Guía para seguir construyendo](docs/BUILDING_GUIDE.md)
 - [Decisiones arquitectónicas](docs/adr/README.md)
 - [Operación, administración y diagnóstico](docs/OPERATIONS_RUNBOOK.md)
+- [Operación diaria de oficina](docs/BUSINESS_OPERATIONS.md)
+- [Matriz de brechas de configuración](docs/CONFIGURATION_GAP_MATRIX.md)
 - [Catálogo de configuración](docs/CONFIGURATION_CATALOG.md)
 - [Migración y recuperación](docs/MIGRATION_RECOVERY.md)
 - [Contrato histórico de arquitectura](YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md)
@@ -57,7 +59,7 @@ The current entry points select a bootstrap tenant using server-owned `YIBO_TENA
 
 Isolation is enforced at two levels: MX and US use different database files, and every operational primary/foreign key is scoped by `region_id` plus `tenant_id`. Customers, appointments, and calendar events therefore cannot be joined across a region or tenant accidentally.
 
-Schema migrations 1–9: `src/infrastructure/database/migrations/`. See the recovery runbook before starting a newer build against existing data.
+Schema migrations 1–10: `src/infrastructure/database/migrations/`. See the recovery runbook before starting a newer build against existing data.
 
 Regional configuration example: `.env.example`
 

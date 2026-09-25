@@ -19,8 +19,12 @@ export class GoogleOAuthService {
 
   async status(tenantId: string): Promise<GoogleIntegrationStatus> {
     const configured = this.isConfigured();
-    const token = configured ? await this.tokens.get(tenantId) : null;
-    return { configured, connected: token !== null };
+    if (!configured) return { configured: false, connected: false };
+    try {
+      return { configured: true, connected: (await this.accessToken(tenantId)) !== null };
+    } catch {
+      return { configured: true, connected: false };
+    }
   }
 
   authorizationUrl(tenantId: string, returnTo: string): string | null {
@@ -66,13 +70,18 @@ export class GoogleOAuthService {
     if (new Date(current.expiresAt).valueOf() > Date.now() + 60_000) return current.accessToken;
     if (!current.refreshToken || !this.isConfigured()) return null;
 
-    const response = await this.fetcher("https://oauth2.googleapis.com/token", {
-      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
-        refresh_token: current.refreshToken, grant_type: "refresh_token",
-      }),
-    });
+    let response: Response;
+    try {
+      response = await this.fetcher("https://oauth2.googleapis.com/token", {
+        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
+          refresh_token: current.refreshToken, grant_type: "refresh_token",
+        }),
+      });
+    } catch {
+      return null;
+    }
     if (!response.ok) return null;
     const payload = await response.json() as { access_token?: string; expires_in?: number };
     if (!payload.access_token) return null;
@@ -96,7 +105,14 @@ export class GoogleOAuthService {
         { headers: { authorization: `Bearer ${token}` } },
       );
       if (response.ok) return "accessible";
-      if (response.status === 403) return "forbidden";
+      if (response.status === 403) {
+        const payload = await response.json().catch(() => null) as {
+          error?: { errors?: Array<{ reason?: string }> };
+        } | null;
+        return payload?.error?.errors?.some(({ reason }) => reason === "accessNotConfigured")
+          ? "api_not_enabled"
+          : "forbidden";
+      }
       if (response.status === 404) return "not_found";
       if (response.status === 401) return "disconnected";
       return "unavailable";

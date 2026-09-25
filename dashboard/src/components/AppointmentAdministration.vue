@@ -6,7 +6,7 @@ import { availabilityTime } from "../services/availability-search";
 import { calendarDay, appointmentStatusLabel } from "../services/appointment-calendar";
 import type { Appointment, AppointmentCalendarEntry } from "../services/api";
 import { priceText } from "../services/catalog-editor";
-const props = defineProps<{ initialCustomerId?: string; initialAppointmentId?: string; initialLocationId?: string; entry?: AppointmentCalendarEntry; embedded?: boolean }>();
+const props = defineProps<{ initialCustomerId?: string; initialAppointmentId?: string; initialLocationId?: string; entry?: AppointmentCalendarEntry; embedded?: boolean; readOnly?: boolean }>();
 const emit = defineEmits<{ changed: [appointment: Appointment]; busy: [value: boolean] }>();
 const editor = createAppointmentEditor(); const { state } = editor;
 useUnsavedChanges(() => Boolean(state.pending), () => state.busy);
@@ -16,7 +16,7 @@ const time = (value: string) => availabilityTime(value, location.value?.timezone
 const notice = (minutes = 0) => minutes === 0 ? "No minimum notice" : minutes % 60 === 0 ? `${minutes / 60} hours before the appointment` : `${minutes} minutes before the appointment`;
 watch(() => state.busy, value => emit("busy", value), { flush: "sync" });
 async function findSlots() { searched.value = await editor.availability(day.value); }
-async function confirm() { if (await editor.confirm() && state.selected) { searched.value = false; emit("changed", state.selected); } }
+async function confirm() { if (props.readOnly) return; if (await editor.confirm() && state.selected) { searched.value = false; emit("changed", state.selected); } }
 onMounted(async () => {
   state.customerId = props.initialCustomerId ?? ""; state.appointmentId = props.entry?.id ?? props.initialAppointmentId ?? "";
   state.locationId = props.entry?.locationId ?? props.initialLocationId ?? "";
@@ -44,13 +44,13 @@ onMounted(async () => {
     </fieldset>
     <article v-if="state.selected">
       <h3>{{ state.selected.serviceNameSnapshot }}</h3>
-      <dl><dt>Customer</dt><dd>{{ entry?.customerName || entry?.customerPhone || 'Customer unavailable' }}<template v-if="entry?.customerName && entry.customerPhone"><br>{{ entry.customerPhone }}</template></dd><dt>Location</dt><dd>{{ location?.name }} · {{ location?.timezone }}</dd><dt>Professional</dt><dd>{{ entry?.professionalName || state.selected.employeeId }}</dd><dt>Time</dt><dd>{{ time(state.selected.startAt) }} – {{ time(state.selected.endAt) }}</dd><dt>Price at booking</dt><dd>{{ priceText({ amountMinor: state.selected.priceAmountMinor, currency: state.selected.priceCurrency }) }} {{ state.selected.priceCurrency }}</dd><dt>Status</dt><dd>{{ appointmentStatusLabel(state.selected.status) }}</dd></dl>
+      <dl><dt>Customer</dt><dd>{{ entry?.customerName || entry?.customerPhone || 'Customer unavailable' }}<template v-if="entry?.customerName && entry.customerPhone"><br>{{ entry.customerPhone }}</template></dd><dt>Location</dt><dd>{{ location?.name }} · {{ location?.timezone }}</dd><dt>Professional</dt><dd>{{ entry?.professionalName || state.selected.employeeId }}</dd><dt>Time</dt><dd>{{ time(state.selected.startAt) }} – {{ time(state.selected.endAt) }}</dd><dt>Price at booking</dt><dd>{{ priceText({ amountMinor: state.selected.priceAmountMinor, currency: state.selected.priceCurrency }) }} {{ state.selected.priceCurrency }}</dd><dt>Status</dt><dd>{{ appointmentStatusLabel(state.selected.outcomeStatus ?? state.selected.status) }}</dd></dl>
       <p v-if="['FAILED', 'PENDING_CONFIRMATION'].includes(state.selected.status)" role="status">This booking needs review. Check the calendar with your administrator before creating another appointment.</p>
       <p><strong>Cancellation:</strong> {{ notice(location?.minimumCancellationNoticeMinutes) }}.<br><strong>Rescheduling:</strong> {{ notice(location?.minimumRescheduleNoticeMinutes) }}.</p>
-      <fieldset v-if="state.selected.status === 'CONFIRMED'" :disabled="state.busy">
+      <fieldset v-if="state.selected.status === 'CONFIRMED' && !readOnly" :disabled="state.busy">
         <legend>Change appointment</legend>
-        <button type="button" @click="state.pending = { kind: 'cancel' }; state.slots = []; searched = false">Cancel appointment…</button>
-        <form @submit.prevent="findSlots"><label>New date at this location<input v-model="day" type="date" required @change="state.slots = []; state.pending = undefined; searched = false"></label><button>Find reschedule slots</button></form>
+        <button v-if="location?.cancellationAllowed !== false" type="button" @click="state.pending = { kind: 'cancel' }; state.slots = []; searched = false">Cancel appointment…</button>
+        <form v-if="location?.reschedulingAllowed !== false" @submit.prevent="findSlots"><label>New date at this location<input v-model="day" type="date" required @change="state.slots = []; state.pending = undefined; searched = false"></label><button>Find reschedule slots</button></form>
         <p>Rescheduling keeps the same service and professional. Only available slots are offered.</p>
         <p v-if="searched && !state.slots.length">No available times found. Try another date.</p>
         <div class="reschedule-slots"><button v-for="slot in state.slots" :key="slot.startAt" type="button" @click="state.pending = { kind: 'reschedule', startAt: slot.startAt }">{{ time(slot.startAt) }}<small v-if="slot.outsideRequestedRange">Outside the requested date</small></button></div>

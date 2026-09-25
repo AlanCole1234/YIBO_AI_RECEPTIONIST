@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, provide, nextTick, onMounted, onUnmounted, ref } from "vue";
-import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus } from "./services/api";
+import { api, ApiError, type Appointment, type Business, type Customer, type GoogleCalendarStatus, type Readiness } from "./services/api";
 import { createAdminSession } from "./services/admin-session";
 import { messages, type MessageKey } from "./i18n";
 import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
@@ -11,15 +11,19 @@ import AppointmentCalendar from "./components/AppointmentCalendar.vue";
 import CalendarSettings from "./components/CalendarSettings.vue";
 import CatalogSettings from "./components/CatalogSettings.vue";
 import AvailabilitySearch from "./components/AvailabilitySearch.vue";
+import OfficeWorkspace from "./components/OfficeWorkspace.vue";
+import CustomerDirectory from "./components/CustomerDirectory.vue";
+import AvailabilityBoard from "./components/AvailabilityBoard.vue";
 
 import { createUnsavedChanges, unsavedChangesKey } from "./services/unsaved-changes";
 const leaveGuard = createUnsavedChanges(message => window.confirm(message), message => window.alert(message));
 provide(unsavedChangesKey, leaveGuard);
 
-type Section = "overview" | "agent" | "customers" | "availability" | "appointments" | "settings" | "catalog" | "calendars";
-const section = ref<Section>("overview");
+type Section = "office" | "overview" | "agent" | "customers" | "availability" | "team-availability" | "appointments" | "settings" | "catalog" | "calendars";
+const section = ref<Section>("office");
 const adminSession = createAdminSession();
 const auth = adminSession.state;
+const readOnly = computed(() => auth.principal?.roles.includes("read_only") ?? false);
 const previewVisible = ref(false);
 async function showVoicePreview(): Promise<void> {
   previewVisible.value = true;
@@ -29,10 +33,9 @@ async function showVoicePreview(): Promise<void> {
 const business = ref<Business>();
 const apiOnline = ref(false);
 const googleCalendar = ref<GoogleCalendarStatus>({ configured: false, connected: false });
-const calendarNeedsReconnect = ref(new URLSearchParams(window.location.search).get("calendar") === "failed");
+const readiness = ref<Readiness>();
 const globalError = ref("");
 const busy = ref(false);
-const customerForm = ref({ name: "", phone: "+52999" });
 const customer = ref<Customer>();
 const createdAppointment = ref<Appointment>();
 const settingsLocationId = ref("");
@@ -42,10 +45,9 @@ leaveGuard.register({ dirty: () => false, busy: () => busy.value });
 const locale = computed(() => "en-US" as const);
 const copy = computed(() => messages[locale.value]);
 const navItems = computed(() => ([
-  ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
-  ["availability", copy.value.availability], ["appointments", copy.value.appointments], ["settings", "Settings"], ["catalog", "Services & professionals"], ["calendars", "Calendar mappings"],
+  ["office", "Office schedule"], ["overview", copy.value.overview], ["agent", copy.value.agent], ["customers", copy.value.customers],
+  ["availability", copy.value.availability], ["team-availability", "Team availability"], ["appointments", copy.value.appointments], ["settings", "Settings"], ["catalog", "Services & professionals"], ["calendars", "Calendar mappings"],
 ] as Array<[Section, string]>).filter(([candidate]) => canAccessSection(candidate)));
-const phonePlaceholder = computed(() => locale.value === "en-US" ? "+15125550123" : "+529991234567");
 const t = (key: MessageKey): string => copy.value[key];
 
 onMounted(async () => {
@@ -58,15 +60,16 @@ onUnmounted(() => { adminSession.dispose(); window.removeEventListener("beforeun
 
 async function loadWorkspace(): Promise<void> {
   try {
-    const [health, profile, calendarStatus] = await Promise.all([
+    const [health, profile, calendarStatus, readinessStatus] = await Promise.all([
       api.health(),
       api.business(),
       adminSession.can("tenant_admin") ? api.googleCalendarStatus() : Promise.resolve({ configured: false, connected: false }),
+      adminSession.can("tenant_admin") ? api.readiness() : Promise.resolve(undefined),
     ]);
     apiOnline.value = health.status === "ok";
     business.value = profile;
     googleCalendar.value = calendarStatus;
-    customerForm.value.phone = profile.region === "US" ? "+1" : "+52";
+    readiness.value = readinessStatus;
   } catch (error) {
     globalError.value = messageFor(error);
   }
@@ -100,17 +103,8 @@ async function connectGoogleCalendar(): Promise<void> {
   await run(async () => { window.location.assign((await api.googleCalendarConnect(window.location.origin)).url); });
 }
 
-async function saveCustomer(): Promise<void> {
-  await run(async () => {
-    customer.value = await api.findOrCreateCustomer(customerForm.value);
-    section.value = "availability";
-  });
-}
-
-function appointmentBooked(appointment: Appointment): void {
-  createdAppointment.value = appointment;
-  section.value = "appointments";
-}
+function selectDirectoryCustomer(value: Customer): void { customer.value = value; }
+function availabilityBooked(value: Appointment): void { createdAppointment.value = value; section.value = "appointments"; }
 
 async function locationSettingsSaved(): Promise<void> {
   await run(async () => { business.value = await api.business(); });
@@ -150,20 +144,22 @@ function statusLabel(status: string): string {
         </button>
       </nav>
       <div class="sidebar-account">
-        <div><strong>{{ auth.principal?.subject }}</strong><small>{{ auth.principal?.roles.includes('tenant_admin') ? 'Tenant admin' : 'Operator' }}</small></div>
+        <div><strong>{{ auth.principal?.subject }}</strong><small>{{ auth.principal?.roles[0]?.replaceAll('_', ' ') }}</small></div>
         <button type="button" :disabled="auth.busy" @click="logout">Sign out</button>
       </div>
       <div class="sidebar-status"><span :class="['status-dot', { online: apiOnline }]"></span>{{ apiOnline ? t('apiConnected') : t('apiOffline') }}</div>
     </aside>
 
     <main>
-      <header v-if="section !== 'agent' && section !== 'overview'"><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span v-if="section !== 'availability' && section !== 'appointments'" class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
+      <header v-if="['appointments', 'availability', 'catalog', 'calendars'].includes(section)"><div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1></div><span v-if="['catalog', 'calendars'].includes(section)" class="timezone">{{ business?.timezone ?? 'America/Merida' }}</span></header>
       <p v-if="globalError" class="alert" role="alert">{{ globalError }}</p>
 
-      <section v-if="section === 'overview'" class="view home-view">
+      <section v-if="section === 'office'" class="view office-view"><OfficeWorkspace :read-only="readOnly" /></section>
+
+      <section v-else-if="section === 'overview'" class="view home-view">
         <div class="home-intro">
           <div><p class="eyebrow">{{ t('localEnvironment') }}</p><h1>{{ business?.name ?? 'YIBO Demo Clinic' }}</h1><p>{{ t('homeSubtitle') }}</p></div>
-          <div class="home-actions"><span class="pill success">{{ t('systemReady') }}</span><button class="primary" @click="chooseSection('agent')">{{ t('testAgent') }} <span aria-hidden="true">→</span></button></div>
+          <div class="home-actions"><span :class="['pill', { success: readiness?.ready }]">{{ readiness?.ready ? t('systemReady') : 'Setup required' }}</span><button class="primary" @click="chooseSection('agent')">{{ t('testAgent') }} <span aria-hidden="true">→</span></button></div>
         </div>
         <div class="home-dashboard">
           <section class="home-snapshot" aria-labelledby="home-status-title">
@@ -177,8 +173,9 @@ function statusLabel(status: string): string {
           <article class="home-calendar">
             <div class="calendar-mark" aria-hidden="true"><span></span><b>31</b></div>
             <div><p class="eyebrow">Google Calendar</p><h3>{{ googleCalendar.connected ? 'Connected' : googleCalendar.configured ? t('calendarSetup') : t('calendarMissing') }}</h3><p v-if="googleCalendar.connected">{{ t('calendarReadyHelp') }}</p><p v-else-if="googleCalendar.configured">{{ t('calendarSetupHelp') }}</p><p v-else>{{ t('calendarMissingHelp') }}</p></div>
-            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">{{ calendarNeedsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar' }}</button><span v-else class="pill">{{ t('notConfigured') }}</span>
+            <span v-if="googleCalendar.connected" class="pill success">Connected</span><button v-else-if="googleCalendar.configured" class="primary" :disabled="busy" @click="connectGoogleCalendar">Reconnect Google Calendar</button><span v-else class="pill">{{ t('notConfigured') }}</span>
           </article>
+          <article v-if="readiness" class="home-calendar"><div><p class="eyebrow">Go-live readiness</p><h3>{{ readiness.ready ? 'Ready for pilot checks' : 'Setup required' }}</h3><p v-if="readiness.blockers.length">{{ readiness.blockers.join(' · ') }}</p><p v-else>Core providers and location relationships are configured.</p><ul><li v-for="item in readiness.locations" :key="item.id">{{ item.name }}: {{ item.ready ? 'Ready' : item.issues.join(', ') }}</li></ul></div><span :class="['pill', { success: readiness.ready }]">{{ readiness.ready ? 'Ready' : 'Needs setup' }}</span></article>
         </div>
         <div class="two-column home-details">
           <article class="panel"><h3>{{ t('availableServices') }}</h3><div v-for="service in business?.services" :key="service.id" class="list-row"><div><strong>{{ service.name }}</strong><small>{{ service.id }}</small></div><span>{{ service.durationMinutes }} min</span></div></article>
@@ -191,22 +188,20 @@ function statusLabel(status: string): string {
         <AgentConfigurationPanel :locale="locale" @preview="showVoicePreview" />
       </section>
 
-      <section v-else-if="section === 'customers'" class="view narrow">
-        <div class="section-heading"><div><p class="eyebrow">{{ t('customers') }}</p><h2>{{ t('findOrCreateCustomer') }}</h2><p>{{ t('customerIdentityHelp') }}</p></div></div>
-        <form class="panel form-card" @submit.prevent="saveCustomer">
-          <label>{{ t('name') }}<input v-model="customerForm.name" autocomplete="name" :placeholder="t('namePlaceholder')" /></label>
-          <label>{{ t('phone') }}<input v-model="customerForm.phone" required autocomplete="tel" :placeholder="phonePlaceholder" /></label>
-          <button class="primary" :disabled="busy">{{ busy ? t('processing') : t('findCreateCustomerButton') }}</button>
-        </form>
-        <article v-if="customer" class="result-card success-card"><span class="result-label">{{ t('activeCustomer') }}</span><h3>{{ customer.name || t('unnamed') }}</h3><p>{{ customer.phone }}</p><code>{{ customer.id }}</code></article>
+      <section v-else-if="section === 'customers'" class="view">
+        <CustomerDirectory :read-only="readOnly" :timezone="business?.timezone" @selected="selectDirectoryCustomer" />
       </section>
 
       <section v-else-if="section === 'availability'" class="view">
-        <AvailabilitySearch :customer="customer" :can-manage-settings="adminSession.can('tenant_admin')" @booked="appointmentBooked" @customer-needed="chooseSection('customers')" @settings="locationId => chooseSection('settings', locationId)" />
+        <AvailabilitySearch :customer="customer" :read-only="readOnly" :can-manage-settings="adminSession.can('tenant_admin')" @booked="availabilityBooked" @customer-needed="chooseSection('customers')" @settings="locationId => chooseSection('settings', locationId)" />
+      </section>
+
+      <section v-else-if="section === 'team-availability'" class="view">
+        <AvailabilityBoard :customer="customer" :read-only="readOnly" @booked="availabilityBooked" />
       </section>
 
       <section v-else-if="section === 'appointments'" class="view">
-        <AppointmentCalendar :customer="customer" :initial-appointment="createdAppointment" @customer-selected="customer = $event" />
+        <AppointmentCalendar :read-only="readOnly" :customer="customer" :initial-appointment="createdAppointment" @customer-selected="customer = $event" />
       </section>
 
       <section v-else-if="section === 'calendars'" class="view">

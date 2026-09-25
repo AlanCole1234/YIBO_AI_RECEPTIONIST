@@ -50,7 +50,7 @@ describe("Checkpoint C availability through the authenticated API", () => {
     const { search, session } = await fixture();
     expect(search.state.locations.map(item => item.id)).toEqual(["default", "north"]);
     expect(search.location.value!.services.map(item => item.id)).toEqual(["consultation"]);
-    expect(search.professionals.value).toEqual([{ id: "north-provider", displayName: "North Provider" }]);
+    expect(search.professionals.value).toEqual([{ id: "north-provider", displayName: "North Provider", name: "North Provider", serviceIds: ["consultation"] }]);
     const metadata = await api.appointmentLocations();
     expect(metadata.locations.find(item => item.id === "closed")!.active).toBe(false);
     const text = JSON.stringify(metadata);
@@ -176,7 +176,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 async function controlled() {
   const location: AvailabilityLocation = { id: "north", name: "North", active: true, timezone: "America/Chicago", minimumCancellationNoticeMinutes: 0, minimumRescheduleNoticeMinutes: 0,
     services: [{ id: "consultation", name: "Consultation", durationMinutes: 30, bufferMinutes: 0, eligibleEmployeeIds: ["provider"] }],
-    professionals: [{ id: "provider", displayName: "Provider" }], availabilitySuggestions: { enabled: false, expansionDays: 1, maximumAlternatives: 3 } };
+    professionals: [{ id: "provider", displayName: "Provider", name: "Provider", serviceIds: ["consultation"] }], availabilitySuggestions: { enabled: false, expansionDays: 1, maximumAlternatives: 3 } };
   const client = { appointmentLocations: vi.fn().mockResolvedValue({ locations: [location] }), availability: vi.fn(), createAppointment: vi.fn() };
   const search = createAvailabilitySearch(client, clock); disposers.push(search.dispose); await search.load();
   const slot: Slot = { employeeId: "provider", startAt: "2026-08-10T14:00:00Z", endAt: "2026-08-10T14:30:00Z" };

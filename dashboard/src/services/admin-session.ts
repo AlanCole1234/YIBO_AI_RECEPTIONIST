@@ -102,7 +102,10 @@ export function createAdminSession(
     },
     can(required: AdminRole): boolean {
       const roles = state.principal?.roles ?? [];
-      return roles.includes("tenant_admin") || roles.includes(required);
+      if (roles.some((role) => role === "owner" || role === "tenant_admin")) return true;
+      if (required === "tenant_admin") return roles.includes("office_manager");
+      if (required === "operator") return roles.some((role) => ["office_manager", "secretary", "operator", "read_only"].includes(role));
+      return roles.includes(required);
     },
     dispose(): void {
       clearExpiration();

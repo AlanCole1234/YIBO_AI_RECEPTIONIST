@@ -7,7 +7,7 @@ import { createAppointmentCalendar, calendarDay, calendarDateLabel, appointmentS
 import { availabilityTime, type AvailabilityPreferences } from "../services/availability-search";
 import { useUnsavedChanges } from "../services/unsaved-changes";
 
-const props = defineProps<{ customer?: Customer; initialAppointment?: Appointment }>();
+const props = defineProps<{ customer?: Customer; initialAppointment?: Appointment; readOnly?: boolean }>();
 const emit = defineEmits<{ customerSelected: [customer: Customer] }>();
 const calendar = createAppointmentCalendar(), { state, location, groups, professionals } = calendar;
 const dialog = ref<HTMLDialogElement>(), mode = ref<"book" | "details">();
@@ -32,7 +32,7 @@ const staffColor = (id: string) => ["#2758b8", "#7e438f", "#20705d", "#9a5515", 
 ];
 async function showDialog() { await nextTick(); dialog.value?.showModal(); }
 async function book(day = state.day) {
-  if (!location.value?.active) return;
+  if (props.readOnly || !location.value?.active) return;
   preferences.value = { locationId: state.locationId, day, ...(state.employeeId ? { employeeId: state.employeeId } : {}) };
   mode.value = "book"; await showDialog();
 }
@@ -73,7 +73,7 @@ onBeforeUnmount(() => { dialog.value?.close(); calendar.dispose(); });
   <section class="appointment-calendar" aria-labelledby="calendar-title">
     <div class="section-heading">
       <div><p class="eyebrow">Front desk</p><h2 id="calendar-title">Appointments</h2><p>Your team’s appointments, with available times one click away.</p></div>
-      <button class="primary" :disabled="!location?.active || state.loadingLocations" @click="book()">New appointment</button>
+      <button v-if="!readOnly" class="primary" :disabled="!location?.active || state.loadingLocations" @click="book()">New appointment</button>
     </div>
     <p v-if="message" class="calendar-success" role="status">{{ message }}</p>
     <p v-if="state.metadataError" role="alert">{{ state.metadataError }} <button @click="calendar.load()">Try again</button></p>
@@ -107,12 +107,12 @@ onBeforeUnmount(() => { dialog.value?.close(); calendar.dispose(); });
                 <strong>{{ entry.customerName || entry.customerPhone || 'Customer unavailable' }}</strong>
                 <span>{{ entry.serviceNameSnapshot }}</span>
                 <span class="staff-name"><span class="staff-dot" aria-hidden="true"></span>{{ entry.professionalName }}</span>
-                <span class="appointment-status">{{ appointmentStatusLabel(entry.status) }}</span>
+                <span class="appointment-status">{{ appointmentStatusLabel(entry.outcomeStatus ?? entry.status) }}</span>
               </button>
             </li>
           </ol>
           <p v-else class="day-empty">No appointments{{ state.employeeId ? ' for this staff member' : '' }}.</p>
-          <button v-if="location?.active" class="find-times" :aria-label="`Find available times on ${calendarDateLabel(group.day)}`" @click="book(group.day)">+ Find available times</button>
+          <button v-if="location?.active && !readOnly" class="find-times" :aria-label="`Find available times on ${calendarDateLabel(group.day)}`" @click="book(group.day)">+ Find available times</button>
         </section>
       </div>
       <p class="calendar-note">Available times depend on the service and professional. Choose “Find available times” on a day to check them. Other events in your connected calendar also block availability; only YIBO appointments appear here.</p>
@@ -121,7 +121,7 @@ onBeforeUnmount(() => { dialog.value?.close(); calendar.dispose(); });
       <div v-if="mode" class="dialog-content">
         <div class="dialog-heading"><h2 id="appointment-dialog-title">{{ mode === 'book' ? 'New appointment' : 'Appointment details' }}</h2><button :disabled="modalBusy" @click="close">Close</button></div>
         <ManualAppointmentBooking v-if="mode === 'book'" :customer="customer" :preferences="preferences" @busy="modalBusy = $event" @booked="booked" @customer-selected="emit('customerSelected', $event)" />
-        <AppointmentAdministration v-else-if="selected" :key="selected.id" :entry="selected" embedded @busy="modalBusy = $event" @changed="changed" />
+        <AppointmentAdministration v-else-if="selected" :key="selected.id" :entry="selected" :read-only="readOnly" embedded @busy="modalBusy = $event" @changed="changed" />
       </div>
     </dialog>
   </section>

@@ -6,4 +6,10 @@ export interface Customer {
   phone: string;
   name?: string;
   email?: string;
+  preferredLanguage?: string;
+  emailVerifiedAt?: string;
+  emailOptIn?: boolean;
+  source?: "AI_CALL" | "OFFICE" | "API" | "IMPORT" | "UNKNOWN";
+  createdAt?: string;
+  updatedAt?: string;
 }

@@ -7,7 +7,7 @@ import { ApiError, type AppointmentCalendarEntry, type AvailabilityLocation } fr
 const locations: AvailabilityLocation[] = [
   { id: "east", name: "East", active: true, timezone: "America/New_York", minimumCancellationNoticeMinutes: 60, minimumRescheduleNoticeMinutes: 60,
     services: [{ id: "consultation", name: "Consultation", durationMinutes: 30, bufferMinutes: 0, eligibleEmployeeIds: ["alex"] }],
-    professionals: [{ id: "alex", displayName: "Alex Example" }],
+    professionals: [{ id: "alex", displayName: "Alex Example", name: "Alex Example", serviceIds: ["consultation"] }],
     availabilitySuggestions: { enabled: false, expansionDays: 1, maximumAlternatives: 3 } },
   { id: "west", name: "West", active: false, timezone: "America/Los_Angeles", minimumCancellationNoticeMinutes: 0, minimumRescheduleNoticeMinutes: 0,
     services: [], professionals: [], availabilitySuggestions: { enabled: false, expansionDays: 1, maximumAlternatives: 3 } },
@@ -130,7 +130,7 @@ describe("manual appointment customer and availability handoff", () => {
   });
   it("chooses a service offered by the selected staff member when opening available times", async () => {
     const staffLocation = structuredClone(locations[0]!);
-    staffLocation.professionals.push({ id: "specialist", displayName: "Specialist" });
+    staffLocation.professionals.push({ id: "specialist", displayName: "Specialist", name: "Specialist", serviceIds: ["consultation"] });
     staffLocation.services.push({ id: "cleaning", name: "Cleaning", durationMinutes: 45, bufferMinutes: 0, eligibleEmployeeIds: ["specialist"] });
     const client = { appointmentLocations: async () => ({ locations: [staffLocation] }), availability: vi.fn(async () => ({ slots: [] })), createAppointment: vi.fn() };
     const search = createAvailabilitySearch(client); disposers.push(search.dispose);

@@ -148,3 +148,24 @@ describe("Checkpoint C availability suggestion settings", () => {
     expect(source.policies.availabilitySuggestions!.expansionDays).toBe(1);
   });
 });
+
+
+describe("launch integration location defaults", () => {
+  it("opens legacy settings without phantom unsaved changes and preserves explicit restrictions after save/reload", async () => {
+    const { editor, requests } = await fixture();
+    const location = editor.state.draft!.locations[0]!;
+    expect(location.policies).toMatchObject({ sameDayBooking: true, cancellationAllowed: true,
+      reschedulingAllowed: true, staffOverrideAllowed: false });
+    expect(location.aiCapabilities).toMatchObject({ collectEmail: false, quotePrices: true, afterHoursBehavior: "INFORMATION_ONLY" });
+    expect(editor.dirty.value).toBe(false);
+    expect(requests.every(request => request.method === "GET")).toBe(true);
+    location.policies.cancellationAllowed = false;
+    location.aiCapabilities!.quotePrices = false;
+    expect(editor.dirty.value).toBe(true);
+    expect(await editor.save()).toBe(true);
+    await editor.load();
+    expect(editor.dirty.value).toBe(false);
+    expect(editor.state.draft!.locations[0]!.policies.cancellationAllowed).toBe(false);
+    expect(editor.state.draft!.locations[0]!.aiCapabilities!.quotePrices).toBe(false);
+  });
+});

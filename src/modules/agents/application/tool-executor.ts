@@ -2,7 +2,7 @@ import { trustedToolScope } from "./trusted-tool-scope.js";
 import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { AppointmentService } from "../../appointments/index.js";
 import type { SchedulingService } from "../../scheduling/index.js";
-import type { BusinessDirectory } from "../../business/index.js";
+import { resolvedAiCapabilities, type BusinessDirectory } from "../../business/index.js";
 import type { CustomerService } from "../../customers/index.js";
 import type { Clock } from "../../../shared/application/system.js";
 import type { HumanTransferPort } from "../ports/agent-dependencies.js";
@@ -20,6 +20,7 @@ type ConfirmableAvailability = { requestedStartAt?: string; availableStartAts: s
 
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly confirmableAvailabilityByCall = new Map<string, ConfirmableAvailability>();
+  private readonly confirmedContactByCall = new Set<string>();
   private readonly appointmentReferencesByCall = new Map<string, Map<string, string>>();
   private readonly testCustomersByCall = new Map<string, string>();
   private readonly testAppointmentsByCall = new Map<string, string[]>();
@@ -76,13 +77,14 @@ export class ToolExecutorImpl implements ToolExecutor {
         durationMinutes: service.durationMinutes,
         locations: activeLocations.flatMap((location) => {
           const offer = location.services.find((candidate) => candidate.active && candidate.serviceId === service.id);
+          const capabilities = resolvedAiCapabilities(location);
           return offer ? [{
             name: location.name,
-            price: {
+            ...(capabilities.quotePrices ? { price: {
               amountMinor: offer.price.amountMinor,
               currency: offer.price.currency,
               display: formatMoney(offer.price.amountMinor, offer.price.currency, location.locale),
-            },
+            } } : {}),
           }] : [];
         }),
       }))
@@ -121,6 +123,9 @@ export class ToolExecutorImpl implements ToolExecutor {
         service: appointment.serviceNameSnapshot,
         startAt: appointment.startAt,
         endAt: appointment.endAt,
+        localStartAt: dateTimeInTimezone(new Date(appointment.startAt), business.value.location.timezone).dateTime,
+        localEndAt: dateTimeInTimezone(new Date(appointment.endAt), business.value.location.timezone).dateTime,
+        displayStart: formatSpokenDateTime(appointment.startAt, business.value.location.timezone, business.value.location.locale),
         timezone: business.value.location.timezone,
         location: business.value.location.name,
         ...(professional ? { professional } : {}),
@@ -138,12 +143,24 @@ export class ToolExecutorImpl implements ToolExecutor {
   private async updateCustomer(context: ToolExecutionContext, call: AgentToolCall) {
     if (!context.customerId) return toolError(call, "CUSTOMER_REQUIRED", "Ask for the caller's name and phone number before booking.", false);
     const input = call.arguments as Input;
-    if (!exactKeys(input, ["name", "phone"], ["name", "phone"]) || !text(input.name) || !hasFirstAndLastName(input.name) || !text(input.phone) || !this.customers) {
-      return invalid(call, "A first and last name and a valid phone number are required.");
+    if (!exactKeys(input, ["name", "phone", "email", "preferredLanguage"], ["name"])
+      || !text(input.name) || !hasFirstAndLastName(input.name) || !this.customers) {
+      return invalid(call, "A first and last name and at least one allowed contact field are required.");
     }
-    const updated = await this.customers.updateCustomer({ tenantId: context.tenantId, customerId: context.customerId, name: input.name, phone: input.phone });
-    return updated.ok ? { toolCallId: call.toolCallId, ok: true as const, data: { saved: true } }
-      : toolError(call, updated.error.code, "The contact information could not be saved. Ask for the phone number again.", false);
+    const location = await this.businesses?.getLocation(context.tenantId, context.locationId);
+    if (!location?.ok) return toolError(call, "BUSINESS_CONTEXT_UNAVAILABLE", "Contact information cannot be saved right now.", false);
+    const capabilities = resolvedAiCapabilities(location.value.location);
+    if (capabilities.collectPhone && !text(input.phone)) {
+      return invalid(call, "Repeat the callback number to the caller, obtain confirmation, and provide phone together with the full name.");
+    }
+    if (input.phone !== undefined && (!capabilities.collectPhone || !text(input.phone))) return invalid(call, "Phone collection is not allowed.");
+    if (input.email !== undefined && (!capabilities.collectEmail || !text(input.email))) return invalid(call, "Email collection is not allowed.");
+    const updated = await this.customers.updateCustomer({ tenantId: context.tenantId, customerId: context.customerId,
+      name: input.name, ...(text(input.phone) ? { phone: input.phone } : {}), ...(text(input.email) ? { email: input.email } : {}),
+      ...(text(input.preferredLanguage) ? { preferredLanguage: input.preferredLanguage } : {}) });
+    if (!updated.ok) return toolError(call, updated.error.code, "The contact information could not be saved. Ask for the phone number again.", false);
+    this.confirmedContactByCall.add(trustedToolScope(context));
+    return { toolCallId: call.toolCallId, ok: true as const, data: { saved: true, contactConfirmedForBooking: true } };
   }
 
   private async checkAvailability(context: ToolExecutionContext, call: AgentToolCall) {
@@ -190,21 +207,25 @@ export class ToolExecutorImpl implements ToolExecutor {
       calendarLog("calendar.availability.failed", { tenantId: context.tenantId, code: result.error.code });
       return toolError(call, result.error.code, availabilityMessage(result.error.code), result.error.code === "EXTERNAL_CALENDAR_UNAVAILABLE" && result.error.retryable);
     }
-    calendarLog("calendar.availability.completed", { tenantId: context.tenantId, slotCount: result.value.length });
+    // Operations may further restrict Product UX suggestions for this caller.
+    const visibleSlots = business?.ok && !resolvedAiCapabilities(business.value.location).offerAlternatives
+      ? result.value.filter(slot => !slot.outsideRequestedRange).slice(0, 1)
+      : result.value;
+    calendarLog("calendar.availability.completed", { tenantId: context.tenantId, slotCount: visibleSlots.length });
     calendarLog("calendar.trace.availability.slots", {
       tenantId: context.tenantId,
-      slots: await Promise.all(result.value.map(async (slot) => ({
+      slots: await Promise.all(visibleSlots.map(async (slot) => ({
         employeeId: slot.employeeId,
         startAt: await this.traceDateTime(context.tenantId, context.locationId, slot.startAt),
         endAt: await this.traceDateTime(context.tenantId, context.locationId, slot.endAt),
       }))),
     });
-    if (result.value[0]) {
-      const selected = await this.normalizeDateTime(context.tenantId, context.locationId, result.value[0].startAt);
+    if (visibleSlots[0]) {
+      const selected = await this.normalizeDateTime(context.tenantId, context.locationId, visibleSlots[0].startAt);
       calendarLog("calendar.slot.selected", {
         tenantId: context.tenantId,
-        employeeId: result.value[0].employeeId,
-        selectedAvailabilitySlot: result.value[0].startAt,
+        employeeId: visibleSlots[0].employeeId,
+        selectedAvailabilitySlot: visibleSlots[0].startAt,
         clinicTimezone: selected?.timeZone,
         selectedLocalDateTime: selected?.dateTime,
       });
@@ -214,7 +235,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       : undefined;
     if (text(input.requestedStartAt) && !requestedStartAt) return invalid(call, "requestedStartAt must be a valid clinic-local or offset-aware datetime");
     const requested = requestedStartAt
-      ? await scheduling.validateSlot({ tenantId: context.tenantId, locationId: context.locationId, serviceId, employeeId: employeeId ?? result.value[0]?.employeeId ?? "", startAt: requestedStartAt.instant })
+      ? await scheduling.validateSlot({ tenantId: context.tenantId, locationId: context.locationId, serviceId, employeeId: employeeId ?? visibleSlots[0]?.employeeId ?? "", startAt: requestedStartAt.instant })
       : undefined;
     if (requestedStartAt) {
       calendarLog("calendar.requested_time.parsed", {
@@ -227,18 +248,33 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     this.confirmableAvailabilityByCall.set(trustedToolScope(context), {
       ...(requested?.ok ? { requestedStartAt: requestedStartAt?.instant } : {}),
-      availableStartAts: result.value.map((slot) => slot.startAt),
+      availableStartAts: visibleSlots.map((slot) => slot.startAt),
     });
+    const businessLocale = business?.ok ? business.value.location.locale : "en";
+    const publicSlots = await Promise.all(visibleSlots.map(async (slot) => {
+      const localStart = await this.normalizeDateTime(context.tenantId, context.locationId, slot.startAt);
+      const localEnd = await this.normalizeDateTime(context.tenantId, context.locationId, slot.endAt);
+      const professional = business?.ok
+        ? business.value.business.professionals.find(({ id }) => id === slot.employeeId)?.displayName
+        : undefined;
+      return {
+        ...slot,
+        ...(localStart ? { localStartAt: localStart.dateTime, displayStart: formatSpokenDateTime(slot.startAt, localStart.timeZone, businessLocale) } : {}),
+        ...(localEnd ? { localEndAt: localEnd.dateTime } : {}),
+        ...(professional ? { professional } : {}),
+        ...(business?.ok ? { timezone: business.value.location.timezone } : {}),
+      };
+    }));
     return {
       toolCallId: call.toolCallId,
       ok: true as const,
       data: {
         success: true,
         requestedPeriod: { startAt: range.rangeStart, endAt: range.rangeEnd, ...(naturalRange ? { label: naturalRange.label } : {}) },
-        availableSlots: result.value,
+        availableSlots: publicSlots,
         // Kept temporarily for existing clients while Realtime uses the clearer names above.
-        slots: result.value,
-        earliestSlot: result.value[0] ?? null,
+        slots: publicSlots,
+        earliestSlot: publicSlots[0] ?? null,
         ...(naturalRange ? { resolvedDate: naturalRange.label } : {}),
         ...(requestedStartAt ? { requestedStartAt: requestedStartAt.instant, requestedTimeAvailable: requested?.ok ?? false } : {}),
       },
@@ -305,6 +341,10 @@ export class ToolExecutorImpl implements ToolExecutor {
     const testMode = this.enabledTestCalls.has(trustedToolScope(context));
     const customerId = testMode ? this.testCustomersByCall.get(trustedToolScope(context)) : context.customerId;
     if (!customerId) return toolError(call, "CUSTOMER_REQUIRED", "Verify the caller before creating an appointment.", false);
+    const supportsCustomerLookup = this.customers && typeof this.customers.getCustomer === "function";
+    if (!testMode && supportsCustomerLookup && !this.confirmedContactByCall.has(trustedToolScope(context))) {
+      return toolError(call, "CONTACT_CONFIRMATION_REQUIRED", "Before booking, collect the caller's full name and callback number, read back the number using the configured phoneReadback style for confirmation, save both with update_customer, then retry this exact verified slot.", false);
+    }
     const input = call.arguments as Input;
     if (!exactKeys(input, ["service", "employeeId", "startAt"], ["employeeId", "startAt"]) ||
         (input.service !== undefined && !text(input.service)) || !text(input.employeeId) || !dateTime(input.startAt)) {
@@ -359,6 +399,16 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (testMode) this.testAppointmentsByCall.set(trustedToolScope(context), [...(this.testAppointmentsByCall.get(trustedToolScope(context)) ?? []), result.value.id]);
     const business = await this.businesses?.getLocation(context.tenantId, context.locationId);
     const locale = business?.ok ? business.value.location.locale : "en";
+    const professional = business?.ok
+      ? business.value.business.professionals.find(({ id }) => id === result.value.employeeId)?.displayName
+      : undefined;
+    const localStart = business?.ok
+      ? dateTimeInTimezone(new Date(result.value.startAt), business.value.location.timezone)
+      : undefined;
+    const localEnd = business?.ok
+      ? dateTimeInTimezone(new Date(result.value.endAt), business.value.location.timezone)
+      : undefined;
+    const address = business?.ok ? formatAddress(business.value.location.address) : undefined;
     return {
       toolCallId: call.toolCallId,
       ok: true as const,
@@ -367,10 +417,20 @@ export class ToolExecutorImpl implements ToolExecutor {
         service: result.value.serviceNameSnapshot,
         startAt: result.value.startAt,
         endAt: result.value.endAt,
+        ...(localStart ? {
+          localStartAt: localStart.dateTime,
+          localEndAt: localEnd?.dateTime,
+          displayStart: formatSpokenDateTime(result.value.startAt, localStart.timeZone, locale),
+        } : {}),
+        ...(professional ? { professional } : {}),
         ...(business?.ok ? {
           timezone: business.value.location.timezone,
           location: business.value.location.name,
+          ...(address ? { address } : {}),
         } : {}),
+        nextStep: address
+          ? "State the local appointment time and professional name, then ask whether the caller needs the location address."
+          : "State the local appointment time and professional name. Do not invent an address because this location has none configured.",
         price: {
           amountMinor: result.value.priceAmountMinor,
           currency: result.value.priceCurrency,
@@ -533,4 +593,22 @@ const formatMoney = (amountMinor: number, currency: string, locale: string): str
   const formatter = new Intl.NumberFormat(locale, { style: "currency", currency });
   const fractionDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
   return formatter.format(amountMinor / (10 ** fractionDigits));
+};
+
+const formatSpokenDateTime = (instant: string, timeZone: string, locale: string): string =>
+  new Intl.DateTimeFormat(locale, {
+    timeZone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(instant));
+
+const formatAddress = (address: { line1: string; line2?: string; city: string; administrativeArea?: string; postalCode?: string; countryCode: string }): string | undefined => {
+  if ([address.line1, address.city].some((part) => part.trim().toLocaleLowerCase() === "pending configuration")) return undefined;
+  return [address.line1, address.line2, address.city, address.administrativeArea, address.postalCode, address.countryCode]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(", ");
 };

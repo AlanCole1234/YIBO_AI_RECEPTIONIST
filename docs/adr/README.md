@@ -15,6 +15,7 @@ se enlaza desde la decisión nueva. El estado operativo vive en
 | [ADR-007](ADR-007-ai-action-confirmation.md) | Aceptado | Confirmación de mutaciones solicitadas por IA |
 | [ADR-008](ADR-008-intentional-call-completion.md) | Aceptado | Fin intencional de llamada después de respuesta y playback |
 | [ADR-009](ADR-009-protect-booked-calendar-routes.md) | Aceptado | Bloqueo atómico de cambios de calendario usado por citas |
+| [ADR-010](ADR-010-office-operations-and-notifications.md) | Aceptado | Operación de oficina, eventos y notificaciones posteriores al commit |
 
 ## Lectura histórica
 

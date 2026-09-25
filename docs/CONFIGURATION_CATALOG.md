@@ -22,6 +22,7 @@ configuration, not an independent claim about current external provider capabili
 | `DEV_VOICE_PORT` | Voice Lab service port, default 4317; loopback only. |
 | `YIBO_LOCAL_DEVELOPER_TEST_MODE` | `1` authorizes isolated developer tools in local Voice Lab only; never normal phone tools. |
 | `YIBO_VOICE_DEBUG` | `1` enables local harness diagnostics; avoid using debug output as production telemetry. |
+| `RESEND_API_KEY`, `YIBO_EMAIL_FROM` | Optional transactional email provider and validated sender. Without both, appointment email is recorded as skipped and never blocks the appointment. |
 
 Source: `src/bootstrap/configuration.ts`, `build-configured-application.ts`,
 `src/main.ts`, `apps/dev-voice/server.ts`. API loads `.env` via dotenv; the package's
@@ -63,6 +64,7 @@ phone-checkout settings into application configuration without checking ownershi
 | Agent, schema/defaults v4 | Instructions, model/voice/VAD, behavior (including price disclosure, default true), tool/channel policy, confirmation gates, limits/retries/escalation. Saved per tenant; next conversation reads it. |
 | Business, schema v2 | Active locations, DIDs, IANA zones, catalog, prices, professional/service assignments, hours/closures, booking policy, transfer destinations and optional location agent overrides (action restrictions, price disclosure, language, phone readback). |
 | Calendar assignments | Professional override and location fallback; resolved from trusted call/location context. |
+| Location operations | Same-day booking, cancellation/rescheduling, staff override, structured AI capabilities and after-hours behavior. |
 
 Business writes use numeric version `If-Match`; agent writes use an opaque revision
 `If-Match`. Schema version is not an edit revision. Defaults are defined in

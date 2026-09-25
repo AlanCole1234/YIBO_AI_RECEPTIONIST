@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEVELOPMENT_BUSINESS } from "../../src/app/development-fixtures.js";
 import { AgentConfigurationService, AgentDefinitionService, InMemoryAgentConfigurationSource, type ToolExecutor } from "../../src/modules/agents/index.js";
-import { BusinessDirectoryService, InMemoryBusinessRepository } from "../../src/modules/business/index.js";
+import { BusinessDirectoryService, InMemoryBusinessRepository, resolvedAiCapabilities, type LocationAiCapabilities } from "../../src/modules/business/index.js";
 import type { LocationAgentOverrides } from "../../src/modules/business/domain/location-agent-overrides.js";
 import { PriceDisclosureToolExecutor } from "../../src/modules/agents/application/business-agent-policy.js";
 
 const actions = ["create_appointment", "cancel_appointment", "reschedule_appointment"] as const;
 const context = { tenantId: DEVELOPMENT_BUSINESS.tenantId, locationId: "default", callId: "call", turnSequence: 1 };
 
-async function fixture(overrides?: LocationAgentOverrides) {
+async function fixture(overrides?: LocationAgentOverrides, capabilities?: Partial<LocationAiCapabilities>) {
   const business = structuredClone(DEVELOPMENT_BUSINESS);
   business.locations[0]!.agentOverrides = overrides;
+  if (capabilities) business.locations[0]!.aiCapabilities = { ...resolvedAiCapabilities(business.locations[0]!), ...capabilities };
   business.locations.push({ ...structuredClone(DEVELOPMENT_BUSINESS.locations[0]!), id: "other", calledNumbers: ["+529991000098"] });
   const source = new InMemoryAgentConfigurationSource([]);
   const configService = new AgentConfigurationService(source);
@@ -27,6 +28,35 @@ async function fixture(overrides?: LocationAgentOverrides) {
 }
 
 describe("business rules in the prepared runtime agent", () => {
+  it("intersects Operations capabilities with Product UX business/channel rules and location overrides", async () => {
+    const { prepare, inner, configuration, configService } = await fixture(
+      { allowPriceDisclosure: true, disabledTools: ["cancel_appointment"] },
+      { quotePrices: false, bookAppointments: false, collectEmail: true, offerAlternatives: false, offerEarliest: false },
+    );
+    configuration.toolPolicies.channels.phone.enabledTools = configuration.toolPolicies.channels.phone.enabledTools.filter(name => name !== "reschedule_appointment");
+    await configService.update(context.tenantId, configuration);
+    const definition = await prepare();
+    expect(definition.behavior).toMatchObject({ allowPriceDisclosure: false, slotOffering: { maximumOptions: 1, strategy: "match_requested_time" } });
+    expect(definition.instructions).toContain("Email may be collected");
+    expect(definition.instructions).toContain("do not offer outside-range alternatives");
+    expect(definition.instructions).not.toContain("offer the returned alternatives as well");
+    for (const name of actions) expect(await definition.toolExecutor.execute(context, { toolCallId: name, name, arguments: {} }))
+      .toMatchObject({ ok: false, error: { code: "TOOL_DISABLED" } });
+    expect(inner.execute).not.toHaveBeenCalled();
+    expect((await prepare(undefined, "other")).behavior.allowPriceDisclosure).toBe(true);
+  });
+
+  it("retains business price denial even when Operations allows it", async () => {
+    const { prepare, configuration, configService, inner } = await fixture(undefined, { quotePrices: true });
+    configuration.behavior.allowPriceDisclosure = false;
+    await configService.update(context.tenantId, configuration);
+    inner.execute.mockResolvedValueOnce({ toolCallId: "t", ok: true, data: { saved: true, price: { amountMinor: 100 } } } as never);
+    const definition = await prepare();
+    expect(definition.behavior.allowPriceDisclosure).toBe(false);
+    expect(await definition.toolExecutor.execute(context, { toolCallId: "t", name: "get_service_information", arguments: {} }))
+      .toMatchObject({ ok: true, data: { saved: true } });
+  });
+
   it("keeps legacy behavior and does not implicitly replace the agent language with the location locale", async () => {
     const { prepare, configuration, configService } = await fixture();
     delete configuration.behavior.allowPriceDisclosure;

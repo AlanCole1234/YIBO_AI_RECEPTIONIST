@@ -49,13 +49,24 @@ describe("GoogleOAuthService", () => {
     expect(tokens.value).toMatchObject({ accessToken: "fresh", refreshToken: "refresh" });
   });
 
+  it("does not report a revoked or unreachable token as connected", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "expired", refreshToken: "revoked", expiresAt: "2020-01-01T00:00:00.000Z" };
+    const rejected = new GoogleOAuthService(config, tokens, async () => new Response(null, { status: 400 }));
+    await expect(rejected.status("tenant-1")).resolves.toEqual({ configured: true, connected: false });
+
+    const unreachable = new GoogleOAuthService(config, tokens, async () => { throw new Error("offline"); });
+    await expect(unreachable.status("tenant-1")).resolves.toEqual({ configured: true, connected: false });
+  });
+
   it("checks calendar access with the tenant token and maps safe statuses", async () => {
     const tokens = new MemoryTokenStore();
     tokens.value = { accessToken: "tenant-access", expiresAt: "2099-01-01T00:00:00.000Z" };
     const requests: string[] = [];
     const service = new GoogleOAuthService(config, tokens, async (input, init) => {
-      requests.push(`${String(input)}:${String(new Headers(init?.headers).get("authorization"))}`);
-      return new Response(null, { status: String(input).includes("missing") ? 404 : 200 });
+      requests.push(`${String(input)}:${new Headers(init?.headers).get("authorization")}`);
+      return String(input).includes("missing") ? new Response(null, { status: 404 })
+        : new Response(JSON.stringify({ kind: "calendar#events" }), { status: 200 });
     });
     await expect(service.verifyCalendarAccess("tenant-1", "team@example.com")).resolves.toBe("accessible");
     await expect(service.verifyCalendarAccess("tenant-1", "missing@example.com")).resolves.toBe("not_found");
@@ -108,5 +119,14 @@ describe("GoogleOAuthService", () => {
     const url = new URL(service.authorizationUrl("tenant-1", "http://localhost:5274")!);
     expect(url.searchParams.get("redirect_uri")).toBe(redirectUri);
     await expect(service.completeAuthorization("code", url.searchParams.get("state")!)).resolves.toMatchObject({ tenantId: "tenant-1" });
+  });
+
+  it("distinguishes a disabled Calendar API from denied calendar access", async () => {
+    const tokens = new MemoryTokenStore();
+    tokens.value = { accessToken: "tenant-access", expiresAt: "2099-01-01T00:00:00.000Z" };
+    const service = new GoogleOAuthService(config, tokens, async () => new Response(JSON.stringify({
+      error: { errors: [{ reason: "accessNotConfigured" }] },
+    }), { status: 403 }));
+    await expect(service.verifyCalendarAccess("tenant-1", "team@example.com")).resolves.toBe("api_not_enabled");
   });
 });

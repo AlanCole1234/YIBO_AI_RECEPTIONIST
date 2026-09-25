@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { api } from "../services/api";
+import { api, type RealtimeModelCapability } from "../services/api";
+import { emptyRealtimeCostState, observeRealtimeCostEvent, estimateRealtimeCost } from "../services/realtime-cost";
 import { previewBlockReason } from "../services/voice-preview";
 import RecentActivity from "./RecentActivity.vue";
 import { VoiceLabSession, type VoiceLabSnapshot } from "../../../apps/dev-voice/voice-lab-session.js";
@@ -20,6 +21,19 @@ const canStart = computed(() => !microphoneActive.value && !["connecting", "star
 const calendarToolsAvailable = ref(false);
 const clinicTimezone = ref("Loading…");
 const calendarStatus = ref<"connected" | "needs setup" | "unavailable">("unavailable");
+const costState = shallowRef(emptyRealtimeCostState());
+const modelCapabilities = ref<RealtimeModelCapability[]>([]);
+const selectedPricing = computed(() => modelCapabilities.value.find(item => item.id === previewMetadata.value?.model)?.pricing);
+const elapsedSeconds = ref(0);
+let clockTimer: ReturnType<typeof setInterval> | undefined;
+const sessionUsage = computed(() => costState.value.usage);
+const estimatedCost = computed(() => estimateRealtimeCost(costState.value.usage, selectedPricing.value));
+const estimatedCostPerMinute = computed(() => elapsedSeconds.value >= 5 && estimatedCost.value !== null
+  ? estimatedCost.value / elapsedSeconds.value * 60
+  : null);
+const elapsedLabel = computed(() => `${String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0")}:${String(elapsedSeconds.value % 60).padStart(2, "0")}`);
+const textTokens = computed(() => costState.value.usage.inputTextTokens + costState.value.usage.outputTextTokens);
+const audioTokens = computed(() => costState.value.usage.inputAudioTokens + costState.value.usage.outputAudioTokens);
 const statusCopy = computed(() => ({
   connecting: ["Connecting your studio", "Preparing the audio channel"],
   ready: ["Ready when you are", "The microphone is off"],
@@ -37,14 +51,15 @@ const lab = new VoiceLabSession({
   onState: snapshot => { session.value = snapshot; },
   onActivity: observeEvent,
 });
-onMounted(() => { void lab.connect().catch(() => {}); void loadDeveloperReadiness(); });
-onBeforeUnmount(() => lab.dispose());
+onMounted(() => { void lab.connect().catch(() => {}); void loadDeveloperReadiness(); clockTimer = setInterval(updateElapsed, 1_000); });
+onBeforeUnmount(() => { lab.dispose(); if (clockTimer) clearInterval(clockTimer); });
 
 async function loadDeveloperReadiness(): Promise<void> {
   try {
     const [business, calendar, configuration] = await Promise.all([
       api.business(), api.googleCalendarStatus(), api.agentConfiguration(),
     ]);
+    modelCapabilities.value = configuration.modelCapabilities;
     clinicTimezone.value = business.timezone;
     calendarStatus.value = calendar.connected ? "connected" : calendar.configured ? "needs setup" : "unavailable";
     const enabledTools = (configuration.current ?? configuration.recommended).enabledTools;
@@ -63,6 +78,8 @@ async function sendFixture(event: Event): Promise<void> {
 }
 
 function observeEvent(message: Record<string, unknown>): void {
+  costState.value = observeRealtimeCostEvent(costState.value, message, Date.now());
+  updateElapsed();
   const name = String(message.event ?? message.type ?? "Activity");
   const labels: Record<string, string> = {
     "harness.connected": "Voice studio connected",
@@ -90,6 +107,23 @@ function observeEvent(message: Record<string, unknown>): void {
   const test = message.testNumber ? `Test ${message.testNumber} · ` : "";
   events.value.push(`${timestamp} · ${test}${text}`);
 }
+function updateElapsed(): void {
+  const { startedAt, endedAt } = costState.value;
+  elapsedSeconds.value = startedAt === undefined ? 0 : Math.max(0, Math.floor(((endedAt ?? Date.now()) - startedAt) / 1_000));
+}
+
+function formatUsd(value: number | null): string {
+  if (value === null) return "Unavailable";
+  if (value > 0 && value < 0.0001) return "< US$0.0001";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 6,
+  }).format(value);
+}
+
+function formatTokens(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
 </script>
 
 <template>
@@ -113,6 +147,23 @@ function observeEvent(message: Record<string, unknown>): void {
         <button class="close" :disabled="!sessionUsed" @click="lab.finish()">End Voice Test</button>
       </div>
       <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="!canStart" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
+      <section class="live-cost" aria-live="polite" aria-label="Estimated live session cost">
+        <header>
+          <span><small>ESTIMATED SESSION COST</small><strong>{{ formatUsd(estimatedCost) }}</strong></span>
+          <b :class="{ active: aiSessionConnected }"><i></i>{{ aiSessionConnected ? 'LIVE' : session.testNumber ? 'FINAL' : 'WAITING' }}</b>
+        </header>
+        <div class="cost-metrics">
+          <span><small>Duration</small><strong>{{ elapsedLabel }}</strong></span>
+          <span><small>Audio tokens</small><strong>{{ formatTokens(audioTokens) }}</strong></span>
+          <span><small>Text/context tokens</small><strong>{{ formatTokens(textTokens) }}</strong></span>
+          <span><small>Tool calls</small><strong>{{ formatTokens(sessionUsage.toolCalls) }}</strong></span>
+          <span><small>Current pace</small><strong>{{ estimatedCostPerMinute === null ? '—' : `${formatUsd(estimatedCostPerMinute)}/min` }}</strong></span>
+        </div>
+        <footer>
+          <span>Calculated after each model response from reported usage. Provider billing remains authoritative.</span>
+          <a v-if="selectedPricing" :href="selectedPricing.sourceUrl" target="_blank" rel="noreferrer">{{ previewMetadata?.model }} rates · {{ selectedPricing.verifiedAt }}</a>
+        </footer>
+      </section>
     </div>
 
     <aside class="test-readiness" aria-label="Voice test readiness">
@@ -139,4 +190,8 @@ function observeEvent(message: Record<string, unknown>): void {
 <style scoped>
 /* Azul mineral: una conversación luminosa, no una consola tecnológica. */
 .voice-lab{--red:#2354d7;--red2:#153b9f;--cream:#fff;--black:#10214d;color:#142655;border-color:#a9c9ef;border-radius:5px 42px 7px 24px;background:linear-gradient(108deg,#214fc8 0 41%,#ffffff 41%);box-shadow:0 24px 70px #1a4c9b20,9px 11px 0 #9ed0ff}.voice-lab:before{right:-105px;top:-178px;border-color:#79bdff;opacity:.6}.lab-copy{padding-right:10%}.lab-kicker{color:#bce0ff}.lab-kicker span{background:#fff}.lab-copy h2{color:#fff}.lab-copy h2 em{color:#acd7ff}.lab-copy>p{color:#cfdeff}.privacy span{color:#dce8ff;border-color:#ffffff42;background:#ffffff0d}.privacy .cost{color:#fff;border-color:#ffffff5c;background:#ffffff18}.live-orb{background:radial-gradient(circle,#4e87ee,#204fbf 67%);box-shadow:0 0 0 1px #9dcaff,7px 9px 0 #c6e3ff}.live-orb.listening{background:radial-gradient(circle,#7cbcff,#2356d1 68%);box-shadow:0 0 55px #5eaeff62,7px 9px 0 #c6e3ff}.live-orb.speaking{background:radial-gradient(circle,#ffffff,#71b4ff 54%,#2254cb 75%);box-shadow:0 0 62px #6eb8ff66,7px 9px 0 #c6e3ff}.wave i{background:#fff}.live-orb.speaking .wave i{background:#1746b8}.live-status small{color:#8698bd}.live-status strong{color:#122a68}.live-status span{color:#7182a6}.lab-controls button{color:#254071;border-color:#bfd3ee;background:#f1f7ff}.lab-controls button:hover:not(:disabled){border-color:#4f84df;background:#e7f2ff}.lab-controls .start{color:#fff;border-color:#1946ba;background:#2354d7;box-shadow:4px 5px 0 #aad4ff}.lab-controls .close{color:#5d719a;background:transparent}.fixture{color:#284171;border-color:#81afe5;background:#edf6ff}.fixture i{color:#fff;background:#2354d7}.fixture small{color:#7184a8}.credit-note{color:#6680ac}@media(max-width:1050px){.voice-lab{background:linear-gradient(155deg,#214fc8 0 37%,#fff 37%)}.lab-copy{padding:0 0 40px}}@media(max-width:680px){.voice-lab{background:#fff}.lab-copy{margin:-31px -21px 10px;padding:31px 21px 36px;background:#214fc8}.voice-lab:before{display:none}}
+</style>
+
+<style scoped>
+.live-cost{grid-column:1/-1;margin-top:4px;padding:15px 17px;border:1px solid #b8d1ef;border-radius:8px 22px 8px 15px;background:linear-gradient(135deg,#f7fbff,#eaf4ff);box-shadow:4px 5px 0 #c7e3ff}.live-cost header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.live-cost header>span{display:grid;gap:3px}.live-cost header small{color:#7187ae;font-size:8px;font-weight:850;letter-spacing:.13em}.live-cost header strong{color:#153b91;font:500 30px/1 Georgia,serif}.live-cost header>b{display:flex;align-items:center;gap:6px;padding:5px 8px;color:#7789a8;border:1px solid #c6d7ed;border-radius:999px;font-size:8px;letter-spacing:.1em}.live-cost header>b i{width:6px;height:6px;border-radius:50%;background:#9caac0}.live-cost header>b.active{color:#167047;border-color:#a9d6bb;background:#e5f5ea}.live-cost header>b.active i{background:#24a568;box-shadow:0 0 0 4px #24a5681b}.cost-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:13px;border-block:1px solid #cedeef}.cost-metrics>span{display:grid;gap:3px;padding:10px 11px;border-right:1px solid #d7e5f3}.cost-metrics>span:last-child{border-right:0}.cost-metrics small{color:#7b8eae;font-size:8px;text-transform:uppercase;letter-spacing:.07em}.cost-metrics strong{color:#223d75;font-size:13px}.live-cost footer{display:flex;justify-content:space-between;gap:15px;padding-top:10px;color:#7c8eab;font-size:9px;line-height:1.35}.live-cost footer a{flex:none;color:#2354d7;font-weight:750;text-decoration:none}.live-cost footer a:hover{text-decoration:underline}@media(max-width:900px){.cost-metrics{grid-template-columns:repeat(2,1fr)}.cost-metrics>span{border-bottom:1px solid #d7e5f3}.cost-metrics>span:last-child{grid-column:1/-1}.live-cost footer{display:grid}}@media(max-width:680px){.live-cost{text-align:left}.cost-metrics{grid-template-columns:1fr 1fr}.live-cost header strong{font-size:26px}}
 </style>

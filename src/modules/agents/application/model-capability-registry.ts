@@ -16,6 +16,7 @@ export interface RealtimeModelCapability {
   badge: string;
   description: string;
   voices: string[];
+  pricing: RealtimeModelPricing;
   limits: {
     contextWindowTokens: number;
     modelMaxOutputTokens: number;
@@ -39,6 +40,15 @@ export interface RealtimeModelCapability {
     tracing: boolean;
     truncation: boolean;
   };
+}
+
+export interface RealtimeModelPricing {
+  currency: "USD";
+  unitTokens: 1_000_000;
+  verifiedAt: string;
+  sourceUrl: string;
+  text: { input: number; cachedInput: number; output: number };
+  audio: { input: number; cachedInput: number; output: number };
 }
 
 export interface RealtimeRuntimeOptions {
@@ -88,6 +98,12 @@ const MODEL_CAPABILITIES: RealtimeModelCapability[] = [
     label: "GPT Realtime 2.1",
     badge: "Recomendado",
     description: "Mayor calidad para conversaciones, interrupciones y uso de herramientas.",
+    pricing: {
+      currency: "USD", unitTokens: 1_000_000, verifiedAt: "2026-09-21",
+      sourceUrl: "https://developers.openai.com/api/docs/models/gpt-realtime-2.1",
+      text: { input: 4, cachedInput: 0.4, output: 24 },
+      audio: { input: 32, cachedInput: 0.4, output: 64 },
+    },
     ...common,
   },
   {
@@ -95,6 +111,12 @@ const MODEL_CAPABILITIES: RealtimeModelCapability[] = [
     label: "GPT Realtime 2.1 Mini",
     badge: "Menor costo",
     description: "Más rápido y económico; puede perder matices en conversaciones complejas.",
+    pricing: {
+      currency: "USD", unitTokens: 1_000_000, verifiedAt: "2026-09-21",
+      sourceUrl: "https://developers.openai.com/api/docs/models/gpt-realtime-2.1-mini",
+      text: { input: 0.6, cachedInput: 0.06, output: 2.4 },
+      audio: { input: 10, cachedInput: 0.3, output: 20 },
+    },
     ...common,
   },
 ];

@@ -93,3 +93,7 @@ export async function available(session: ScriptedConversationRuntimeSession, sta
   return tool(session, "check_availability", { service: "Consultation", employeeId: "employee-us-1",
     rangeStart: "2026-09-21T00:00:00Z", rangeEnd: "2026-09-22T00:00:00Z", requestedStartAt: startAt });
 }
+
+export async function confirmContact(session: ScriptedConversationRuntimeSession, suffix = "01") {
+  return tool(session, "update_customer", { name: `Synthetic Patient ${suffix}`, phone: `+120255501${suffix}` });
+}

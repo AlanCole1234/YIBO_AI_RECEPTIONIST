@@ -31,7 +31,14 @@ describe("AgentPromptCompiler", () => {
 
     for (const tool of publicTools) expect(prompt).toContain(tool);
     expect(prompt).toContain("descriptions, prices, and branch availability");
-    expect(prompt).toContain("public confirmation, service, time, and historical price");
+    expect(prompt).toContain("Speak only each slot's displayStart or localStartAt");
+    expect(prompt).toContain("read it back using the configured phoneReadback style");
+    expect(prompt).toContain("Read in natural groups with pauses");
+    expect(prompt).not.toContain("Repeat the phone number digit by digit");
+    expect(prompt).toContain("neutral Mexican accent");
+    expect(prompt).toContain("Do not use an English-speaking accent");
+    expect(prompt).toContain("name the professional");
+    expect(prompt).toContain("invoke end_call");
     expect(prompt).toContain("same-call appointmentReference");
     expect(prompt).toContain("backend owns the destination");
     expect(prompt).toContain("Backend confirmation is required for: create_appointment, cancel_appointment");

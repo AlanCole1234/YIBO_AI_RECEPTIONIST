@@ -6,6 +6,7 @@ export function calendarStatusLabel(status: unknown): string {
     case "accessible": return "Access verified";
     case "unconfigured": return "No calendar configured";
     case "integration_not_configured": return "Google integration not configured";
+    case "api_not_enabled": return "Google Calendar API is disabled in the OAuth project";
     case "disconnected": return "Google connection required";
     case "forbidden": return "Calendar access denied";
     case "not_found": return "Calendar not found";

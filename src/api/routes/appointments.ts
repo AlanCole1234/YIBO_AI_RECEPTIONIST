@@ -13,6 +13,25 @@ interface AppointmentBody {
 }
 
 export async function registerAppointmentRoutes(server: FastifyInstance, app: YiboApplication): Promise<void> {
+  server.get<{ Querystring: { locationId?: string; rangeStart?: string; rangeEnd?: string; employeeId?: string;
+    serviceId?: string; status?: string } }>("/api/office/schedule", { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
+      const { locationId, rangeStart, rangeEnd, employeeId, serviceId, status } = request.query;
+      if (!locationId || !rangeStart || !rangeEnd || Number.isNaN(Date.parse(rangeStart))
+        || Number.isNaN(Date.parse(rangeEnd)) || rangeStart >= rangeEnd) {
+        return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
+      }
+      const appointments = await app.appointments.listAppointments({ tenantId: app.tenantId, locationId,
+        rangeStart, rangeEnd, ...(employeeId ? { employeeId } : {}), ...(serviceId ? { serviceId } : {}),
+        ...(status ? { status } : {}) });
+      let slots: Array<{ employeeId: string; startAt: string; endAt: string }> = [];
+      if (serviceId) {
+        const available = await app.scheduling.findAvailableSlots({ tenantId: app.tenantId, locationId,
+          serviceId, ...(employeeId ? { employeeId } : {}), rangeStart, rangeEnd, limit: 500 });
+        if (available.ok) slots = available.value;
+      }
+      return { appointments, slots };
+    });
   // Operator-safe metadata, using the same tenant-owned configuration as scheduling.
   server.get("/api/appointment-locations", { preHandler: createAdminGuard(app, "operator") }, async (_request, reply) => {
     const result = await app.business.getBusinessConfiguration(app.tenantId);
@@ -22,6 +41,9 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       id: location.id, name: location.name, active: location.active, timezone: location.timezone,
       minimumCancellationNoticeMinutes: location.policies.minimumCancellationNoticeMinutes,
       minimumRescheduleNoticeMinutes: location.policies.minimumRescheduleNoticeMinutes,
+      cancellationAllowed: location.policies.cancellationAllowed !== false,
+      reschedulingAllowed: location.policies.reschedulingAllowed !== false,
+      staffOverrideAllowed: location.policies.staffOverrideAllowed === true,
       // Explicit operator-safe projection; never expose calendar IDs, phone routes or closure reasons.
       services: configuration.services.filter(service => service.active
         && location.services.some(offering => offering.active && offering.serviceId === service.id))
@@ -34,7 +56,10 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
         })),
       professionals: configuration.professionals.filter(professional => professional.active
         && location.professionals.some(assignment => assignment.active && assignment.professionalId === professional.id))
-        .map(professional => ({ id: professional.id, displayName: professional.displayName })),
+        .map(professional => ({ id: professional.id, displayName: professional.displayName,
+          name: professional.displayName,
+          serviceIds: location.professionals.find(assignment => assignment.professionalId === professional.id)!.serviceIds,
+        })),
       availabilitySuggestions: location.policies.availabilitySuggestions ?? DEFAULT_AVAILABILITY_SUGGESTIONS,
     })) };
   });
@@ -126,6 +151,37 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       after: result.value,
     });
     return reply.code(201).send(result.value);
+    },
+  );
+
+  server.get<{ Params: { locationId: string; appointmentId: string } }>(
+    "/api/locations/:locationId/appointments/:appointmentId/events",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
+      const appointment = await app.appointments.getAppointment({ tenantId: app.tenantId, ...request.params });
+      if (!appointment.ok) { const error = toHttpError(appointment.error); return reply.code(error.statusCode).send(error.payload); }
+      return {
+        events: await app.appointments.listAppointmentEvents({ tenantId: app.tenantId, ...request.params }),
+        notifications: app.notifications ? await app.notifications.list(app.tenantId, appointment.value.id) : [],
+      };
+    },
+  );
+
+  server.post<{ Params: { locationId: string; appointmentId: string }; Body: { outcome?: unknown } }>(
+    "/api/locations/:locationId/appointments/:appointmentId/outcome",
+    { preHandler: createAdminGuard(app, "operator") },
+    async (request, reply) => {
+      if (request.body?.outcome !== "COMPLETED" && request.body?.outcome !== "NO_SHOW") {
+        return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
+      }
+      const before = await app.appointments.getAppointment({ tenantId: app.tenantId, ...request.params });
+      const result = await app.appointments.markAppointmentOutcome({ tenantId: app.tenantId, ...request.params,
+        outcome: request.body.outcome });
+      if (!result.ok) { const error = toHttpError(result.error); return reply.code(error.statusCode).send(error.payload); }
+      await app.adminAudit.recordMutation({ principal: adminPrincipalFor(request), entityType: "appointment",
+        entityId: result.value.id, action: request.body.outcome.toLowerCase(), before: before.ok ? before.value : null,
+        after: result.value });
+      return result.value;
     },
   );
 

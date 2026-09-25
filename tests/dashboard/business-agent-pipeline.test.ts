@@ -109,6 +109,8 @@ describe("Model Configuration Pipeline through the dashboard API", () => {
     }
     const available = await execute("check_availability", { rangeStart: "2026-08-10T09:00:00", rangeEnd: "2026-08-10T12:00:00", service: "Consulta" });
     const slot = available.availableSlots[0]; expect(slot).toBeDefined();
+    // Operations requires the same-call contact save before a real booking.
+    await execute("update_customer", { name: "Synthetic Caller", phone: "+19155550123" });
     const booked = await execute("create_appointment", { service: "Consulta", employeeId: slot.employeeId, startAt: slot.startAt });
     expect(booked).toMatchObject({ confirmed: true, startAt: slot.startAt, timezone: "America/Merida" });
     const listed = await execute("list_customer_appointments");

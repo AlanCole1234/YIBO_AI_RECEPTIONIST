@@ -87,7 +87,7 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
       connection.send({
         type: "response.create",
         response: {
-          instructions: `Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
+          instructions: `Use the language and regional pronunciation required by locale ${JSON.stringify(input.agent.locale)}. Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
         },
       });
       this.logger.info?.("OpenAI Realtime automatic greeting requested");
@@ -415,12 +415,20 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     const usage = response.usage;
     const inputDetails = isRecord(usage.input_token_details) ? usage.input_token_details : {};
     const outputDetails = isRecord(usage.output_token_details) ? usage.output_token_details : {};
+    const cachedDetails = isRecord(inputDetails.cached_tokens_details) ? inputDetails.cached_tokens_details : {};
     const output = Array.isArray(response.output) ? response.output : [];
     this.queue.push({
       type: "usage",
       ...(number(usage.input_tokens) ? { inputTokens: usage.input_tokens as number } : {}),
       ...(number(usage.output_tokens) ? { outputTokens: usage.output_tokens as number } : {}),
       ...(number(usage.total_tokens) ? { totalTokens: usage.total_tokens as number } : {}),
+      ...(number(inputDetails.text_tokens) ? { inputTextTokens: inputDetails.text_tokens as number } : {}),
+      ...(number(outputDetails.text_tokens) ? { outputTextTokens: outputDetails.text_tokens as number } : {}),
+      ...(number(inputDetails.audio_tokens) ? { inputAudioTokens: inputDetails.audio_tokens as number } : {}),
+      ...(number(outputDetails.audio_tokens) ? { outputAudioTokens: outputDetails.audio_tokens as number } : {}),
+      ...(number(inputDetails.cached_tokens) ? { cachedInputTokens: inputDetails.cached_tokens as number } : {}),
+      ...(number(cachedDetails.text_tokens) ? { cachedInputTextTokens: cachedDetails.text_tokens as number } : {}),
+      ...(number(cachedDetails.audio_tokens) ? { cachedInputAudioTokens: cachedDetails.audio_tokens as number } : {}),
       ...(number(inputDetails.audio_tokens) ? { inputAudioMs: (inputDetails.audio_tokens as number) * 100 } : {}),
       ...(number(outputDetails.audio_tokens) ? { outputAudioMs: (outputDetails.audio_tokens as number) * 50 } : {}),
       toolCalls: output.filter((item) => isRecord(item) && item.type === "function_call").length,

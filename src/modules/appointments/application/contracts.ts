@@ -10,7 +10,7 @@ import type {
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
-import type { Appointment } from "../domain/appointment.js";
+import type { Appointment, AppointmentEvent } from "../domain/appointment.js";
 
 export interface CreateAppointmentCommand {
   tenantId: TenantId;
@@ -48,6 +48,10 @@ export interface ListUpcomingAppointmentsQuery {
   locationId: LocationId;
   customerId: CustomerId;
 }
+export interface ListAppointmentsQuery { tenantId: TenantId; locationId: LocationId; rangeStart: ISODateTime; rangeEnd: ISODateTime;
+  employeeId?: EmployeeId; serviceId?: ServiceId; status?: string }
+export interface MarkAppointmentOutcomeCommand { tenantId: TenantId; locationId: LocationId; appointmentId: AppointmentId;
+  outcome: "COMPLETED" | "NO_SHOW" }
 
 export interface AppointmentCalendarQuery {
   tenantId: TenantId;
@@ -105,4 +109,9 @@ export interface AppointmentService {
   listCalendarAppointments(query: AppointmentCalendarQuery): Promise<Result<
     AppointmentCalendarEntry[], { code: "VALIDATION_ERROR"; message: string }
   >>;
+  listAppointments(query: ListAppointmentsQuery): Promise<Appointment[]>;
+  listAppointmentEvents(query: GetAppointmentQuery): Promise<AppointmentEvent[]>;
+  markAppointmentOutcome(command: MarkAppointmentOutcomeCommand): Promise<Result<Appointment, AppointmentLookupError>>;
+  listCustomerHistory(tenantId: TenantId, customerId: CustomerId, limit?: number): Promise<Appointment[]>;
+  listTenantHistory(tenantId: TenantId, limit?: number): Promise<Appointment[]>;
 }

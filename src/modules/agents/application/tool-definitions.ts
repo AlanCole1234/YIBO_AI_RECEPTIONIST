@@ -22,7 +22,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "check_availability",
-    description: "Find real clinic-calendar appointment slots. Always supply dateExpression or both rangeStart and rangeEnd, even when requestedStartAt is given. service is an optional patient-facing choice such as Cleaning or Consultation; omit it to use the clinic's configured default appointment type. Never ask for or expose an internal service ID. When the caller asks about an exact time, also include requestedStartAt as an ISO datetime. Results are verified, privacy-safe, and sorted earliest first.",
+    description: "Find real clinic-calendar appointment slots. Always supply dateExpression or both rangeStart and rangeEnd, even when requestedStartAt is given. service is an optional patient-facing choice such as Cleaning or Consultation; omit it to use the clinic's configured default appointment type. Never ask for or expose an internal service ID. When the caller asks about an exact time, also include requestedStartAt as an ISO datetime. Results are verified, privacy-safe, and sorted earliest first. Speak displayStart/localStartAt only; startAt is the original UTC instant to pass unchanged to the booking tool.",
     presentation: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕", kind: "consult" },
     inputSchema: {
       type: "object",
@@ -56,10 +56,11 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   },
   {
     name: "update_customer",
-    description: "Request saving the verified caller's first and last name and best callback phone number. Use only after collecting both values one question at a time; success is the only authority that they were saved.",
+    description: "Save approved contact details for the verified caller before booking. Collect the full name and callback number, repeat the number digit by digit, wait for the caller to confirm it, then call this tool. Success is the only authority that the details were saved.",
     presentation: { title: "Update customer", help: "Saves the verified caller's name and callback number without returning personal data to the model.", route: "Customers", icon: "✎", kind: "mutate" },
-    inputSchema: { type: "object", additionalProperties: false, required: ["name", "phone"], properties: {
+    inputSchema: { type: "object", additionalProperties: false, required: ["name"], properties: {
       name: { type: "string", minLength: 3 }, phone: { type: "string", minLength: 7 },
+      email: { type: "string", format: "email" }, preferredLanguage: { type: "string", minLength: 2 },
       confirmationToken: { type: "string", minLength: 1, description: "Opaque token returned by a prior confirmation request for these exact arguments." },
     } },
   },

@@ -4,7 +4,7 @@ import type { Appointment, Customer, Slot } from "../services/api";
 import { createAvailabilitySearch, availabilityTime, slotKey, type AvailabilityPreferences } from "../services/availability-search";
 import { useUnsavedChanges } from "../services/unsaved-changes";
 
-const props = defineProps<{ customer?: Customer; canManageSettings: boolean; initialPreferences?: AvailabilityPreferences; autoSearch?: boolean }>();
+const props = defineProps<{ customer?: Customer; readOnly?: boolean; canManageSettings: boolean; initialPreferences?: AvailabilityPreferences; autoSearch?: boolean }>();
 const emit = defineEmits<{ booked: [appointment: Appointment]; customerNeeded: []; settings: [locationId: string]; busy: [value: boolean] }>();
 const search = createAvailabilitySearch();
 const { state, location, service, professionals } = search;
@@ -16,7 +16,7 @@ const groups = computed(() => [
 const time = (instant: string) => availabilityTime(instant, location.value?.timezone ?? "UTC");
 const professional = (slot: Slot) => location.value?.professionals.find(item => item.id === slot.employeeId)?.displayName ?? "Professional";
 async function book() {
-  if (!props.customer) return;
+  if (!props.customer || props.readOnly) return;
   const appointment = await search.book(props.customer.id);
   if (appointment) emit("booked", appointment);
 }
@@ -75,7 +75,8 @@ onBeforeUnmount(search.dispose);
     <section v-if="state.selected" class="selection" aria-label="Review selected appointment">
       <h3>Selected appointment</h3><p v-if="state.selected.outsideRequestedRange"><strong>This option is outside your requested period.</strong></p>
       <p>{{ service?.name }} at {{ location?.name }} with {{ professional(state.selected) }}</p><p>{{ time(state.selected.startAt) }} — {{ time(state.selected.endAt) }}</p>
-      <template v-if="customer"><p>For {{ customer.name || 'Selected customer' }} · {{ customer.phone }}</p><p>The time is rechecked when you book. Selecting it does not reserve it.</p><button class="primary" :disabled="state.booking" @click="book">Book selected appointment</button></template>
+      <p v-if="readOnly">Your role allows viewing availability only.</p>
+      <template v-else-if="customer"><p>For {{ customer.name || 'Selected customer' }} · {{ customer.phone }}</p><p>The time is rechecked when you book. Selecting it does not reserve it.</p><button class="primary" :disabled="state.booking" @click="book">Book selected appointment</button></template>
       <template v-else><p>Select or create a customer before booking.</p><button type="button" @click="emit('customerNeeded')">Choose customer</button></template>
     </section>
   </section>

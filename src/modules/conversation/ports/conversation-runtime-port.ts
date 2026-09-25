@@ -55,6 +55,13 @@ export type ConversationRuntimeEvent =
       inputTokens?: number;
       outputTokens?: number;
       totalTokens?: number;
+      inputTextTokens?: number;
+      outputTextTokens?: number;
+      inputAudioTokens?: number;
+      outputAudioTokens?: number;
+      cachedInputTokens?: number;
+      cachedInputTextTokens?: number;
+      cachedInputAudioTokens?: number;
       inputAudioMs?: number;
       outputAudioMs?: number;
       toolCalls?: number;

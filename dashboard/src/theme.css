@@ -25,6 +25,7 @@ body::before {
 }
 
 .sidebar {
+  gap: clamp(14px, 2vw, 30px);
   border-color: #d8d1c4;
   background: #fbf7efee;
   box-shadow: 0 8px 30px #4c46370b;
@@ -47,6 +48,9 @@ select { border-color: #ccc4b7; background: #fffaf2; }
   place-items: center;
   padding: 28px;
 }
+.sidebar nav { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.sidebar nav button { flex: none; }
+.sidebar-account { flex: none; }
 .auth-card {
   width: min(460px, 100%);
   padding: clamp(30px, 6vw, 54px);
@@ -252,6 +256,8 @@ select { border-color: #ccc4b7; background: #fffaf2; }
   .home-calendar > .pill { grid-column: 3; grid-row: 1 / 3; align-self: center; }
   .sidebar-account div { display: none; }
 }
+.home-dashboard > .home-calendar:last-child { grid-column: 1 / -1; grid-template-columns: 52px 1fr auto; min-height: 130px; }
+.home-dashboard > .home-calendar:last-child > .pill { grid-column: 3; grid-row: 1 / 3; align-self: center; }
 @media (max-width: 700px) {
   .home-intro { align-items: flex-start; flex-direction: column; }
   .home-actions { width: 100%; justify-content: space-between; }

@@ -15,6 +15,7 @@ const migrations = [
   { version: 7, path: fileURLToPath(new URL("./migrations/007_location_context.sql", import.meta.url)) },
   { version: 8, path: fileURLToPath(new URL("./migrations/008_business_configuration_version.sql", import.meta.url)) },
   { version: 9, path: fileURLToPath(new URL("./migrations/009_appointment_price_snapshot.sql", import.meta.url)) },
+  { version: 10, path: fileURLToPath(new URL("./migrations/010_office_operations.sql", import.meta.url)) },
 ];
 
 export const defaultDatabasePath = (region: RegionId): string =>

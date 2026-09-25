@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { stdin, stdout } from "node:process";
 import { DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS } from "../app/development-fixtures.js";
-import { AdminCredentialService, ScryptPasswordHasher, type AdminRole } from "../modules/auth/index.js";
+import { ADMIN_ROLES, AdminCredentialService, isAdminRole, ScryptPasswordHasher, type AdminRole } from "../modules/auth/index.js";
 import { SqliteAdminIdentityRepository } from "../infrastructure/database/sqlite-admin-identity-repository.js";
 import { migrateDatabase, openRegionalDatabase, seedBusiness } from "../infrastructure/database/regional-database.js";
 import type { RegionId } from "../shared/types/identifiers.js";
@@ -42,10 +42,10 @@ function parseArguments(values: string[]): { tenantId: string; email: string; re
   const region = valueFor("--region")?.toUpperCase();
   const role = valueFor("--role") ?? "tenant_admin";
   if (!tenantId || !email || (region !== "MX" && region !== "US")
-    || (role !== "tenant_admin" && role !== "operator")) {
-    throw new Error("Usage: pnpm admin:create --tenant <id> --region <MX|US> --email <email> [--role tenant_admin|operator]");
+    || !isAdminRole(role)) {
+    throw new Error(`Usage: pnpm admin:create --tenant <id> --region <MX|US> --email <email> [--role ${ADMIN_ROLES.join("|")}]`);
   }
-  return { tenantId, email, region, role };
+  return { tenantId, email, region, role: role as AdminRole };
 }
 
 async function readSecret(prompt: string): Promise<string> {
