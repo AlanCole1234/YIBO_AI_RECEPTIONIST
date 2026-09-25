@@ -31,6 +31,7 @@ const port = Number(process.env.DEV_VOICE_PORT ?? 4317);
 const tenantId = process.env.YIBO_TENANT_ID?.trim() || DEVELOPMENT_BUSINESS.tenantId;
 const profile = [DEVELOPMENT_BUSINESS, DEVELOPMENT_US_BUSINESS].find((value) => value.tenantId === tenantId);
 if (!profile) throw new Error(`Unknown development tenant: ${tenantId}`);
+const location = profile.locations[0]!;
 const database = openRegionalDatabase(profile.region);
 migrateDatabase(database);
 seedBusiness(database, profile);
@@ -40,7 +41,7 @@ const callRepository = new SqliteCallRepository(database, profile.region);
 const configurationService = new AgentConfigurationService(configurationRepository);
 if (!await configurationRepository.getConfiguration(profile.tenantId)) {
   await configurationRepository.saveConfiguration(profile.tenantId, configurationService.recommended(
-    profile.locale,
+    location.locale,
     profile.name,
     process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1",
   ));
@@ -95,6 +96,13 @@ console.log(JSON.stringify({
 }));
 
 function attachHarness(socket: WebSocket): void {
+  void app.agentConfiguration.get(app.tenantId).then((configuration) => {
+    if (socket.readyState !== socket.OPEN) return;
+    socket.send(JSON.stringify({ type: "voice.lab.ready", tenantId: app.tenantId,
+      runtime: app.config.runtime, model: configuration?.conversation.model,
+      voice: configuration?.audio.voice, configurationSource: "saved",
+    }));
+  }).catch(() => { if (socket.readyState === socket.OPEN) socket.close(1011, "Configuration unavailable"); });
   const callId = app.ids.generate("call");
   const inbound = new AudioQueue();
   let conversationStarted = false;
@@ -174,7 +182,7 @@ function attachHarness(socket: WebSocket): void {
       type: "INCOMING_CALL",
       callId,
       from: "+529990000001",
-      to: profile!.calledNumbers[0]!,
+      to: location.calledNumbers[0]!,
       occurredAt: new Date().toISOString(),
     });
     const call = await callRepository.findByCallId(callId);

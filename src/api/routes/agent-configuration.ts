@@ -1,40 +1,54 @@
+import { agentConfigurationRevision, AgentConfigurationConflict } from "../../modules/agents/application/agent-configuration-service.js";
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
-import { AGENT_TOOL_DEFINITIONS, type AgentToolName } from "../../modules/agents/index.js";
+import {
+  PUBLIC_AGENT_TOOL_DEFINITIONS,
+} from "../../modules/agents/index.js";
+import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
 import { toHttpError } from "../http-errors.js";
 
 export async function registerAgentConfigurationRoutes(
   server: FastifyInstance,
   app: YiboApplication,
 ): Promise<void> {
-  server.get("/api/configuration", async (_request, reply) => {
+  server.get("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (_request, reply) => {
     const business = await app.business.getBusinessProfile(app.tenantId);
     if (!business.ok) {
       const mapped = toHttpError(business.error);
       return reply.code(mapped.statusCode).send(mapped.payload);
     }
+    const location = business.value.locations.find(({ id }) => id === "default") ?? business.value.locations[0]!;
 
+    const current = await app.agentConfiguration.get(app.tenantId);
     return {
-      current: await app.agentConfiguration.get(app.tenantId),
+      revision: agentConfigurationRevision(current),
+      current,
       recommended: app.agentConfiguration.recommended(
-        business.value.locale,
+        location.locale,
         business.value.name,
         app.config.openAiRealtimeModel,
       ),
-      availableTools: AGENT_TOOL_DEFINITIONS.filter(({ name }) => !isDeveloperTestTool(name)).map(({ name, description }) => ({
+      modelCapabilities: app.agentConfiguration.modelCapabilities(),
+      availableTools: PUBLIC_AGENT_TOOL_DEFINITIONS.map(({ name, description, presentation }) => ({
         name,
         description,
-        kind: toolKind(name),
+        ...presentation,
       })),
       secrets: { apiKeyConfigured: Boolean(app.config.openAiApiKey) },
     };
   });
 
-  server.put("/api/configuration", async (request, reply) => {
+  server.put("/api/configuration", { preHandler: createAdminGuard(app, "tenant_admin") }, async (request, reply) => {
+    const match = request.headers["if-match"];
+    if (typeof match !== "string" || !/^"[a-f0-9]{64}"$/.test(match)) {
+      return reply.code(match === undefined ? 428 : 400).send({ error: { code: "CONFIGURATION_VERSION_REQUIRED" } });
+    }
+    const before = await app.agentConfiguration.get(app.tenantId);
+    let configuration;
     try {
-      const configuration = await app.agentConfiguration.update(app.tenantId, request.body as never);
-      return { configuration, appliesTo: "next-conversation" as const };
+      configuration = await app.agentConfiguration.update(app.tenantId, request.body as never, match.slice(1, -1));
     } catch (error) {
+      if (error instanceof AgentConfigurationConflict) return reply.code(409).send({ error: { code: "CONFIGURATION_VERSION_CONFLICT" } });
       return reply.code(400).send({
         error: {
           code: "INVALID_AGENT_CONFIGURATION",
@@ -42,14 +56,15 @@ export async function registerAgentConfigurationRoutes(
         },
       });
     }
+    await app.adminAudit.recordMutation({
+      principal: adminPrincipalFor(request),
+      entityType: "agent_configuration",
+      entityId: app.tenantId,
+      action: before ? "update" : "create",
+      entityVersion: configuration.schemaVersion,
+      before,
+      after: configuration,
+    });
+    return { configuration, revision: agentConfigurationRevision(configuration), appliesTo: "next-conversation" as const };
   });
-}
-
-const isDeveloperTestTool = (name: AgentToolName): boolean =>
-  name === "enable_developer_test_mode" || name === "delete_test_appointments";
-
-function toolKind(name: AgentToolName): "consult" | "mutate" | "external" {
-  if (name === "check_availability") return "consult";
-  if (name === "transfer_to_human") return "external";
-  return "mutate";
 }

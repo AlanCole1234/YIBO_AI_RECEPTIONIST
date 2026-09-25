@@ -10,6 +10,7 @@ const CALL_ID = "call-e2e-1";
 const CUSTOMER_ID = "customer-e2e";
 const APPOINTMENT_ID = "appointment-e2e";
 const CHECK_TOOL_CALL_ID = "tool-check-1";
+const CONTACT_TOOL_CALL_ID = "tool-contact-1";
 const CREATE_TOOL_CALL_ID = "tool-create-1";
 
 const noAudio = async function* () {};
@@ -19,7 +20,7 @@ describe("in-memory call to appointment", () => {
     const ids: IdGenerator = {
       generate: (scope) => scope === "customer" ? CUSTOMER_ID : scope === "appointment" ? APPOINTMENT_ID : `${scope}-e2e`,
     };
-    const app = buildApplication({ ids });
+    const app = buildApplication({ ids, clock: { now: () => new Date("2026-08-01T00:00:00.000Z") } });
     if (!(app.runtime instanceof ScriptedConversationRuntime)) {
       throw new Error("The E2E scenario requires the in-memory scripted runtime");
     }
@@ -61,6 +62,14 @@ describe("in-memory call to appointment", () => {
 
     runtimeSession.emit({
       type: "tool.call",
+      toolCallId: CONTACT_TOOL_CALL_ID,
+      name: "update_customer",
+      arguments: { name: "Synthetic Patient", phone: "+529991234567" },
+    });
+    expect(await waitForToolResult(runtimeSession.receivedToolResults, CONTACT_TOOL_CALL_ID)).toMatchObject({ ok: true });
+
+    runtimeSession.emit({
+      type: "tool.call",
       toolCallId: CREATE_TOOL_CALL_ID,
       name: "create_appointment",
       arguments: {
@@ -72,11 +81,26 @@ describe("in-memory call to appointment", () => {
 
     const creation = await waitForToolResult(runtimeSession.receivedToolResults, CREATE_TOOL_CALL_ID);
     if (!creation.ok) throw new Error(`Appointment creation failed: ${creation.error.code}`);
-    const createdAppointment = appointmentFrom(creation.data);
+    expect(creation.data).toMatchObject({
+      confirmed: true,
+      service: "Consulta",
+      startAt: selected.startAt,
+      price: { amountMinor: 0, currency: "MXN" },
+    });
+    expect(JSON.stringify(creation.data)).not.toContain(APPOINTMENT_ID);
+
+    const persisted = await app.appointments.getAppointment({
+      tenantId: TENANT_ID,
+      locationId: "default",
+      appointmentId: APPOINTMENT_ID,
+    });
+    if (!persisted.ok) throw new Error(`Persisted appointment unavailable: ${persisted.error.code}`);
+    const createdAppointment = persisted.value;
 
     expect(createdAppointment).toMatchObject({
       id: APPOINTMENT_ID,
       tenantId: TENANT_ID,
+      locationId: "default",
       customerId: CUSTOMER_ID,
       status: "CONFIRMED",
       idempotencyKey: `${CALL_ID}:${CREATE_TOOL_CALL_ID}`,
@@ -85,10 +109,6 @@ describe("in-memory call to appointment", () => {
     });
     expect(createdAppointment.externalCalendarEventId).toBeTruthy();
 
-    const persisted = await app.appointments.getAppointment({
-      tenantId: TENANT_ID,
-      appointmentId: APPOINTMENT_ID,
-    });
     expect(persisted).toEqual({ ok: true, value: createdAppointment });
 
     const customer = await app.customers.findOrCreateByPhone({
@@ -99,6 +119,7 @@ describe("in-memory call to appointment", () => {
 
     const calendar = await app.calendar.getBusyIntervals({
       tenantId: TENANT_ID,
+      locationId: "default",
       employeeId: selected.employeeId,
       rangeStart: selected.startAt,
       rangeEnd: selected.endAt,
@@ -145,13 +166,6 @@ function firstSlot(value: unknown): { employeeId: string; startAt: string; endAt
     throw new Error("Availability tool returned an invalid slot");
   }
   return { employeeId: slot.employeeId, startAt: slot.startAt, endAt: slot.endAt };
-}
-
-function appointmentFrom(value: unknown): Record<string, unknown> {
-  if (!isRecord(value) || !isRecord(value.appointment)) {
-    throw new Error("Create appointment tool did not return an appointment");
-  }
-  return value.appointment;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

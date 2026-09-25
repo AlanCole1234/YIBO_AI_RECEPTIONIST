@@ -3,5 +3,5 @@ export interface Clock {
 }
 
 export interface IdGenerator {
-  generate(scope: "appointment" | "customer" | "call" | "calendar-event" | "idempotency"): string;
+  generate(scope: "appointment" | "customer" | "call" | "calendar-event" | "idempotency" | "audit"): string;
 }

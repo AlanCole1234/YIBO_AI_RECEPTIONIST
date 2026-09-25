@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { api } from "../services/api";
+import { api, type RealtimeModelPricing } from "../services/api";
+import {
+  addRealtimeUsage,
+  emptyRealtimeSessionUsage,
+  estimateRealtimeCost,
+} from "../services/realtime-cost";
+import { previewBlockReason } from "../services/voice-preview";
+const props = defineProps<{ expectedTenantId?: string }>();
+const previewMetadata = ref<Record<string, unknown>>();
+const previewBlocked = computed(() => previewBlockReason(props.expectedTenantId, previewMetadata.value));
 
 type LabState = "connecting" | "idle" | "listening" | "speaking" | "closed" | "error";
 type AudioContextConstructor = typeof AudioContext;
@@ -10,6 +19,12 @@ type AudioMetadata = { type: "audio.chunk"; assistantTurnId: string; bytes: numb
 const state = ref<LabState>("connecting");
 const events = ref<string[]>([]);
 const sessionUsed = ref(false);
+const sessionUsage = ref(emptyRealtimeSessionUsage());
+const selectedPricing = ref<RealtimeModelPricing>();
+const elapsedSeconds = ref(0);
+let sessionStartedAt: number | undefined;
+let sessionEndedAt: number | undefined;
+let clockTimer: ReturnType<typeof setInterval> | undefined;
 let socket: WebSocket | undefined;
 let context: AudioContext | undefined;
 let stream: MediaStream | undefined;
@@ -27,6 +42,13 @@ const calendarToolsAvailable = ref(false);
 const clinicTimezone = ref("Loading…");
 const calendarStatus = ref<"connected" | "needs setup" | "unavailable">("unavailable");
 const microphoneActive = computed(() => state.value === "listening" || state.value === "speaking");
+const estimatedCost = computed(() => estimateRealtimeCost(sessionUsage.value, selectedPricing.value));
+const estimatedCostPerMinute = computed(() => elapsedSeconds.value >= 5 && estimatedCost.value !== null
+  ? estimatedCost.value / elapsedSeconds.value * 60
+  : null);
+const elapsedLabel = computed(() => `${String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0")}:${String(elapsedSeconds.value % 60).padStart(2, "0")}`);
+const textTokens = computed(() => sessionUsage.value.inputTextTokens + sessionUsage.value.outputTextTokens);
+const audioTokens = computed(() => sessionUsage.value.inputAudioTokens + sessionUsage.value.outputAudioTokens);
 const statusCopy = computed(() => ({
   connecting: ["Connecting your studio", "Preparing the audio channel"],
   idle: ["Ready when you are", "The microphone is off"],
@@ -39,12 +61,14 @@ const statusCopy = computed(() => ({
 onMounted(() => {
   connect();
   void loadDeveloperReadiness();
+  clockTimer = setInterval(updateElapsed, 1_000);
 });
 onBeforeUnmount(() => {
   stopMicrophone(false);
   stopPlayback();
   socket?.close();
   void context?.close();
+  if (clockTimer) clearInterval(clockTimer);
 });
 
 function connect(): void {
@@ -58,6 +82,7 @@ function connect(): void {
   });
   socket.addEventListener("close", () => {
     connected.value = false;
+    finishClock();
     if (state.value !== "closed") state.value = "error";
     addEvent("Connection closed");
   });
@@ -73,6 +98,10 @@ function connect(): void {
       return;
     }
     const message = JSON.parse(data) as Record<string, unknown>;
+    if (message.type === "voice.lab.ready") {
+      previewMetadata.value = message;
+      return;
+    }
     if (message.type === "audio.chunk") {
       pendingAudio = message as unknown as AudioMetadata;
       if (pendingAudio.assistantTurnId !== announcedAssistantTurnId) {
@@ -92,7 +121,9 @@ async function loadDeveloperReadiness(): Promise<void> {
     ]);
     clinicTimezone.value = business.timezone;
     calendarStatus.value = calendar.connected ? "connected" : calendar.configured ? "needs setup" : "unavailable";
-    const enabledTools = (configuration.current ?? configuration.recommended).enabledTools;
+    const activeConfiguration = configuration.current ?? configuration.recommended;
+    const enabledTools = activeConfiguration.enabledTools;
+    selectedPricing.value = configuration.modelCapabilities.find(({ id }) => id === activeConfiguration.conversation.model)?.pricing;
     calendarToolsAvailable.value = enabledTools.includes("check_availability") && enabledTools.includes("create_appointment");
   } catch {
     clinicTimezone.value = "Unavailable";
@@ -102,7 +133,7 @@ async function loadDeveloperReadiness(): Promise<void> {
 
 async function startMicrophone(): Promise<void> {
   const activeSocket = socket;
-  if (!connected.value || !activeSocket) return;
+  if (!connected.value || !activeSocket || previewBlocked.value) return;
   try {
     const activeContext = await resumeAudioContext();
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
@@ -146,6 +177,7 @@ function closeSession(): void {
   stopPlayback();
   if (connected.value && sessionUsed.value) socket?.send(JSON.stringify({ type: "close" }));
   state.value = "closed";
+  finishClock();
   aiSessionConnected.value = false;
   addEvent("Session closed");
 }
@@ -153,7 +185,7 @@ function closeSession(): void {
 async function sendFixture(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (!file || !connected.value) return;
+  if (!file || !connected.value || previewBlocked.value) return;
   await resumeAudioContext();
   socket?.send(JSON.stringify({ type: "fixture.next", name: file.name }));
   socket?.send(await file.arrayBuffer());
@@ -247,8 +279,22 @@ function observeEvent(message: Record<string, unknown>): void {
     "conversation.closed": "Conversation closed",
     error: "An error occurred",
   };
-  if (name === "conversation.opened") aiSessionConnected.value = true;
-  if (name === "conversation.closed") aiSessionConnected.value = false;
+  if (name === "conversation.opened") {
+    aiSessionConnected.value = true;
+    sessionUsage.value = emptyRealtimeSessionUsage();
+    sessionStartedAt = Date.now();
+    sessionEndedAt = undefined;
+    updateElapsed();
+  }
+  if (name === "conversation.closed") {
+    aiSessionConnected.value = false;
+    finishClock();
+  }
+  if (name === "usage") {
+    sessionUsage.value = addRealtimeUsage(sessionUsage.value, message);
+    addEvent(`Usage updated · ${formatUsd(estimatedCost.value)}`);
+    return;
+  }
   if (name === "assistant.transcript" && typeof message.transcript === "string") {
     addEvent(`YIBO said: ${message.transcript}`);
     return;
@@ -262,6 +308,29 @@ function observeEvent(message: Record<string, unknown>): void {
   addEvent(labels[name] ?? name);
 }
 
+function updateElapsed(): void {
+  if (!sessionStartedAt) return;
+  elapsedSeconds.value = Math.max(0, Math.floor(((sessionEndedAt ?? Date.now()) - sessionStartedAt) / 1_000));
+}
+
+function finishClock(): void {
+  if (!sessionStartedAt || sessionEndedAt) return;
+  sessionEndedAt = Date.now();
+  updateElapsed();
+}
+
+function formatUsd(value: number | null): string {
+  if (value === null) return "Unavailable";
+  if (value > 0 && value < 0.0001) return "< US$0.0001";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 6,
+  }).format(value);
+}
+
+function formatTokens(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
 function addEvent(value: string): void {
   const timestamp = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
   events.value = [`${timestamp} · ${value}`, ...events.value].slice(0, 6);
@@ -273,7 +342,9 @@ function addEvent(value: string): void {
     <div class="lab-copy">
       <div class="lab-kicker"><span></span> LIVE TEST</div>
       <h2 id="voice-lab-title">Talk to your agent<br><em>before publishing it.</em></h2>
-      <p>This test uses the same ConversationService that telephony will use. Listen to its pace, refine it, and test interruptions right here.</p>
+      <p>Preview the saved agent settings through Voice Lab. Unsaved edits are not included. This is a browser voice test, not a phone call. Starting the microphone or sending a WAV uses OpenAI and may incur charges.</p>
+      <p v-if="previewBlocked" role="status">{{ previewBlocked }}</p>
+      <p v-else>Saved model: {{ previewMetadata?.model }} · Voice: {{ previewMetadata?.voice }}</p>
       <div class="privacy"><span>Audio is not saved</span><span>Transcript is off</span><span class="cost">May use credits</span></div>
     </div>
 
@@ -281,12 +352,30 @@ function addEvent(value: string): void {
       <div :class="['live-orb', state]"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
       <div class="live-status"><small>AGENT STATUS</small><strong>{{ statusCopy[0] }}</strong><span>{{ statusCopy[1] }}</span></div>
       <div class="lab-controls">
-        <button class="start" :disabled="!connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Start Voice Test</button>
+        <button class="start" :disabled="Boolean(previewBlocked) || !connected || microphoneActive || state === 'closed'" @click="startMicrophone">● Start Voice Test</button>
         <button :disabled="!microphoneActive" @click="stopMicrophone()">Pause microphone</button>
         <button :disabled="!sessionUsed || state === 'closed'" @click="interrupt">Interrupt YIBO</button>
         <button class="close" :disabled="!sessionUsed || state === 'closed'" @click="closeSession">End Voice Test</button>
       </div>
-      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="!connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
+      <label class="fixture"><input type="file" accept="audio/wav,.wav" :disabled="Boolean(previewBlocked) || !connected || state === 'closed'" @change="sendFixture"><i>↥</i><span><strong>Use a WAV phrase</strong><small>Replay exactly the same audio to compare configurations.</small></span></label>
+
+      <section class="live-cost" aria-live="polite" aria-label="Estimated live session cost">
+        <header>
+          <span><small>ESTIMATED SESSION COST</small><strong>{{ formatUsd(estimatedCost) }}</strong></span>
+          <b :class="{ active: aiSessionConnected }"><i></i>{{ aiSessionConnected ? 'LIVE' : sessionUsed ? 'FINAL' : 'WAITING' }}</b>
+        </header>
+        <div class="cost-metrics">
+          <span><small>Duration</small><strong>{{ elapsedLabel }}</strong></span>
+          <span><small>Audio tokens</small><strong>{{ formatTokens(audioTokens) }}</strong></span>
+          <span><small>Text/context tokens</small><strong>{{ formatTokens(textTokens) }}</strong></span>
+          <span><small>Tool calls</small><strong>{{ formatTokens(sessionUsage.toolCalls) }}</strong></span>
+          <span><small>Current pace</small><strong>{{ estimatedCostPerMinute === null ? '—' : `${formatUsd(estimatedCostPerMinute)}/min` }}</strong></span>
+        </div>
+        <footer>
+          <span>Calculated after each model response from reported usage. Provider billing remains authoritative.</span>
+          <a v-if="selectedPricing" :href="selectedPricing.sourceUrl" target="_blank" rel="noreferrer">{{ previewMetadata?.model }} rates · {{ selectedPricing.verifiedAt }}</a>
+        </footer>
+      </section>
     </div>
 
     <aside class="test-readiness" aria-label="Voice test readiness">
@@ -307,6 +396,10 @@ function addEvent(value: string): void {
 
 <style scoped>
 .voice-lab{--red:#e24e5d;--red2:#9d2c3e;--cream:#f5ecdc;--black:#151214;position:relative;display:grid;grid-template-columns:minmax(330px,.83fr) minmax(520px,1.35fr);gap:28px;padding:42px clamp(28px,4vw,58px) 30px;color:var(--cream);border:1px solid #3b3034;border-radius:5px 38px 7px 24px;background:radial-gradient(circle at 14% 110%,#5e2634 0,transparent 34%),linear-gradient(145deg,#171315,#22191d);box-shadow:0 22px 70px #0008,9px 11px 0 #7e2938;overflow:hidden;isolation:isolate}.voice-lab:before{content:"";position:absolute;width:260px;height:260px;right:-110px;top:-170px;border:36px solid #e24e5d;border-radius:47% 53% 39% 61%;transform:rotate(18deg);opacity:.75;z-index:-1}.lab-copy{align-self:center}.lab-kicker{display:flex;align-items:center;gap:9px;color:#f0ae78;font-size:10px;font-weight:850;letter-spacing:.18em}.lab-kicker span{width:25px;height:2px;background:var(--red)}h2{margin:15px 0 17px;color:#fff8ee;font:500 clamp(38px,4.2vw,62px)/.91 "Iowan Old Style",Georgia,serif;letter-spacing:-.055em}h2 em{color:#f09a79;font-weight:500}.lab-copy>p{max-width:590px;color:#bfaeb2;line-height:1.55}.privacy{display:flex;flex-wrap:wrap;gap:7px;margin-top:23px}.privacy span{padding:7px 9px;border:1px solid #58454b;border-radius:99px;color:#c8b8bc;font-size:9px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}.privacy .cost{color:#eec485;border-color:#74532e;background:#392a1d}.lab-experience{display:grid;grid-template-columns:150px 1fr;gap:15px 23px;align-content:center;padding:20px 0}.live-orb{grid-row:1/3;width:142px;height:156px;display:grid;place-items:center;border-radius:47% 53% 44% 56%;background:radial-gradient(circle,#642837,#2c1d22 65%);box-shadow:0 0 0 1px #7e3b4b,7px 9px 0 #0b090a;transition:.3s;animation:creature 5s ease-in-out infinite}.live-orb.listening{background:radial-gradient(circle,#b33e51,#4b202b 67%);box-shadow:0 0 55px #df46554d,7px 9px 0 #0b090a}.live-orb.speaking{background:radial-gradient(circle,#d46148,#702b35 67%);box-shadow:0 0 62px #ef805e55,7px 9px 0 #0b090a}.live-orb.connecting{opacity:.55}.live-orb.error,.live-orb.closed{filter:saturate(.25);opacity:.7}.wave{height:54px;display:flex;align-items:center;gap:4px}.wave i{width:4px;height:18px;border-radius:8px;background:#f5d5b0;animation:wave 1.15s ease-in-out infinite}.wave i:nth-child(2),.wave i:nth-child(6){height:31px;animation-delay:.1s}.wave i:nth-child(3),.wave i:nth-child(5){height:43px;animation-delay:.2s}.wave i:nth-child(4){height:54px;animation-delay:.3s}.live-status{display:grid;align-content:end}.live-status small{color:#8f7b81;font-size:8px;letter-spacing:.15em}.live-status strong{margin-top:6px;color:#fff4e9;font:500 20px/1.1 Georgia,serif}.live-status span{margin-top:3px;color:#a9969b;font-size:11px}.lab-controls{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px}.lab-controls button{min-height:45px;padding:10px 12px;border:1px solid #58454b;border-radius:5px 13px 6px 10px;color:#e7dadd;background:#2b2024;font-weight:700;font-size:12px;transition:.18s}.lab-controls button:hover:not(:disabled){transform:translateY(-2px);border-color:#c56b78}.lab-controls .start{color:#fff8ef;border-color:#ff8e96;background:var(--red);box-shadow:4px 5px 0 #721f30}.lab-controls .close{grid-column:1/-1;min-height:36px;background:transparent}.lab-controls button:disabled{cursor:not-allowed;opacity:.28}.fixture{grid-column:2;position:relative;display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px dashed #72535b;border-radius:14px 4px 12px 5px;color:#d9c9cc;background:#231a1e;cursor:pointer}.fixture input{position:absolute;inset:0;opacity:0;cursor:pointer}.fixture i{width:34px;height:34px;display:grid;place-items:center;flex:none;border-radius:50%;color:#211417;background:#f0ae78;font-style:normal;font-size:19px}.fixture span{display:grid}.fixture small{color:#9e898f;font-weight:400}.lab-events{grid-column:1/-1;display:grid;grid-template-columns:220px 1fr;gap:17px;margin-top:3px;padding-top:17px;border-top:1px solid #3d3034}.lab-events>div{display:flex;justify-content:space-between;align-items:flex-start;flex-direction:column;color:#bdaeb1;font-size:10px;text-transform:uppercase;letter-spacing:.11em}.lab-events>div i{display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:#e24e5d;box-shadow:0 0 0 4px #e24e5d16}.lab-events>div small{color:#66565b;font-size:8px}.lab-events ol{min-height:51px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px 17px;margin:0;padding:0;list-style:none;color:#8f7d82;font:10px/1.45 ui-monospace,SFMono-Regular,monospace}.lab-events li:first-child{color:#e8a3a9}.credit-note{grid-column:1/-1;margin:0;color:#b88b60;font-size:10px;text-align:right}@keyframes wave{50%{transform:scaleY(.38)}}@keyframes creature{0%,100%{border-radius:47% 53% 44% 56%;transform:rotate(-2deg)}45%{border-radius:54% 46% 57% 43%;transform:rotate(2deg) translateY(-3px)}75%{border-radius:43% 57% 48% 52%;transform:rotate(-4deg) translateY(2px)}}@media(max-width:1050px){.voice-lab{grid-template-columns:1fr}.lab-experience{grid-template-columns:140px 1fr}.lab-events{grid-column:1}.fixture{grid-column:2}.credit-note{grid-column:1}}@media(max-width:680px){.voice-lab{padding:31px 21px 24px}.lab-experience{grid-template-columns:1fr;text-align:center}.live-orb{grid-row:auto;margin:auto}.live-status{text-align:center}.lab-controls{grid-template-columns:1fr}.lab-controls .close,.fixture{grid-column:1}.lab-events{grid-template-columns:1fr}.lab-events>div{flex-direction:row}.lab-events ol{grid-template-columns:1fr}.credit-note{text-align:left}}@media(prefers-reduced-motion:reduce){.live-orb,.wave i{animation:none!important}}
+</style>
+
+<style scoped>
+.live-cost{grid-column:1/-1;margin-top:4px;padding:15px 17px;border:1px solid #b8d1ef;border-radius:8px 22px 8px 15px;background:linear-gradient(135deg,#f7fbff,#eaf4ff);box-shadow:4px 5px 0 #c7e3ff}.live-cost header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.live-cost header>span{display:grid;gap:3px}.live-cost header small{color:#7187ae;font-size:8px;font-weight:850;letter-spacing:.13em}.live-cost header strong{color:#153b91;font:500 30px/1 Georgia,serif}.live-cost header>b{display:flex;align-items:center;gap:6px;padding:5px 8px;color:#7789a8;border:1px solid #c6d7ed;border-radius:999px;font-size:8px;letter-spacing:.1em}.live-cost header>b i{width:6px;height:6px;border-radius:50%;background:#9caac0}.live-cost header>b.active{color:#167047;border-color:#a9d6bb;background:#e5f5ea}.live-cost header>b.active i{background:#24a568;box-shadow:0 0 0 4px #24a5681b}.cost-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:13px;border-block:1px solid #cedeef}.cost-metrics>span{display:grid;gap:3px;padding:10px 11px;border-right:1px solid #d7e5f3}.cost-metrics>span:last-child{border-right:0}.cost-metrics small{color:#7b8eae;font-size:8px;text-transform:uppercase;letter-spacing:.07em}.cost-metrics strong{color:#223d75;font-size:13px}.live-cost footer{display:flex;justify-content:space-between;gap:15px;padding-top:10px;color:#7c8eab;font-size:9px;line-height:1.35}.live-cost footer a{flex:none;color:#2354d7;font-weight:750;text-decoration:none}.live-cost footer a:hover{text-decoration:underline}@media(max-width:900px){.cost-metrics{grid-template-columns:repeat(2,1fr)}.cost-metrics>span{border-bottom:1px solid #d7e5f3}.cost-metrics>span:last-child{grid-column:1/-1}.live-cost footer{display:grid}}@media(max-width:680px){.live-cost{text-align:left}.cost-metrics{grid-template-columns:1fr 1fr}.live-cost header strong{font-size:26px}}
 </style>
 
 <style scoped>

@@ -8,7 +8,7 @@ import type {
 } from "../../modules/calls/index.js";
 import type { RegionId, TenantId } from "../../shared/types/identifiers.js";
 
-type CallRow = { call_id:string; tenant_id:string; customer_id:string|null; caller_number:string; called_number:string; state:CallState; created_at:string; updated_at:string };
+type CallRow = { call_id:string; tenant_id:string; location_id:string; customer_id:string|null; caller_number:string; called_number:string; state:CallState; created_at:string; updated_at:string };
 type HistoryRow = CallRow & { input_tokens:number; output_tokens:number; input_audio_ms:number; output_audio_ms:number; tool_calls:number };
 
 export class SqliteCallRepository implements CallRepository, CallHistoryReader {
@@ -20,8 +20,8 @@ export class SqliteCallRepository implements CallRepository, CallHistoryReader {
   }
 
   async create(record: CallRecord): Promise<void> {
-    this.database.prepare(`INSERT INTO calls(region_id,tenant_id,call_id,customer_id,caller_number,called_number,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`)
-      .run(this.region,record.tenantId,record.callId,record.customerId??null,record.from,record.to,record.state,record.createdAt,record.updatedAt);
+    this.database.prepare(`INSERT INTO calls(region_id,tenant_id,location_id,call_id,customer_id,caller_number,called_number,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .run(this.region,record.tenantId,record.locationId,record.callId,record.customerId??null,record.from,record.to,record.state,record.createdAt,record.updatedAt);
     this.insertTransition(record.tenantId, record.callId, record.state, record.createdAt);
   }
 
@@ -51,4 +51,4 @@ export class SqliteCallRepository implements CallRepository, CallHistoryReader {
   }
 }
 
-const toRecord=(row:CallRow):CallRecord=>({callId:row.call_id,tenantId:row.tenant_id,...(row.customer_id?{customerId:row.customer_id}:{}),from:row.caller_number,to:row.called_number,state:row.state,createdAt:row.created_at,updatedAt:row.updated_at});
+const toRecord=(row:CallRow):CallRecord=>({callId:row.call_id,tenantId:row.tenant_id,locationId:row.location_id,...(row.customer_id?{customerId:row.customer_id}:{}),from:row.caller_number,to:row.called_number,state:row.state,createdAt:row.created_at,updatedAt:row.updated_at});

@@ -5,6 +5,7 @@ export type CallId = string;
 export type CustomerId = string;
 export type EmployeeId = string;
 export type IdempotencyKey = string;
+export type LocationId = string;
 export type ServiceId = string;
 export type ToolCallId = string;
 export type IANATimeZone = string;

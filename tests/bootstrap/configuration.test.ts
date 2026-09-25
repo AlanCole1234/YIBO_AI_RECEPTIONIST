@@ -11,6 +11,7 @@ describe("loadConfiguration", () => {
       openAiRealtimeModel: "gpt-realtime-2.1",
       conversationVoice: "marin",
       maxOutputTokens: 512,
+      dashboardOrigin: "http://localhost:5173",
     });
   });
 
@@ -25,6 +26,7 @@ describe("loadConfiguration", () => {
       openAiRealtimeModel: "gpt-realtime-2.1",
       conversationVoice: "marin",
       maxOutputTokens: 512,
+      dashboardOrigin: "http://localhost:5173",
     });
   });
 

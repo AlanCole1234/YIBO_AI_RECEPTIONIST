@@ -12,8 +12,9 @@ import type { AsteriskClient, AsteriskEvent, AsteriskFailure } from "./asterisk-
 export class AsteriskTelephonyGateway implements TelephonyGateway {
   private readonly handlers: Array<(event: TelephonyEvent) => Promise<void>> = [];
   private readonly calls: AsteriskCallRegistry;
+  private readonly activeCalls = new Set<string>();
 
-  constructor(client: AsteriskClient, createCallId: () => CallId) {
+  constructor(client: AsteriskClient, createCallId: () => CallId, private readonly media?: { prepare(callId: string, channelId: string): Promise<void>; cleanup(callId: string): Promise<void> }) {
     this.client = client;
     this.calls = new AsteriskCallRegistry(createCallId);
     client.onEvent((event) => this.handleAsteriskEvent(event));
@@ -26,11 +27,23 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
   }
 
   async answer(callId: CallId) {
-    return this.withChannel(callId, (channelId) => this.client.answer(channelId));
+    return this.withChannel(callId, async channelId => {
+      // CallOrchestrator resolves trusted DID/location before answering.
+      await this.media?.prepare(callId, channelId);
+      await this.client.answer(channelId);
+    });
   }
 
   async hangup(callId: CallId) {
-    return this.withChannel(callId, (channelId) => this.client.hangup(channelId));
+    const result = await this.withChannel(callId, (channelId) => this.client.hangup(channelId));
+    await this.media?.cleanup(callId);
+    return result;
+  }
+
+  async close(): Promise<void> {
+    await Promise.allSettled([...this.activeCalls].map(callId => this.hangup(callId)));
+    this.activeCalls.clear();
+    (this.client as AsteriskClient & {close?(): void}).close?.();
   }
 
   async transfer(callId: CallId, destination: TransferDestination) {
@@ -60,6 +73,7 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
   private async handleAsteriskEvent(event: AsteriskEvent): Promise<void> {
     if (event.type === "CHANNEL_ENTERED_APPLICATION") {
       const callId = this.calls.register(event.channelId);
+      this.activeCalls.add(callId);
       return this.emit({
         type: "INCOMING_CALL",
         callId,
@@ -73,7 +87,12 @@ export class AsteriskTelephonyGateway implements TelephonyGateway {
       : this.calls.callIdForChannel(event.channelId);
     if (!callId) return;
     if (event.type === "CHANNEL_DESTROYED") {
-      return this.emit({ type: "CALL_HUNG_UP", callId, occurredAt: normalizedTimestamp(event.occurredAt) });
+      this.activeCalls.delete(callId);
+      await Promise.all([
+        Promise.resolve().then(() => this.media?.cleanup(callId)).catch(() => undefined),
+        this.emit({ type: "CALL_HUNG_UP", callId, occurredAt: normalizedTimestamp(event.occurredAt) }),
+      ]);
+      return;
     }
     if (/^[0-9A-D*#]$/.test(event.digit)) {
       return this.emit({

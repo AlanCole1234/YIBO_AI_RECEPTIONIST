@@ -3,7 +3,9 @@ import { failure, success } from "../../src/shared/domain/result.js";
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessProfile,
+  type VersionedBusinessProfile,
 } from "../../src/modules/business/index.js";
 import type { SchedulingService } from "../../src/modules/scheduling/index.js";
 import {
@@ -53,6 +55,7 @@ const scheduling = (validate: SchedulingService["validateSlot"] = async (query) 
 
 const command = {
   tenantId: "tenant-a",
+  locationId: "default",
   customerId: "customer-1",
   serviceId: "service-1",
   employeeId: "employee-1",
@@ -62,20 +65,22 @@ const command = {
   sourceCallId: "call-1",
 };
 
-function fixture(options: { scheduling?: SchedulingService } = {}) {
+function fixture(options: { scheduling?: SchedulingService; business?: VersionedBusinessProfile } = {}) {
   const repository = new InMemoryAppointmentRepository();
   const calendar = new InMemoryAppointmentCalendar();
+  const businessRepository = new InMemoryBusinessRepository([options.business ?? business]);
   let nextId = 1;
   const service = new AppointmentServiceImpl(
     repository,
     customers,
-    new BusinessDirectoryService(new InMemoryBusinessRepository([business])),
+    new BusinessDirectoryService(businessRepository),
     options.scheduling ?? scheduling(),
     calendar,
     new InMemoryAppointmentConcurrencyGuard(),
     () => `appointment-${nextId++}`,
+    { now: () => new Date("2026-08-01T00:00:00.000Z") },
   );
-  return { calendar, repository, service };
+  return { businessRepository, calendar, repository, service };
 }
 
 describe("AppointmentServiceImpl", () => {
@@ -87,6 +92,9 @@ describe("AppointmentServiceImpl", () => {
     expect(result).toEqual({ ok: true, value: {
       id: "appointment-1",
       ...command,
+      serviceNameSnapshot: "Consultation",
+      priceAmountMinor: 0,
+      priceCurrency: "MXN",
       startAt: "2026-08-10T15:00:00.000Z",
       endAt: "2026-08-10T15:30:00.000Z",
       status: "CONFIRMED",
@@ -119,7 +127,7 @@ describe("AppointmentServiceImpl", () => {
     calendar.failNext({ code: "PROVIDER_UNAVAILABLE", retryable: true });
 
     const result = await service.createAppointment(command);
-    const stored = await service.getAppointment({ tenantId: "tenant-a", appointmentId: "appointment-1" });
+    const stored = await service.getAppointment({ tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1" });
 
     expect(result).toEqual({ ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true } });
     expect(stored.ok && stored.value.status).toBe("FAILED");
@@ -131,8 +139,74 @@ describe("AppointmentServiceImpl", () => {
 
     await expect(service.getAppointment({
       tenantId: "tenant-b",
+      locationId: "default",
       appointmentId: "appointment-1",
     })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
+  });
+
+  it("freezes service name and price independently from later catalog changes", async () => {
+    const priced = upgradeBusinessProfile(business);
+    priced.locations[0]!.services[0]!.price = { amountMinor: 85000, currency: "MXN" };
+    const { businessRepository, service } = fixture({ business: priced });
+
+    const created = await service.createAppointment(command);
+    expect(created).toMatchObject({
+      ok: true,
+      value: { serviceNameSnapshot: "Consultation", priceAmountMinor: 85000, priceCurrency: "MXN" },
+    });
+
+    priced.services[0]!.name = "Renamed later";
+    priced.locations[0]!.services[0]!.price = { amountMinor: 99000, currency: "MXN" };
+    await businessRepository.save(priced);
+    await expect(service.getAppointment({
+      tenantId: command.tenantId, locationId: command.locationId, appointmentId: "appointment-1",
+    })).resolves.toMatchObject({
+      ok: true,
+      value: { serviceNameSnapshot: "Consultation", priceAmountMinor: 85000, priceCurrency: "MXN" },
+    });
+  });
+
+  it("never returns an appointment through another location", async () => {
+    const { service } = fixture();
+    await service.createAppointment(command);
+
+    await expect(service.getAppointment({
+      tenantId: "tenant-a",
+      locationId: "other-location",
+      appointmentId: "appointment-1",
+    })).resolves.toEqual({ ok: false, error: { code: "APPOINTMENT_NOT_FOUND" } });
+  });
+
+  it("lists only confirmed upcoming appointments in the trusted tenant, customer, and location", async () => {
+    const { repository, service } = fixture();
+    const created = await service.createAppointment(command);
+    if (!created.ok) throw new Error("fixture appointment was not created");
+    await repository.save({
+      ...created.value, id: "appointment-earlier", idempotencyKey: "earlier",
+      startAt: "2026-08-05T15:00:00.000Z", endAt: "2026-08-05T15:30:00.000Z",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-other-customer", idempotencyKey: "other-customer",
+      customerId: "customer-2",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-other-location", idempotencyKey: "other-location",
+      locationId: "other-location",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-cancelled", idempotencyKey: "cancelled", status: "CANCELLED",
+    });
+    await repository.save({
+      ...created.value, id: "appointment-past", idempotencyKey: "past",
+      startAt: "2026-07-31T15:00:00.000Z", endAt: "2026-07-31T15:30:00.000Z",
+    });
+
+    await expect(service.listUpcomingAppointments({
+      tenantId: "tenant-a", locationId: "default", customerId: "customer-1",
+    })).resolves.toMatchObject([
+      { id: "appointment-earlier", startAt: "2026-08-05T15:00:00.000Z" },
+      { id: "appointment-1", startAt: "2026-08-10T15:00:00.000Z" },
+    ]);
   });
 
   it("serializes concurrent attempts so only one can claim a slot", async () => {
@@ -173,18 +247,20 @@ describe("AppointmentServiceImpl", () => {
 
     const cancelled = await service.cancelAppointment({
       tenantId: "tenant-a",
+      locationId: "default",
       appointmentId: "appointment-1",
     });
 
     expect(cancelled.ok && cancelled.value.status).toBe("CANCELLED");
   });
 
-  it("replaces the external event and persists the validated rescheduled slot", async () => {
+  it("preserves the external event and persists the validated rescheduled slot", async () => {
     const { service } = fixture();
     await service.createAppointment(command);
 
     const rescheduled = await service.rescheduleAppointment({
       tenantId: "tenant-a",
+      locationId: "default",
       appointmentId: "appointment-1",
       startAt: "2026-08-10T16:00:00.000Z",
     });
@@ -194,7 +270,40 @@ describe("AppointmentServiceImpl", () => {
       startAt: "2026-08-10T16:00:00.000Z",
       endAt: "2026-08-10T16:30:00.000Z",
       status: "CONFIRMED",
-      externalCalendarEventId: "event-2",
+      externalCalendarEventId: "event-1",
     } });
+  });
+
+  it("enforces location notice before cancellation and rescheduling", async () => {
+    const restricted = upgradeBusinessProfile(business);
+    restricted.locations[0]!.policies.minimumCancellationNoticeMinutes = 14 * 24 * 60;
+    restricted.locations[0]!.policies.minimumRescheduleNoticeMinutes = 14 * 24 * 60;
+    const { service } = fixture({ business: restricted });
+    await service.createAppointment(command);
+
+    await expect(service.cancelAppointment({
+      tenantId: command.tenantId, locationId: command.locationId, appointmentId: "appointment-1",
+    })).resolves.toEqual({ ok: false, error: { code: "CANCELLATION_NOTICE_NOT_MET" } });
+    await expect(service.rescheduleAppointment({
+      tenantId: command.tenantId, locationId: command.locationId,
+      appointmentId: "appointment-1", startAt: "2026-08-10T16:00:00.000Z",
+    })).resolves.toEqual({ ok: false, error: { code: "RESCHEDULE_NOTICE_NOT_MET" } });
+  });
+
+  it("serializes different professionals competing for the same location capacity", async () => {
+    const guard = new InMemoryAppointmentConcurrencyGuard();
+    let active = 0;
+    let maximum = 0;
+    const operation = async () => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active -= 1;
+    };
+    await Promise.all([
+      guard.execute("tenant-a", "default", "employee-1", operation),
+      guard.execute("tenant-a", "default", "employee-2", operation),
+    ]);
+    expect(maximum).toBe(1);
   });
 });

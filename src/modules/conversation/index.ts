@@ -29,6 +29,8 @@ export {
   ScriptedConversationRuntimeSession,
 } from "./infrastructure/scripted-conversation-runtime.js";
 export { OpenAIRealtimeAdapter } from "./infrastructure/openai-realtime-adapter.js";
+export { buildRealtimeSessionUpdate } from "./infrastructure/realtime-session-payload.js";
+export { REALTIME_AUDIO_TRANSPORT } from "./domain/realtime-transport-profile.js";
 export type {
   OpenAIRealtimeAdapterOptions,
   RealtimeConnection,

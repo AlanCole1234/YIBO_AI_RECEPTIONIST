@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
-import type { YiboApplication } from "../../src/bootstrap/index.js";
+import { buildApplication } from "../../src/bootstrap/index.js";
+import type { GoogleOAuthService } from "../../src/modules/integrations/index.js";
+import { createAdminTestSession } from "../helpers/admin-session.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
@@ -13,9 +15,15 @@ describe("Google Calendar OAuth callback", () => {
       completeAuthorization: async () => ({ tenantId: "tenant-1", returnTo: "http://127.0.0.1:5174" }),
       returnToForState: () => "http://127.0.0.1:5174",
     };
-    server = await createApiServer({ tenantId: "tenant-1", googleOAuth } as unknown as YiboApplication);
+    const app = buildApplication({ googleOAuth: googleOAuth as unknown as GoogleOAuthService });
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
 
-    const connect = await server.inject({ method: "GET", url: "/api/integrations/google/connect?returnTo=http%3A%2F%2F127.0.0.1%3A5174" });
+    const connect = await server.inject({
+      method: "GET",
+      url: "/api/integrations/google/connect?returnTo=http%3A%2F%2F127.0.0.1%3A5174",
+      headers: session.readHeaders,
+    });
     expect(connect.statusCode).toBe(200);
     expect(connect.json()).toEqual({ url: "https://accounts.google.com/o/oauth2/v2/auth?returnTo=http%3A%2F%2F127.0.0.1%3A5174" });
 

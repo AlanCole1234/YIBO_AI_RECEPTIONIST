@@ -8,7 +8,7 @@ const monday = {
 
 describe("development application composition", () => {
   it("confirms a booking and makes the occupied slot unavailable", async () => {
-    const app = buildApplication();
+    const app = buildApplication({ clock: { now: () => new Date("2026-08-01T00:00:00.000Z") } });
     const customer = await app.customers.findOrCreateByPhone({
       tenantId: app.tenantId,
       phone: "+529991234567",
@@ -18,6 +18,7 @@ describe("development application composition", () => {
 
     const before = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
+      locationId: "default",
       serviceId: "consultation",
       employeeId: "employee-1",
       ...monday,
@@ -28,6 +29,7 @@ describe("development application composition", () => {
 
     const created = await app.appointments.createAppointment({
       tenantId: app.tenantId,
+      locationId: "default",
       customerId: customer.value.id,
       serviceId: "consultation",
       employeeId: selected.employeeId,
@@ -39,6 +41,7 @@ describe("development application composition", () => {
 
     const after = await app.scheduling.findAvailableSlots({
       tenantId: app.tenantId,
+      locationId: "default",
       serviceId: "consultation",
       employeeId: "employee-1",
       ...monday,

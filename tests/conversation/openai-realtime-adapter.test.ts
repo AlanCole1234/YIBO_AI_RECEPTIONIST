@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_AGENT_BEHAVIOR } from "../../src/modules/agents/index.js";
 import {
   OpenAIRealtimeAdapter,
   type RealtimeConnection,
@@ -8,7 +9,20 @@ import {
 const agent = {
   instructions: "Help the caller schedule an appointment.",
   locale: "es-MX",
-  conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const, turnDetection: {} },
+  conversation: {
+    model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const,
+    tracing: "disabled" as const, truncation: { mode: "auto" as const },
+  },
+  audio: {
+    voice: "marin", noiseReduction: "near_field" as const,
+    turnDetection: {
+      type: "server_vad" as const, createResponse: true, interruptResponse: true,
+      idleTimeoutMs: 6_000, silenceDurationMs: 800,
+    },
+  },
+  behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
+  toolChoice: "auto" as const,
+  parallelToolCalls: false,
   tools: [{
     name: "check_availability" as const,
     description: "Find available times",
@@ -72,13 +86,7 @@ describe("OpenAIRealtimeAdapter", () => {
         type: "realtime",
         model: "gpt-realtime-2.1",
         output_modalities: ["text"],
-        instructions: [
-          "Help the caller schedule an appointment.",
-          "Keep responses concise, but always finish the current sentence naturally.",
-          "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
-          "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
-        ].join("\n"),
+        instructions: "Help the caller schedule an appointment.",
         tools: [{
           type: "function",
           name: "check_availability",
@@ -90,6 +98,7 @@ describe("OpenAIRealtimeAdapter", () => {
         max_output_tokens: 512,
         reasoning: { effort: "minimal" },
         tracing: null,
+        truncation: "auto",
       },
     });
   });
@@ -164,6 +173,26 @@ describe("OpenAIRealtimeAdapter", () => {
     await expect(events.next()).resolves.toMatchObject({ value: { type: "assistant.response_done", status: "completed" } });
   });
 
+  it("reports detailed billable Realtime usage", async () => {
+    const value = fixture();
+    const session = await open(value);
+    const events = session.events()[Symbol.asyncIterator]();
+    value.connection.emit({ type: "response.done", response: { status: "completed", usage: {
+      input_tokens: 130, output_tokens: 50, total_tokens: 180,
+      input_token_details: { text_tokens: 100, audio_tokens: 30, cached_tokens: 25,
+        cached_tokens_details: { text_tokens: 20, audio_tokens: 5 } },
+      output_token_details: { text_tokens: 10, audio_tokens: 40 },
+    } } });
+
+    await events.next();
+    await expect(events.next()).resolves.toEqual({ value: {
+      type: "usage", inputTokens: 130, outputTokens: 50, totalTokens: 180,
+      inputTextTokens: 100, inputAudioTokens: 30, outputTextTokens: 10, outputAudioTokens: 40,
+      cachedInputTokens: 25, cachedInputTextTokens: 20, cachedInputAudioTokens: 5,
+      inputAudioMs: 3_000, outputAudioMs: 2_000, toolCalls: 0,
+    }, done: false });
+  });
+
   it("logs the Realtime lifecycle, audio appends, and safe provider event metadata", async () => {
     const connection = new FakeRealtimeConnection();
     const diagnostics: Array<{ message: string; details?: Record<string, unknown> }> = [];
@@ -219,11 +248,22 @@ describe("OpenAIRealtimeAdapter", () => {
     const adapter = new OpenAIRealtimeAdapter({
       apiKey: "test-key",
       mode: "audio",
-      turnDetection: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500 },
       connectionFactory: { connect: async () => connection },
     });
 
-    await open({ ...fixture(), adapter, connection });
+    await adapter.openSession({
+      conversationId: "conversation-1",
+      agent: {
+        ...agent,
+        audio: {
+          ...agent.audio,
+          turnDetection: {
+            type: "server_vad", createResponse: true, interruptResponse: true,
+            idleTimeoutMs: 6000, threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 500,
+          },
+        },
+      },
+    });
 
     expect(connection.sent[0]).toMatchObject({
       session: { audio: { input: { turn_detection: {
@@ -236,6 +276,182 @@ describe("OpenAIRealtimeAdapter", () => {
         idle_timeout_ms: 6000,
       } } } },
     });
+  });
+
+  it("enforces the audio transport for trusted product channels despite the legacy fallback", async () => {
+    const value = fixture();
+
+    await value.adapter.openSession({
+      conversationId: "conversation-1",
+      agent: { ...agent, channel: "phone" },
+    });
+
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: {
+        output_modalities: ["audio"],
+        audio: {
+          input: { format: { type: "audio/pcm", rate: 24_000 } },
+          output: { format: { type: "audio/pcm", rate: 24_000 } },
+        },
+      },
+    });
+  });
+
+  it("rejects unsupported runtime options before opening a provider connection", async () => {
+    let connectionAttempts = 0;
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key",
+      connectionFactory: {
+        connect: async () => {
+          connectionAttempts += 1;
+          return new FakeRealtimeConnection();
+        },
+      },
+    });
+
+    await expect(adapter.openSession({
+      conversationId: "conversation-invalid-model",
+      agent: {
+        ...agent,
+        channel: "phone",
+        conversation: { ...agent.conversation, model: "unsupported-model" },
+      },
+    })).rejects.toThrow("conversation.model is not supported: unsupported-model");
+    expect(connectionAttempts).toBe(0);
+  });
+
+  it("maps the channel tool choice into the Realtime session", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-required-tool",
+      agent: { ...agent, toolChoice: "required" },
+    });
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: { tool_choice: "required" },
+    });
+  });
+
+  it("maps validated read-only parallelism into the Realtime session", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-parallel-tools",
+      agent: { ...agent, parallelToolCalls: true },
+    });
+    expect(value.connection.sent[0]).toMatchObject({
+      type: "session.update",
+      session: { parallel_tool_calls: true },
+    });
+  });
+
+  it("starts an explicitly configured greeting and enforces the consecutive silence limit", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-greeting",
+      agent: {
+        ...agent,
+        behavior: {
+          ...structuredClone(DEFAULT_AGENT_BEHAVIOR),
+          greeting: { mode: "automatic", message: "Gracias por llamar a YIBO." },
+          silence: { message: "¿Sigue en la línea?", maxPrompts: 1 },
+        },
+      },
+    });
+
+    expect(value.connection.sent[1]).toEqual({
+      type: "response.create",
+      response: {
+        instructions: 'Use the language and regional pronunciation required by locale "es-MX". Say exactly this greeting and add nothing else: "Gracias por llamar a YIBO.".',
+      },
+    });
+
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "silence-1" } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.cancel" });
+    value.connection.emit({ type: "response.done", response: { id: "silence-1", status: "completed" } });
+
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "silence-2" } });
+    expect(value.connection.sent).toContainEqual({ type: "response.cancel" });
+  });
+
+  it("does not apply the silence-response limit when automatic VAD responses are disabled", async () => {
+    const value = fixture();
+    await value.adapter.openSession({
+      conversationId: "conversation-manual-silence",
+      agent: {
+        ...agent,
+        audio: {
+          ...agent.audio,
+          turnDetection: { type: "server_vad", createResponse: false, interruptResponse: true },
+        },
+        behavior: {
+          ...structuredClone(DEFAULT_AGENT_BEHAVIOR),
+          silence: { message: "Wait", maxPrompts: 0 },
+        },
+      },
+    });
+    value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+    value.connection.emit({ type: "response.created", response: { id: "unrelated-response" } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.cancel" });
+  });
+
+  it("maps semantic VAD, far-field noise reduction, tracing and retention truncation", async () => {
+    const connection = new FakeRealtimeConnection();
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key", mode: "audio", connectionFactory: { connect: async () => connection },
+    });
+
+    await adapter.openSession({
+      conversationId: "conversation-semantic",
+      agent: {
+        ...agent,
+        conversation: {
+          ...agent.conversation,
+          tracing: "auto",
+          truncation: { mode: "retention_ratio", retentionRatio: 0.8, postInstructionsTokens: 12_000 },
+        },
+        audio: {
+          voice: "cedar",
+          noiseReduction: "far_field",
+          turnDetection: {
+            type: "semantic_vad", eagerness: "low", createResponse: false, interruptResponse: true,
+          },
+        },
+      },
+    });
+
+    expect(connection.sent[0]).toMatchObject({ session: {
+      audio: { input: {
+        noise_reduction: { type: "far_field" },
+        turn_detection: {
+          type: "semantic_vad", eagerness: "low", create_response: false, interrupt_response: true,
+        },
+      }, output: { voice: "cedar" } },
+      tracing: "auto",
+      truncation: {
+        type: "retention_ratio", retention_ratio: 0.8, token_limits: { post_instructions: 12_000 },
+      },
+    } });
+  });
+
+  it("maps manual turns and disabled noise reduction to null", async () => {
+    const connection = new FakeRealtimeConnection();
+    const adapter = new OpenAIRealtimeAdapter({
+      apiKey: "test-key", mode: "audio", connectionFactory: { connect: async () => connection },
+    });
+    await adapter.openSession({
+      conversationId: "conversation-manual",
+      agent: {
+        ...agent,
+        audio: { voice: "marin", noiseReduction: "disabled", turnDetection: { type: "manual" } },
+      },
+    });
+    expect(connection.sent[0]).toMatchObject({ session: { audio: { input: {
+      noise_reduction: null,
+      turn_detection: null,
+    } } } });
   });
 
   it("reports a redacted provider error when the initial connection is rejected", async () => {
@@ -382,6 +598,62 @@ describe("OpenAIRealtimeAdapter", () => {
     expect(connection.sent.filter((event) => (event as { type?: string }).type === "response.create")).toEqual([]);
   });
 
+  it("delivers a confirmation token once and requests only one response for duplicate results", async () => {
+    const value = fixture();
+    const session = await open(value);
+    const result = { toolCallId: "confirm-1", ok: false as const, error: {
+      code: "CONFIRMATION_REQUIRED", message: "Ask the caller", retryable: false,
+      confirmationToken: "opaque-confirmation-token",
+    } };
+    await session.sendToolResult(result);
+    await session.sendToolResult(result);
+    expect(value.connection.sent.slice(1)).toEqual([
+      { type: "conversation.item.create", item: {
+        type: "function_call_output", call_id: "confirm-1",
+        output: JSON.stringify({ ok: false, error: result.error }),
+      } },
+      { type: "response.create" },
+    ]);
+  });
+
+  it("waits for the active response before continuing with a tool result", async () => {
+    const value = fixture();
+    const session = await open(value);
+    value.connection.emit({ type: "response.created", response: { id: "first" } });
+    await session.sendToolResult({ toolCallId: "tool-1", ok: true, data: { booked: true } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.create" });
+    value.connection.emit({ type: "response.done", response: { id: "first", status: "completed" } });
+    value.connection.emit({ type: "response.created", response: { id: "second" } });
+    value.connection.emit({ type: "response.done", response: { id: "second", status: "completed" } });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+  });
+
+  it("serializes results arriving before response.created acknowledges the first request", async () => {
+    const value = fixture();
+    const session = await open(value);
+    await session.sendToolResult({ toolCallId: "tool-1", ok: true, data: {} });
+    await session.sendToolResult({ toolCallId: "tool-2", ok: true, data: {} });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+    value.connection.emit({ type: "response.created", response: { id: "first" } });
+    value.connection.emit({ type: "response.done", response: { id: "first", status: "completed" } });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(2);
+  });
+
+  it("continues a pending failed tool result after speech with automatic VAD responses disabled", async () => {
+    const value = fixture();
+    const session = await value.adapter.openSession({ conversationId: "manual-response", agent: {
+      ...agent, audio: { ...agent.audio, turnDetection: {
+        type: "server_vad", createResponse: false, interruptResponse: true,
+      } },
+    } });
+    value.connection.emit({ type: "input_audio_buffer.speech_started" });
+    await session.sendToolResult({ toolCallId: "calendar-failure", ok: false,
+      error: { code: "CALENDAR_UNAVAILABLE", message: "Booking failed", retryable: true } });
+    expect(value.connection.sent).not.toContainEqual({ type: "response.create" });
+    value.connection.emit({ type: "input_audio_buffer.speech_stopped" });
+    expect(value.connection.sent.filter((event: any) => event.type === "response.create")).toHaveLength(1);
+  });
+
   it("logs and translates connection errors", async () => {
     const value = fixture();
     const session = await open(value);
@@ -464,3 +736,24 @@ async function next(
   if (result.done) throw new Error("Expected a conversation event");
   return result.value;
 }
+
+
+it("acknowledges call end without another response and cancels unsolicited silence output", async () => {
+  const value = fixture();
+  const session = await value.adapter.openSession({ conversationId: "end-test", agent });
+  value.connection.emit({ type: "response.created", response: { id: "final" } });
+  const before = value.connection.sent.length;
+  await session.sendToolResult({ toolCallId: "end", ok: true, data: { ending: true } }, { requestResponse: false });
+  value.connection.emit({ type: "response.done", response: { id: "final", status: "completed" } });
+  expect(value.connection.sent.slice(before).map(event => (event as { type: string }).type)).toEqual(["conversation.item.create"]);
+  value.connection.emit({ type: "input_audio_buffer.timeout_triggered" });
+  value.connection.emit({ type: "response.created", response: { id: "unwanted" } });
+  expect(value.connection.sent.at(-1)).toEqual({ type: "response.cancel" });
+  value.connection.emit({ type: "response.done", response: { id: "unwanted", status: "cancelled" } });
+  value.connection.emit({ type: "input_audio_buffer.speech_started" });
+  value.connection.emit({ type: "input_audio_buffer.speech_stopped" });
+  const after = value.connection.sent.length;
+  value.connection.emit({ type: "response.created", response: { id: "caller-resumes" } });
+  expect(value.connection.sent.length).toBe(after);
+  await session.close();
+});

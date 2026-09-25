@@ -7,6 +7,12 @@ export type {
 } from "./application/contracts.js";
 export { ScriptedVoiceMediaGateway } from "./infrastructure/scripted-voice-media-gateway.js";
 export {
+  TELEPHONE_SAMPLE_RATE,
+  ulawToRealtimeFrame,
+  realtimeFrameToUlaw,
+  RealtimeToUlawStream,
+  pcm16ToUlaw,
+  ulawToPcm16,
   decodeWav,
   floatAudioToRealtimeFrame,
   splitRealtimeFrame,

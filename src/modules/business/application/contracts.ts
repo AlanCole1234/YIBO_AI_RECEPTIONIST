@@ -3,27 +3,62 @@ import type {
   BusinessId,
   EmployeeId,
   IANATimeZone,
+  LocationId,
   RegionId,
   ServiceId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
+import type { BusinessConfigurationV2, LocationDefinition } from "../domain/multi-location-business.js";
 
 export interface BusinessDirectory {
+  resolveLocationByCalledNumber(
+    phoneNumber: string,
+  ): Promise<Result<BusinessLocationContext, BusinessLookupError>>;
+
+  getLocation(
+    tenantId: TenantId,
+    locationId: LocationId,
+  ): Promise<Result<BusinessLocationContext, BusinessLookupError>>;
+
   getBusinessByCalledNumber(
     phoneNumber: string,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
 
   getBusinessProfile(
     tenantId: TenantId,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
 
   updateBusinessTimezone(
     tenantId: TenantId,
     timezone: IANATimeZone,
-  ): Promise<Result<BusinessProfile, BusinessLookupError>>;
+  ): Promise<Result<BusinessConfigurationV2, BusinessLookupError>>;
+
+  getBusinessConfiguration(
+    tenantId: TenantId,
+  ): Promise<Result<VersionedBusinessConfiguration, BusinessLookupError>>;
+
+  updateBusinessConfiguration(
+    tenantId: TenantId,
+    configuration: EditableBusinessConfiguration,
+    expectedVersion: number,
+  ): Promise<Result<VersionedBusinessConfiguration, BusinessLookupError>>;
+}
+
+export type EditableBusinessConfiguration = Omit<
+  BusinessConfigurationV2,
+  "schemaVersion" | "region" | "tenantId" | "businessId"
+>;
+
+export interface VersionedBusinessConfiguration {
+  version: number;
+  region: RegionId;
+  businessId: BusinessId;
+  configuration: EditableBusinessConfiguration;
 }
 
 export interface BusinessProfile {
+  /** Historical v1 shape. Absence of this field also means v1. */
+  schemaVersion?: 1;
   region: RegionId;
   tenantId: TenantId;
   businessId: BusinessId;
@@ -36,6 +71,15 @@ export interface BusinessProfile {
   employees: EmployeeDefinition[];
   openingHours: OpeningHoursRule[];
 }
+
+export interface BusinessLocationContext {
+  tenantId: TenantId;
+  locationId: LocationId;
+  business: BusinessConfigurationV2;
+  location: LocationDefinition;
+}
+
+export type LegacyBusinessProfileV1 = BusinessProfile;
 
 export interface ServiceDefinition {
   id: ServiceId;
@@ -58,7 +102,10 @@ export interface OpeningHoursRule {
 }
 
 export type BusinessLookupError =
+  | { code: "CALENDAR_ROUTE_IN_USE" }
   | { code: "INVALID_CALLED_NUMBER" }
   | { code: "BUSINESS_NOT_FOUND" }
   | { code: "BUSINESS_INACTIVE" }
+  | { code: "LOCATION_NOT_FOUND" }
+  | { code: "CONFIGURATION_VERSION_CONFLICT"; currentVersion: number | null }
   | { code: "BUSINESS_CONFIGURATION_INVALID"; message: string };

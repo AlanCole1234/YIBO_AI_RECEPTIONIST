@@ -1,49 +1,48 @@
 <script setup lang="ts">
+import { useUnsavedChanges } from "../services/unsaved-changes";
 import { computed, onMounted, ref } from "vue";
 import {
   api,
   ApiError,
   type AgentConfiguration,
+  type AgentConfigurationPayload,
   type AgentToolName,
-  type ReasoningEffort,
+  type RealtimeModelCapability,
+  type TurnDetectionMode,
 } from "../services/api";
+import { phoneTurnDetectionModes, validateAgentCapabilityFields } from "../services/agent-capability-controls";
+import { prioritizeCollectionField, setConfirmationRequired, setToolEnabled } from "../services/agent-policy-controls";
 
 defineProps<{ locale: "es-MX" | "en-US" }>();
+const emit = defineEmits<{ preview: [] }>();
 
-type Step = "identity" | "conversation" | "abilities" | "instructions";
+type Step = "identity" | "conversation" | "silence" | "abilities" | "confirmations" | "limits" | "instructions";
 type VadPreset = "auto" | "fast" | "balanced" | "patient" | "custom";
 
 const steps: Array<{ id: Step; number: string; label: string }> = [
   { id: "identity", number: "01", label: "Identity" },
-  { id: "conversation", number: "02", label: "Conversation" },
-  { id: "abilities", number: "03", label: "Actions" },
-  { id: "instructions", number: "04", label: "Instructions" },
+  { id: "conversation", number: "02", label: "Turn & audio" },
+  { id: "silence", number: "03", label: "Silence" },
+  { id: "abilities", number: "04", label: "Tools" },
+  { id: "confirmations", number: "05", label: "Confirm" },
+  { id: "limits", number: "06", label: "Limits" },
+  { id: "instructions", number: "07", label: "Instructions" },
 ];
-const models = [
-  { value: "gpt-realtime-2.1", label: "GPT Realtime 2.1", note: "Best conversational quality" },
-  { value: "gpt-realtime-2.1-mini", label: "GPT Realtime 2.1 Mini", note: "Lower cost" },
-];
-const voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
-const reasoningEfforts: ReasoningEffort[] = ["minimal", "low", "medium", "high"];
 const locales = [
   ["es-MX", "Español · México"], ["es-US", "Español · Estados Unidos"],
   ["es-ES", "Español · España"], ["en-US", "English · United States"],
   ["en-GB", "English · United Kingdom"], ["pt-BR", "Português · Brasil"],
 ];
-const vadPresets: Record<Exclude<VadPreset, "custom">, AgentConfiguration["conversation"]["turnDetection"]> = {
-  auto: {},
-  fast: { threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
-  balanced: { threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
-  patient: { threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
+type ServerVad = Extract<AgentConfiguration["audio"]["turnDetection"], { type: "server_vad" }>;
+const vadPresets: Record<Exclude<VadPreset, "custom">, ServerVad> = {
+  auto: { type: "server_vad", createResponse: true, interruptResponse: true, silenceDurationMs: 800 },
+  fast: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.58, prefixPaddingMs: 240, silenceDurationMs: 380 },
+  balanced: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.5, prefixPaddingMs: 300, silenceDurationMs: 600 },
+  patient: { type: "server_vad", createResponse: true, interruptResponse: true, threshold: 0.44, prefixPaddingMs: 420, silenceDurationMs: 1000 },
 };
-const toolCopy: Record<AgentToolName, { title: string; help: string; route: string; icon: string }> = {
-  check_availability: { title: "Check availability", help: "Reviews services, professionals, and available times. It does not change data.", route: "Scheduling", icon: "⌕" },
-  create_appointment: { title: "Create appointments", help: "Requests a booking; YIBO validates identity, availability, and idempotency.", route: "Appointments", icon: "+" },
-  cancel_appointment: { title: "Cancel appointments", help: "Only cancels appointments that belong to the verified customer.", route: "Appointments", icon: "×" },
-  reschedule_appointment: { title: "Reschedule appointments", help: "Checks the new time and updates the calendar only when the change succeeds.", route: "Appointments", icon: "↺" },
-  transfer_to_human: { title: "Transfer to a person", help: "Requests a transfer to the business's configured destination.", route: "HumanTransferPort", icon: "↗" },
-};
-
+const baseline = ref("");
+const revision = ref("");
+const conflict = ref(false);
 const loading = ref(true);
 const saving = ref(false);
 const saved = ref(false);
@@ -51,20 +50,33 @@ const error = ref("");
 const apiKeyConfigured = ref(false);
 const configuration = ref<AgentConfiguration>();
 const recommended = ref<AgentConfiguration>();
-const availableTools = ref<Array<{ name: AgentToolName; kind: "consult" | "mutate" | "external" }>>([]);
+const availableTools = ref<AgentConfigurationPayload["availableTools"]>([]);
+const modelCapabilities = ref<RealtimeModelCapability[]>([]);
 const step = ref<Step>("identity");
-const speechPlaying = ref(false);
+useUnsavedChanges(() => Boolean(configuration.value) && JSON.stringify(configuration.value) !== baseline.value, () => saving.value || loading.value);
 
 const currentStep = computed(() => steps.findIndex((candidate) => candidate.id === step.value));
+const selectedCapability = computed(() => modelCapabilities.value.find(({ id }) => id === configuration.value?.conversation.model));
+const models = computed(() => modelCapabilities.value);
+const voices = computed(() => selectedCapability.value?.voices ?? []);
+const reasoningEfforts = computed(() => selectedCapability.value?.controls.reasoningEfforts ?? []);
+const turnDetectionModes = computed(() => phoneTurnDetectionModes(selectedCapability.value));
+const outputLimits = computed(() => selectedCapability.value?.limits.responseOutputTokens ?? { minimum: 1, maximum: 4096, uiMinimum: 64, step: 64 });
+const fieldErrors = computed<Record<string, string>>(() => validateAgentCapabilityFields(configuration.value, selectedCapability.value));
+const hasFieldErrors = computed(() => Object.keys(fieldErrors.value).length > 0);
 const vadPreset = computed<VadPreset>(() => {
-  const value = configuration.value?.conversation.turnDetection;
-  if (!value) return "auto";
+  const value = configuration.value?.audio.turnDetection;
+  if (!value || value.type !== "server_vad") return "custom";
   for (const [key, preset] of Object.entries(vadPresets)) {
     if (sameVad(value, preset)) return key as Exclude<VadPreset, "custom">;
   }
   return "custom";
 });
 const activeToolCount = computed(() => configuration.value?.enabledTools.length ?? 0);
+const mutableTools = computed(() => availableTools.value.filter(({ kind }) => kind === "mutate"));
+const enabledToolDescriptors = computed(() => availableTools.value.filter(({ name }) => configuration.value?.enabledTools.includes(name)));
+const canAutoTransfer = computed(() => configuration.value?.enabledTools.includes("transfer_to_human")
+  && Object.values(configuration.value.toolPolicies.channels).every(({ enabledTools }) => enabledTools.includes("transfer_to_human")));
 
 onMounted(load);
 
@@ -75,7 +87,9 @@ async function load(): Promise<void> {
     const payload = await api.agentConfiguration();
     recommended.value = clone(payload.recommended);
     configuration.value = clone(payload.current ?? payload.recommended);
+    baseline.value = JSON.stringify(configuration.value); revision.value = payload.revision; conflict.value = false; saved.value = false;
     availableTools.value = payload.availableTools;
+    modelCapabilities.value = payload.modelCapabilities;
     apiKeyConfigured.value = payload.secrets.apiKeyConfigured;
   } catch (caught) {
     error.value = errorMessage(caught);
@@ -92,68 +106,106 @@ function move(offset: number): void {
 
 function applyVad(preset: Exclude<VadPreset, "custom">): void {
   if (!configuration.value) return;
-  configuration.value.conversation.turnDetection = { ...vadPresets[preset] };
+  configuration.value.audio.turnDetection = { ...vadPresets[preset] };
+}
+
+function selectModel(): void {
+  if (!configuration.value || !selectedCapability.value) return;
+  if (!selectedCapability.value.voices.includes(configuration.value.audio.voice)) {
+    configuration.value.audio.voice = selectedCapability.value.voices[0] ?? "";
+  }
+  if (!selectedCapability.value.controls.reasoningEfforts.includes(configuration.value.conversation.reasoningEffort)) {
+    configuration.value.conversation.reasoningEffort = selectedCapability.value.controls.reasoningEfforts[0] ?? "minimal";
+  }
+  if (configuration.value.audio.turnDetection.type === "manual"
+    || !turnDetectionModes.value.includes(configuration.value.audio.turnDetection.type)) {
+    setTurnDetection("server_vad");
+  }
+}
+
+function setTurnDetection(mode: TurnDetectionMode): void {
+  if (!configuration.value) return;
+  configuration.value.audio.turnDetection = mode === "semantic_vad"
+    ? { type: "semantic_vad", eagerness: "auto", createResponse: true, interruptResponse: true }
+    : mode === "manual" ? { type: "manual" } : { ...vadPresets.auto };
+}
+
+function changeTurnDetection(event: Event): void {
+  setTurnDetection((event.target as HTMLSelectElement).value as TurnDetectionMode);
 }
 
 function toggleTool(name: AgentToolName): void {
   if (!configuration.value) return;
   const active = configuration.value.enabledTools.includes(name);
-  configuration.value.enabledTools = active
-    ? configuration.value.enabledTools.filter((candidate) => candidate !== name)
-    : [...configuration.value.enabledTools, name];
+  const kind = availableTools.value.find((tool) => tool.name === name)?.kind ?? "external";
+  setToolEnabled(configuration.value, name, kind, !active);
 }
 
 function restoreRecommended(): void {
+  if (JSON.stringify(configuration.value) !== baseline.value && !window.confirm("Replace your unsaved edits with the recommended settings?")) return;
   if (recommended.value) configuration.value = clone(recommended.value);
   saved.value = false;
 }
 
 async function save(): Promise<void> {
-  if (!configuration.value) return;
+  if (!configuration.value || hasFieldErrors.value || saving.value || conflict.value) return;
   saving.value = true;
   saved.value = false;
   error.value = "";
   try {
-    const result = await api.updateAgentConfiguration(configuration.value);
+    const result = await api.updateAgentConfiguration(configuration.value, revision.value);
     configuration.value = clone(result.configuration);
+    baseline.value = JSON.stringify(configuration.value); revision.value = result.revision;
     saved.value = true;
   } catch (caught) {
-    error.value = errorMessage(caught);
+    conflict.value = caught instanceof ApiError && caught.code === "CONFIGURATION_VERSION_CONFLICT";
+    error.value = conflict.value ? "Settings changed elsewhere. Your draft is retained. Copy any edits you need, then discard the draft and reload." : errorMessage(caught);
   } finally {
     saving.value = false;
   }
 }
 
-function playVoicePreview(): void {
-  if (!("speechSynthesis" in window) || !configuration.value) return;
-  if (window.speechSynthesis.speaking) {
-    window.speechSynthesis.cancel();
-    speechPlaying.value = false;
-    return;
-  }
-  const sample = configuration.value.locale.startsWith("en")
-    ? "Hello, I'm YIBO. How can I help you today?"
-    : "Hola, soy YIBO. ¿En qué puedo ayudarte hoy?";
-  const utterance = new SpeechSynthesisUtterance(sample);
-  utterance.lang = configuration.value.locale;
-  const language = utterance.lang.slice(0, 2).toLowerCase();
-  utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith(language)) ?? null;
-  utterance.onend = () => { speechPlaying.value = false; };
-  utterance.onerror = () => { speechPlaying.value = false; };
-  speechPlaying.value = true;
-  window.speechSynthesis.speak(utterance);
-}
-
 function sameVad(
-  left: AgentConfiguration["conversation"]["turnDetection"],
-  right: AgentConfiguration["conversation"]["turnDetection"],
+  left: ServerVad,
+  right: ServerVad,
 ): boolean {
   return left.threshold === right.threshold
     && left.prefixPaddingMs === right.prefixPaddingMs
     && left.silenceDurationMs === right.silenceDurationMs;
 }
 
-function clone(value: AgentConfiguration): AgentConfiguration { return structuredClone(value); }
+function toggleConfirmation(name: AgentToolName): void {
+  if (!configuration.value) return;
+  const values = configuration.value.toolPolicies.confirmations.requiredFor;
+  setConfirmationRequired(configuration.value, name, !values.includes(name));
+}
+
+function channelCanParallel(channel: "phone" | "voice_lab"): boolean {
+  if (!selectedCapability.value?.controls.parallelToolCalls || !configuration.value || channel === "voice_lab") return false;
+  return configuration.value.toolPolicies.channels[channel].enabledTools.every((name) =>
+    availableTools.value.find((tool) => tool.name === name)?.kind === "consult");
+}
+
+function changeGreetingMode(event: Event): void {
+  if (!configuration.value) return;
+  configuration.value.behavior.greeting = (event.target as HTMLSelectElement).value === "automatic"
+    ? { mode: "automatic", message: defaultGreeting(configuration.value.identity.locale) }
+    : { mode: "wait_for_caller" };
+}
+
+function defaultGreeting(locale: string): string {
+  if (locale.toLowerCase().startsWith("es")) return "Hola, gracias por llamar a YIBO. ¿En qué puedo ayudarle?";
+  if (locale.toLowerCase().startsWith("pt")) return "Olá, agradecemos por ligar para a YIBO. Como posso ajudar?";
+  return "Hello, thank you for calling YIBO. How may I help you?";
+}
+
+function changeFirstCollectionField(event: Event): void {
+  if (!configuration.value) return;
+  const selected = (event.target as HTMLSelectElement).value as AgentConfiguration["behavior"]["dataCollectionOrder"][number];
+  prioritizeCollectionField(configuration.value, selected);
+}
+
+function clone(value: AgentConfiguration): AgentConfiguration { return JSON.parse(JSON.stringify(value)); }
 function errorMessage(caught: unknown): string {
   if (caught instanceof ApiError) return `Could not save the configuration (${caught.code}).`;
   return caught instanceof Error ? caught.message : "Could not load the configuration.";
@@ -177,6 +229,7 @@ function errorMessage(caught: unknown): string {
     <div v-else-if="!configuration" class="config-state error-state">{{ error }}</div>
 
     <form v-else @submit.prevent="save">
+      <fieldset :disabled="saving" style="border:0;padding:0;margin:0;min-width:0">
       <nav class="config-steps" aria-label="Configuration steps">
         <button v-for="(item, index) in steps" :key="item.id" type="button"
           :class="{ active: step === item.id, complete: index < currentStep }" @click="selectStep(item.id)">
@@ -189,62 +242,113 @@ function errorMessage(caught: unknown): string {
           <section v-if="step === 'identity'" class="step-panel">
             <div class="step-heading"><span>01</span><div><h3>Conversation personality</h3><p>Choose the model, voice, and language callers will hear.</p></div></div>
             <div class="field-grid">
-              <label>Conversation model<select v-model="configuration.conversation.model"><option v-for="model in models" :key="model.value" :value="model.value">{{ model.label }} — {{ model.note }}</option></select><small>Sets the approximate quality, speed, and cost of each turn.</small></label>
-              <label>YIBO voice<select v-model="configuration.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>This is the sound callers will hear. Marin and Cedar are good starting points.</small></label>
-              <label>Language and region<select v-model="configuration.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Adjusts pronunciation, vocabulary, dates, and times.</small></label>
-              <label>Reasoning<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>More reasoning adds latency and cost; minimal is recommended.</small></label>
+              <label>Conversation model<select v-model="configuration.conversation.model" @change="selectModel"><option v-for="model in models" :key="model.id" :value="model.id">{{ model.label }} — {{ model.badge }}</option></select><small>{{ selectedCapability?.description }}</small><em v-if="fieldErrors.model" class="field-error">{{ fieldErrors.model }}</em></label>
+              <label>YIBO voice<select v-model="configuration.audio.voice"><option v-for="voice in voices" :key="voice" :value="voice">{{ voice[0]?.toUpperCase() }}{{ voice.slice(1) }}</option></select><small>Only voices supported by this model are shown.</small><em v-if="fieldErrors.voice" class="field-error">{{ fieldErrors.voice }}</em></label>
+              <label>Language and region<select v-model="configuration.identity.locale"><option v-for="candidate in locales" :key="candidate[0]" :value="candidate[0]">{{ candidate[1] }}</option></select><small>Adjusts pronunciation, vocabulary, dates, and times.</small></label>
+              <label>Reasoning<select v-model="configuration.conversation.reasoningEffort"><option v-for="effort in reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option></select><small>Options come from the selected model.</small><em v-if="fieldErrors.reasoning" class="field-error">{{ fieldErrors.reasoning }}</em></label>
             </div>
-            <label class="token-control"><span>Maximum response length <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" min="64" max="4096" step="64"><small>This is a ceiling, not a target. A normal response can use much less.</small></label>
+            <label class="token-control"><span>Maximum response length <output>{{ configuration.conversation.maxOutputTokens }} tokens</output></span><input v-model.number="configuration.conversation.maxOutputTokens" type="range" :min="outputLimits.uiMinimum" :max="outputLimits.maximum" :step="outputLimits.step"><small>This is a ceiling, not a target. Range and step come from the model registry.</small><em v-if="fieldErrors.maxOutputTokens" class="field-error">{{ fieldErrors.maxOutputTokens }}</em></label>
+            <div class="field-grid behavior-fields">
+              <label>Brevity<select v-model="configuration.behavior.responseStyle.brevity"><option value="brief">Brief</option><option value="balanced">Balanced</option><option value="detailed">Detailed</option></select></label>
+              <label>Tone<select v-model="configuration.behavior.responseStyle.tone"><option value="warm">Warm</option><option value="professional">Professional</option><option value="direct">Direct</option></select></label>
+              <label>Speaking pace<select v-model="configuration.behavior.responseStyle.pace"><option value="slow">Slow</option><option value="balanced">Balanced</option><option value="fast">Fast</option></select></label>
+              <label>Options per offer<input v-model.number="configuration.behavior.slotOffering.maximumOptions" type="number" min="1" max="5"><small>Maximum verified slots spoken at once.</small></label>
+            </div>
           </section>
 
           <section v-else-if="step === 'conversation'" class="step-panel">
             <div class="step-heading"><span>02</span><div><h3>Conversation pacing</h3><p>Control when YIBO understands that you have finished speaking.</p></div></div>
-            <div class="preset-grid">
+            <div class="field-grid compact-fields">
+              <label>Turn detection<select :value="configuration.audio.turnDetection.type" @change="changeTurnDetection"><option v-for="mode in turnDetectionModes" :key="mode" :value="mode">{{ mode === 'server_vad' ? 'Server VAD' : 'Semantic VAD' }}</option></select><small>Modes unsupported by the model or phone channel are hidden.</small><em v-if="fieldErrors.turnDetection" class="field-error">{{ fieldErrors.turnDetection }}</em></label>
+              <label>Noise reduction<select v-model="configuration.audio.noiseReduction"><option v-for="mode in selectedCapability?.controls.noiseReductionModes ?? []" :key="mode" :value="mode">{{ mode.replace('_', ' ') }}</option></select><small>Uses only modes declared by the selected model.</small></label>
+            </div>
+            <div v-if="configuration.audio.turnDetection.type === 'server_vad'" class="preset-grid">
               <button v-for="preset in (['auto','fast','balanced','patient'] as const)" :key="preset" type="button" :class="{ selected: vadPreset === preset }" @click="applyVad(preset)"><i>{{ preset === 'auto' ? '✦' : preset === 'fast' ? '⚡' : preset === 'balanced' ? '◉' : '◌' }}</i><strong>{{ {auto:'Automatic',fast:'Fast',balanced:'Balanced',patient:'Patient'}[preset] }}</strong><small>{{ preset === 'auto' ? 'Uses provider-managed values.' : preset === 'fast' ? 'Responds quickly in quiet environments.' : preset === 'balanced' ? 'A good starting point for a phone receptionist.' : 'Allows longer pauses before responding.' }}</small></button>
             </div>
-            <details class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
-              <label>Sensitivity <output>{{ configuration.conversation.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.conversation.turnDetection.threshold" type="range" min="0" max="1" step="0.01"></label>
-              <label>Audio before speech <output>{{ configuration.conversation.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.conversation.turnDetection.prefixPaddingMs" type="range" min="0" max="1000" step="20"></label>
-              <label>End-of-turn silence <output>{{ configuration.conversation.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.conversation.turnDetection.silenceDurationMs" type="range" min="100" max="2000" step="50"></label>
+            <details v-if="configuration.audio.turnDetection.type === 'server_vad'" class="advanced"><summary>Advanced settings <span>{{ vadPreset === 'custom' ? 'Custom' : 'Optional' }}</span></summary><p>Change these only after listening to real conversations.</p><div class="advanced-grid">
+              <label>Sensitivity <output>{{ configuration.audio.turnDetection.threshold ?? 0.5 }}</output><input v-model.number="configuration.audio.turnDetection.threshold" type="range" :min="selectedCapability?.controls.serverVad.threshold.minimum" :max="selectedCapability?.controls.serverVad.threshold.maximum" step="0.01"><em v-if="fieldErrors.threshold" class="field-error">{{ fieldErrors.threshold }}</em></label>
+              <label>Audio before speech <output>{{ configuration.audio.turnDetection.prefixPaddingMs ?? 300 }} ms</output><input v-model.number="configuration.audio.turnDetection.prefixPaddingMs" type="range" :min="selectedCapability?.controls.serverVad.prefixPaddingMs.minimum" :max="selectedCapability?.controls.serverVad.prefixPaddingMs.maximum" step="20"><em v-if="fieldErrors.prefixPaddingMs" class="field-error">{{ fieldErrors.prefixPaddingMs }}</em></label>
+              <label>End-of-turn silence <output>{{ configuration.audio.turnDetection.silenceDurationMs ?? 600 }} ms</output><input v-model.number="configuration.audio.turnDetection.silenceDurationMs" type="range" :min="selectedCapability?.controls.serverVad.silenceDurationMs.minimum" :max="selectedCapability?.controls.serverVad.silenceDurationMs.maximum" step="50"><em v-if="fieldErrors.silenceDurationMs" class="field-error">{{ fieldErrors.silenceDurationMs }}</em></label>
             </div></details>
+            <label v-else-if="configuration.audio.turnDetection.type === 'semantic_vad'" class="token-control">Semantic eagerness<select v-model="configuration.audio.turnDetection.eagerness"><option v-for="value in selectedCapability?.controls.semanticVadEagerness ?? []" :key="value" :value="value">{{ value }}</option></select><small>Controls how readily the model decides that the caller finished speaking.</small></label>
+          </section>
+
+          <section v-else-if="step === 'silence'" class="step-panel">
+            <div class="step-heading"><span>03</span><div><h3>Greeting and silence</h3><p>Control who speaks first and how YIBO checks whether the caller is still present.</p></div></div>
+            <div class="field-grid">
+              <label>First turn<select :value="configuration.behavior.greeting.mode" @change="changeGreetingMode"><option value="wait_for_caller">Wait for caller</option><option value="automatic">Automatic greeting</option></select><small>Phone calls can begin silently or with a configured greeting.</small></label>
+              <label>Silence prompts<input v-model.number="configuration.behavior.silence.maxPrompts" type="number" min="0" max="3"><small>Maximum reminders before waiting silently.</small></label>
+            </div>
+            <label v-if="configuration.behavior.greeting.mode === 'automatic'" class="prompt-field compact-prompt">Greeting<input v-model="configuration.behavior.greeting.message" maxlength="500"></label>
+            <label class="prompt-field compact-prompt">Message after silence<input v-model="configuration.behavior.silence.message" maxlength="500"></label>
+            <div class="field-grid behavior-fields">
+              <label>Slot strategy<select v-model="configuration.behavior.slotOffering.strategy"><option value="earliest_first">Earliest first</option><option value="spread_across_day">Spread across day</option><option value="match_requested_time">Closest to requested time</option></select></label>
+              <label>Collection order<small>{{ configuration.behavior.dataCollectionOrder.join(' → ') }}</small><select :value="configuration.behavior.dataCollectionOrder[0]" @change="changeFirstCollectionField"><option value="full_name">Full name first</option><option value="phone_number">Phone first</option><option value="service">Service first</option></select><small>The remaining fields keep their relative order.</small></label>
+            </div>
           </section>
 
           <section v-else-if="step === 'abilities'" class="step-panel">
-            <div class="step-heading"><span>03</span><div><h3>Capabilities and limits</h3><p>The model can request these actions; ToolExecutor still validates and executes them.</p></div></div>
+            <div class="step-heading"><span>04</span><div><h3>Tools by channel</h3><p>The model can request these actions; ToolExecutor still validates and executes them.</p></div></div>
             <div class="permission-flow"><span>Model<small>requests</small></span><b>→</b><span class="gate">ToolExecutor<small>validates</small></span><b>→</b><span>YIBO<small>executes</small></span></div>
-            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ toolCopy[tool.name].icon }}</i><span><small>{{ tool.kind === 'consult' ? 'Read only' : tool.kind === 'mutate' ? 'Changes data' : 'External action' }}</small><strong>{{ toolCopy[tool.name].title }}</strong><p>{{ toolCopy[tool.name].help }}</p><em>Safe route: {{ toolCopy[tool.name].route }}</em></span><b></b></button></div>
+            <div class="tool-grid"><button v-for="tool in availableTools" :key="tool.name" type="button" :class="{ enabled: configuration.enabledTools.includes(tool.name) }" @click="toggleTool(tool.name)"><i>{{ tool.icon || '•' }}</i><span><small>{{ tool.kind === 'consult' ? 'Read only' : tool.kind === 'mutate' ? 'Changes data' : 'External action' }}</small><strong>{{ tool.title || tool.name }}</strong><p>{{ tool.help || tool.description }}</p><em>Safe route: {{ tool.route || 'Backend validation' }}</em></span><b></b></button></div>
             <p class="security-note">The model never receives direct database access. Tenant, call, and customer arrive as trusted system context.</p>
+          </section>
+
+          <section v-else-if="step === 'confirmations'" class="step-panel">
+            <div class="step-heading"><span>05</span><div><h3>Channels and confirmations</h3><p>Choose tool behavior per channel and require a new caller turn before selected mutations.</p></div></div>
+            <div class="channel-grid">
+              <article v-for="channel in (['phone','voice_lab'] as const)" :key="channel" class="policy-card"><h4>{{ channel === 'phone' ? 'Phone' : 'Voice Lab' }}</h4>
+                <label>Tool choice<select v-model="configuration.toolPolicies.channels[channel].toolChoice"><option value="auto">Auto</option><option value="required">Required</option><option value="none">None</option></select></label>
+                <label class="check-row"><input v-model="configuration.toolPolicies.channels[channel].parallelToolCalls" type="checkbox" :disabled="!channelCanParallel(channel)"><span>Parallel read-only calls</span></label>
+                <small v-if="!channelCanParallel(channel)">Available only when every enabled tool is read-only.</small>
+              </article>
+            </div>
+            <div class="confirmation-list"><button v-for="tool in mutableTools" :key="tool.name" type="button" :disabled="!configuration.enabledTools.includes(tool.name)" :class="{ enabled: configuration.toolPolicies.confirmations.requiredFor.includes(tool.name) }" @click="toggleConfirmation(tool.name)"><strong>{{ tool.title }}</strong><small>{{ configuration.toolPolicies.confirmations.requiredFor.includes(tool.name) ? 'Two-turn confirmation required' : 'Normal caller agreement' }}</small></button></div>
+          </section>
+
+          <section v-else-if="step === 'limits'" class="step-panel">
+            <div class="step-heading"><span>06</span><div><h3>Limits and escalation</h3><p>Bound tool activity and decide when a safe human transfer should be attempted.</p></div></div>
+            <div class="field-grid">
+              <label>Total tools per call<input v-model.number="configuration.toolPolicies.limits.totalPerCall" type="number" min="1" max="100"></label>
+              <label>External attempts<select v-model.number="configuration.toolPolicies.externalRetryAttempts"><option :value="1">1</option><option :value="2">2</option><option :value="3">3</option></select></label>
+            </div>
+            <div class="per-tool-limits"><label v-for="tool in enabledToolDescriptors" :key="tool.name">{{ tool.title }}<input v-model.number="configuration.toolPolicies.limits.perTool[tool.name]" type="number" min="1" max="100" placeholder="Use total limit"></label></div>
+            <div class="policy-card escalation-card"><h4>Automatic human escalation</h4><label class="check-row"><input v-model="configuration.toolPolicies.automaticTransfer.onLimitReached" type="checkbox" :disabled="!canAutoTransfer"><span>Transfer when a tool limit is reached</span></label><label class="check-row"><input v-model="configuration.toolPolicies.automaticTransfer.onRetryableFailure" type="checkbox" :disabled="!canAutoTransfer"><span>Transfer after retryable external failure</span></label><small>{{ canAutoTransfer ? 'Transfer uses only the destination configured for the trusted branch.' : 'Enable transfer_to_human in both channels first.' }}</small></div>
           </section>
 
           <section v-else class="step-panel">
             <div class="step-heading"><span>04</span><div><h3>Core instructions</h3><p>Describe YIBO's role, tone, and limits with clear rules.</p></div></div>
-            <label class="prompt-field">Active instructions<textarea v-model="configuration.instructions" rows="12"></textarea><small>Do not include secrets or personal data. {{ configuration.instructions.length }} characters.</small></label>
+            <label class="prompt-field">Active instructions<textarea v-model="configuration.identity.instructions" rows="12"></textarea><small>Do not include secrets or personal data. {{ configuration.identity.instructions.length }} characters.</small></label>
           </section>
 
-          <div class="step-actions"><button type="button" :disabled="currentStep === 0" @click="move(-1)">← Previous</button><span>Step {{ currentStep + 1 }} of 4</span><button type="button" :disabled="currentStep === 3" @click="move(1)">Next →</button></div>
+          <div class="step-actions"><button type="button" :disabled="currentStep === 0" @click="move(-1)">← Previous</button><span>Step {{ currentStep + 1 }} of {{ steps.length }}</span><button type="button" :disabled="currentStep === steps.length - 1" @click="move(1)">Next →</button></div>
         </div>
 
         <aside class="agent-preview">
           <small>PREVIEW</small><div class="voice-orb"><i></i><i></i><i></i><i></i><i></i></div>
-          <h3>{{ configuration.conversation.model.replace('gpt-', 'GPT ') }}</h3><p>Voice <strong>{{ configuration.voice }}</strong> · {{ configuration.locale }}</p>
-          <blockquote>“{{ configuration.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
-          <button type="button" class="preview-button" @click="playVoicePreview">{{ speechPlaying ? '■ Stop preview' : '▶ Listen to a free preview' }}</button>
-          <small class="preview-note">Uses your browser's local voice. It does not use the API and does not exactly represent the OpenAI voice.</small>
+          <h3>{{ selectedCapability?.label ?? configuration.conversation.model }}</h3><p>Voice <strong>{{ configuration.audio.voice }}</strong> · {{ configuration.identity.locale }}</p>
+          <blockquote>“{{ configuration.identity.locale.startsWith('en') ? "Hello, I'm YIBO. How can I help?" : 'Hola, soy YIBO. ¿En qué puedo ayudarte?' }}”</blockquote>
+          <button type="button" class="preview-button" @click="emit('preview')">Open saved-settings Voice Lab</button>
+          <small class="preview-note">Uses the real OpenAI voice and may incur API charges. Save your edits first; this preview uses saved settings, not unsaved changes. Audio starts only when you start the Voice Test.</small>
           <dl><div><dt>Response</dt><dd>{{ configuration.conversation.maxOutputTokens }} max tokens</dd></div><div><dt>Capabilities</dt><dd>{{ activeToolCount }} active</dd></div><div><dt>Protection</dt><dd>Trusted context</dd></div></dl>
         </aside>
       </div>
 
       <p v-if="error" class="config-error" role="alert">{{ error }}</p>
-      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
+      <button v-if="conflict" type="button" @click="load">Discard draft and reload latest settings</button>
+      <footer class="config-actions"><div><strong>{{ saved ? 'Settings saved' : hasFieldErrors ? 'Review highlighted fields' : 'Applies to the next conversation' }}</strong><small>The active runtime does not change in the middle of a call.</small></div><button type="button" class="restore" @click="restoreRecommended">Restore recommended</button><button class="save" :disabled="saving || hasFieldErrors || conflict">{{ saving ? 'Saving…' : 'Save settings' }}</button></footer>
+      </fieldset>
     </form>
   </section>
 </template>
 
 <style scoped>
+.field-error{color:#c43855;font-size:11px;font-style:normal;font-weight:700}.compact-fields{margin-bottom:24px}.behavior-fields{margin-top:24px}.compact-prompt{margin-top:20px}.compact-prompt input{padding:13px}.channel-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.policy-card{padding:18px;border:1px solid var(--ac-line);border-radius:10px;background:#fffaf2}.policy-card h4{margin:0 0 15px;color:var(--blue-deep);font-family:Georgia,serif}.check-row{display:flex!important;grid-template-columns:none!important;align-items:center;gap:10px;margin-top:14px}.check-row input{width:auto}.confirmation-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}.confirmation-list button{display:grid;gap:4px;padding:14px;text-align:left;border:1px solid #d1c5b7;border-radius:8px;background:#fbf7ef;color:#403833}.confirmation-list button.enabled{border-color:#2854c7;box-shadow:inset 4px 0 #2854c7;background:#e8edf4}.confirmation-list button:disabled{opacity:.45}.confirmation-list small,.policy-card>small{color:#7d8079}.per-tool-limits{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px}.escalation-card{margin-top:20px}
 .agent-config{--ac-bg:#07151c;--ac-panel:#0c2029;--ac-line:#24444e;--ac-mint:#5ee8c4;--ac-amber:#f6c85f;--ac-ink:#eaf7f4;color:var(--ac-ink);background:linear-gradient(145deg,#091a21,#061117);border:1px solid var(--ac-line);clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px);overflow:hidden;box-shadow:0 30px 80px #0007}.config-intro{display:flex;justify-content:space-between;gap:30px;padding:42px 46px 32px;background:radial-gradient(circle at 80% 0,#133c3c 0,transparent 35%)}.config-intro h2{margin:0 0 10px;color:#fff;font-size:clamp(28px,4vw,48px);text-transform:none;text-shadow:none}.config-intro p:not(.config-kicker){max-width:680px;color:#91afb3}.config-kicker{color:var(--ac-mint);font:700 11px/1 monospace;letter-spacing:.2em}.connection-chip{height:max-content;display:flex;align-items:center;gap:8px;padding:10px 13px;background:#321d22;border:1px solid #6a3d45;color:#ff9b9b;font:700 11px/1 monospace;text-transform:uppercase}.connection-chip i{width:7px;height:7px;border-radius:50%;background:currentColor}.connection-chip.ready{background:#12352e;border-color:#296958;color:var(--ac-mint)}.config-state{min-height:300px;display:grid;place-content:center;gap:15px;color:#91afb3}.config-state i{width:38px;height:38px;border:3px solid var(--ac-line);border-top-color:var(--ac-mint);border-radius:50%;animation:spin 1s linear infinite}.error-state{color:#ff9a9a}.config-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0 46px;border-bottom:1px solid var(--ac-line)}.config-steps button{display:flex;gap:10px;align-items:center;padding:17px 12px;border:0;border-bottom:3px solid transparent;background:transparent;color:#6f8e93;text-align:left}.config-steps button small{color:#52747a;font-family:monospace}.config-steps button.active{color:#fff;border-color:var(--ac-mint);background:#0d242c}.config-steps button.complete small{color:var(--ac-mint)}.config-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px}.config-stage{padding:40px 42px 24px;min-width:0}.step-panel{animation:enter .24s ease-out}.step-heading{display:flex;gap:16px;align-items:flex-start;margin-bottom:28px}.step-heading>span{width:45px;height:45px;display:grid;place-items:center;flex:none;background:var(--ac-mint);color:#06201a;font-weight:900;border-radius:14px 4px 14px 5px}.step-heading h3{margin:0 0 5px;color:#fff;font:700 25px/1.1 inherit}.step-heading p{margin:0;color:#84a1a6}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.field-grid label,.token-control,.advanced-grid label,.prompt-field{display:grid;gap:8px;color:#d9e8e6;font-weight:700}.field-grid small,.token-control small,.prompt-field small{color:#729196;font-weight:400;line-height:1.4}.field-grid select,.prompt-field textarea{width:100%;border:1px solid #31545e;background:#08171d;color:#eaf7f4;padding:13px;border-radius:9px}.field-grid select:focus,.prompt-field textarea:focus{outline:2px solid #5ee8c455;border-color:var(--ac-mint)}.token-control{margin-top:24px;padding:18px;background:#0b1d24;border-left:4px solid var(--ac-amber)}.token-control>span{display:flex;justify-content:space-between}.token-control output,.advanced output{color:var(--ac-mint)}input[type=range]{accent-color:var(--ac-mint)}.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.preset-grid button{display:grid;grid-template-columns:38px 1fr;text-align:left;gap:10px;padding:15px;border:1px solid var(--ac-line);border-radius:12px;background:#0a1b22;color:#dcecea}.preset-grid button i{grid-row:1/3;width:34px;height:34px;display:grid;place-items:center;background:#16323a;color:var(--ac-mint);font-style:normal;border-radius:10px}.preset-grid button small{color:#779499;line-height:1.4}.preset-grid button.selected{border-color:var(--ac-mint);background:#102d2c;box-shadow:inset 4px 0 0 var(--ac-mint)}.advanced{margin-top:22px;border:1px solid var(--ac-line);background:#09191f;padding:15px}.advanced summary{display:flex;justify-content:space-between;color:#cde0dd;cursor:pointer;font-weight:700}.advanced summary span{color:var(--ac-amber);font-size:11px}.advanced>p{color:#78969a}.advanced-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.advanced-grid label{padding:12px;background:#0d2229}.advanced-grid output{font-size:12px}.permission-flow{display:flex;align-items:center;justify-content:center;margin:0 0 24px}.permission-flow span{display:grid;padding:11px 20px;border:1px solid var(--ac-line);background:#0a1b22;text-align:center}.permission-flow small{color:#759297}.permission-flow b{color:var(--ac-mint);padding:0 8px}.permission-flow .gate{border-color:var(--ac-mint);background:#13342f;color:var(--ac-mint)}.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tool-grid button{display:grid;grid-template-columns:38px 1fr 36px;gap:12px;padding:16px;text-align:left;border:1px solid var(--ac-line);background:#091a21;color:#dbe9e7;border-radius:13px}.tool-grid button>i{width:36px;height:36px;display:grid;place-items:center;background:#173039;color:#91adb1;border-radius:10px;font:normal 22px/1 inherit}.tool-grid button span{display:grid;gap:3px}.tool-grid button span>small{color:#708e93;text-transform:uppercase;font-size:9px;letter-spacing:.08em}.tool-grid button p{margin:5px 0;color:#7e9b9f;font-size:12px;line-height:1.45}.tool-grid button em{color:#557b7e;font-size:10px;font-style:normal}.tool-grid button>b{width:34px;height:20px;padding:3px;border-radius:20px;background:#293e43}.tool-grid button>b:after{content:"";display:block;width:14px;height:14px;border-radius:50%;background:#73878a;transition:.2s}.tool-grid button.enabled{border-color:#397b6d;background:#102722}.tool-grid button.enabled>i{background:#17473d;color:var(--ac-mint)}.tool-grid button.enabled>b{background:#269c82}.tool-grid button.enabled>b:after{transform:translateX(14px);background:#fff}.security-note{padding:14px;border:1px solid #315063;background:#0e1e2a;color:#8ca6ae;font-size:12px}.prompt-field textarea{min-height:280px;resize:vertical;line-height:1.65}.step-actions{display:flex;align-items:center;justify-content:space-between;margin-top:28px;padding-top:18px;border-top:1px solid var(--ac-line)}.step-actions button{border:0;background:transparent;color:var(--ac-mint);padding:8px}.step-actions button:disabled{opacity:.25}.step-actions span{color:#66868b;font-size:11px}.agent-preview{padding:38px 24px;border-left:1px solid var(--ac-line);background:linear-gradient(180deg,#0d2229,#08171d);text-align:center}.agent-preview>small:first-child{color:#68898e;letter-spacing:.17em}.voice-orb{width:112px;height:112px;margin:28px auto 20px;display:flex;align-items:center;justify-content:center;gap:4px;border-radius:38px;background:radial-gradient(circle,#236858,#102a2b 65%);box-shadow:0 0 0 7px #173139,0 0 45px #37d4b32e}.voice-orb i{width:4px;height:36px;background:var(--ac-mint);border-radius:5px;animation:wave 1.2s ease-in-out infinite}.voice-orb i:nth-child(2),.voice-orb i:nth-child(4){height:22px;animation-delay:.18s}.voice-orb i:first-child,.voice-orb i:last-child{height:12px;animation-delay:.32s}.agent-preview h3{margin:0 0 5px;color:#fff;text-transform:capitalize}.agent-preview>p{color:#759399}.agent-preview blockquote{margin:22px 0 12px;padding:15px;background:#142b33;color:#c8dbd9;text-align:left;border-radius:14px;line-height:1.5}.preview-button{width:100%;border:1px solid #397165;background:#13362f;color:var(--ac-mint);padding:10px;border-radius:10px;font-weight:700}.preview-note{display:block;margin:8px 0 20px;color:#627f83;line-height:1.4}.agent-preview dl{display:grid;gap:0;text-align:left}.agent-preview dl div{display:flex;justify-content:space-between;padding:10px 3px;border-bottom:1px solid #203940}.agent-preview dt{color:#78979b}.agent-preview dd{margin:0;color:#b6cecb}.config-error{margin:0 42px 15px;padding:12px 14px;border:1px solid #7a3b45;background:#301b21;color:#ffaaaa}.config-actions{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;padding:16px 42px;border-top:1px solid var(--ac-line);background:#08171df2;backdrop-filter:blur(14px)}.config-actions>div{display:grid;margin-right:auto}.config-actions small{color:#69888d}.config-actions button{padding:11px 15px;border-radius:9px;font-weight:700}.restore{border:1px solid #31515a;background:transparent;color:#a9c4c2}.save{border:0;background:var(--ac-mint);color:#062019}.save:disabled{opacity:.55}@keyframes spin{to{transform:rotate(360deg)}}@keyframes enter{from{opacity:0;transform:translateY(7px)}}@keyframes wave{50%{transform:scaleY(.45)}}@media(max-width:1050px){.config-layout{grid-template-columns:1fr}.agent-preview{border-left:0;border-top:1px solid var(--ac-line)}.advanced-grid{grid-template-columns:1fr}.agent-preview dl{max-width:500px;margin:auto}}@media(max-width:700px){.config-intro{padding:28px 22px;flex-direction:column}.connection-chip{width:max-content}.config-steps{padding:0;overflow:auto}.config-steps button{min-width:130px}.config-stage{padding:28px 20px 20px}.field-grid,.preset-grid,.tool-grid{grid-template-columns:1fr}.permission-flow{font-size:11px}.permission-flow span{padding:9px}.config-actions{padding:14px 20px;flex-wrap:wrap}.config-actions>div{width:100%}.config-actions button{flex:1}}
 </style>
 
 <style scoped>
+.config-steps{grid-template-columns:repeat(7,minmax(105px,1fr));overflow-x:auto}.config-steps button{min-width:105px}
 /* Segunda escena en azul y blanco: clara, silenciosa y fácil de recorrer. */
 .agent-config{--ac-bg:#fff;--ac-panel:#fff;--ac-line:#c8daf1;--ac-mint:#2354d7;--ac-amber:#76bfff;--ac-ink:#17254a;color:#17254a;border-color:#b9d2ee;border-radius:5px 36px 7px 22px;background:#fff;box-shadow:0 24px 70px #214d941d,9px 10px 0 #9fd0ff}.config-intro{min-height:190px;padding:38px 5% 30px;background:linear-gradient(132deg,#fff 0 76%,#d9ecff 76%)}.config-intro:before{width:185px;height:185px;right:9%;top:-128px;border-color:#2354d7;opacity:.82}.config-intro:after{width:185px;height:7px;left:5%;bottom:24px;background:#76bfff}.config-intro h2{color:#102a68}.config-intro p:not(.config-kicker){color:#697b9e}.config-kicker{color:#2354d7}.connection-chip{color:#2354d7;border-color:#a9c7ea;background:#edf5ff}.connection-chip.ready{color:#1c7047;border-color:#afd8c1;background:#e6f6ed}.config-steps{padding:0 5%;border-color:#c9d9ee;background:#e8f2ff}.config-steps button{color:#7181a2}.config-steps button small{color:#8193b6}.config-steps button.active{color:#fff;border-color:#2354d7;background:#2354d7}.config-steps button.active small{color:#dceaff}.config-steps button.complete small{color:#2354d7}.config-layout{background:#fff}.config-stage{padding:39px 5% 25px}.step-heading>span{color:#fff;background:#2354d7;box-shadow:4px 5px 0 #9dccff}.step-heading h3{color:#15306e}.step-heading p{color:#7484a3}.field-grid label,.token-control,.advanced-grid label,.prompt-field{color:#31456f}.field-grid small,.token-control small,.prompt-field small{color:#7b8baa}.field-grid select,.prompt-field textarea{color:#182750;border-color:#b8cce7;background:#fbfdff}.field-grid select:focus,.prompt-field textarea:focus{border-color:#2354d7;box-shadow:0 0 0 4px #2354d713}.token-control{border-color:#2354d7;background:#e8f2ff}.token-control output,.advanced output{color:#2354d7}input[type=range]{accent-color:#2354d7}.preset-grid button{color:#243964;border-color:#c6d7ed;background:#f8fbff}.preset-grid button i{color:#2354d7;background:#e4f0ff}.preset-grid button small{color:#7789aa}.preset-grid button.selected{border-color:#3c70df;background:#e1edff;box-shadow:inset 5px 0 0 #2354d7}.advanced{border-color:#c5d6ec;background:#edf4fc}.advanced summary{color:#31456e}.advanced summary span{color:#2354d7}.advanced>p{color:#7b8dab}.advanced-grid label{background:#fff}.permission-flow span{color:#344971;border-color:#c3d4eb;background:#f3f8ff}.permission-flow small{color:#8292b0}.permission-flow b{color:#2354d7}.permission-flow .gate{color:#fff;border-color:#173b9c;background:#2354d7}.permission-flow .gate small{color:#d5e5ff}.tool-grid button{color:#2e416b;border-color:#c2d4ea;background:#f9fcff}.tool-grid button>i{color:#2354d7;background:#e4f0ff}.tool-grid button span>small{color:#7b8dab}.tool-grid button p{color:#6f81a2}.tool-grid button em{color:#6080b1}.tool-grid button>b{background:#d3dfed}.tool-grid button.enabled{border-color:#5885e4;background:#e5efff}.tool-grid button.enabled>i{color:#fff;background:#2354d7}.tool-grid button.enabled>b{background:#2354d7}.security-note{color:#345d7a;border-color:#afd1e8;border-left-color:#338ed0;background:#e6f5ff}.step-actions{border-color:#d5e1f1}.step-actions button{color:#2354d7}.step-actions span{color:#8291ad}.agent-preview{margin:24px 20px 36px -3px;color:#fff;border-radius:29px 6px 22px 7px;background:linear-gradient(155deg,#14358d,#2354d7 70%,#4b8cf2);box-shadow:8px 9px 0 #9fd1ff}.agent-preview>small:first-child{color:#c3d8ff}.voice-orb{background:radial-gradient(circle,#77bcff,#2354d7 68%);box-shadow:0 0 0 7px #4d7add,8px 9px 0 #0f2b70}.voice-orb i{background:#fff}.agent-preview h3{color:#fff}.agent-preview>p{color:#d1e1ff}.agent-preview blockquote{color:#15306b;background:#e4f2ff}.preview-button{color:#fff;border-color:#9ac8ff;background:#1746bd}.preview-button:hover{background:#2860d8}.preview-note{color:#bdd3fa}.agent-preview dl div{border-color:#ffffff26}.agent-preview dt{color:#c6d9fa}.agent-preview dd{color:#fff}.config-error{color:#8b2b3d;border-color:#e2aab4;background:#fff0f2}.config-actions{margin:0 3% 17px 5%;border-color:#c7d8ed;background:#f3f8ffee}.config-actions strong{color:#27406c}.config-actions small{color:#7889a8}.restore{color:#506b9d;border-color:#b7cbe6}.save{color:#fff;background:#2354d7;box-shadow:4px 5px 0 #9bcaff}.save:hover:not(:disabled){box-shadow:2px 3px 0 #9bcaff}@media(max-width:700px){.config-intro{background:#fff}.config-intro:before{opacity:.35}}
 </style>

@@ -5,6 +5,7 @@ import type {
   EmployeeId,
   IdempotencyKey,
   ISODateTime,
+  LocationId,
   TenantId,
 } from "../../../shared/types/identifiers.js";
 
@@ -14,12 +15,13 @@ export interface CustomerReader {
 }
 
 export interface AppointmentConcurrencyGuard {
-  execute<T>(tenantId: TenantId, employeeId: EmployeeId, operation: () => Promise<T>): Promise<T>;
+  execute<T>(tenantId: TenantId, locationId: LocationId, employeeId: EmployeeId, operation: () => Promise<T>): Promise<T>;
 }
 
 export interface AppointmentCalendarPort {
   createEvent(command: {
     tenantId: TenantId;
+    locationId: LocationId;
     appointmentId: AppointmentId;
     employeeId: EmployeeId;
     title: string;
@@ -29,8 +31,20 @@ export interface AppointmentCalendarPort {
     endAt: ISODateTime;
     idempotencyKey: IdempotencyKey;
   }): Promise<Result<{ provider: string; externalEventId: string }, AppointmentCalendarError>>;
-  cancelEvent(command: {
+  rescheduleEvent(command: {
     tenantId: TenantId;
+    locationId: LocationId;
+    appointmentId: AppointmentId;
+    employeeId: EmployeeId;
+    externalEventId: string;
+    startAt: ISODateTime;
+    endAt: ISODateTime;
+  }): Promise<Result<void, AppointmentCalendarError>>;
+  cancelEvent(command: {
+    appointmentId: AppointmentId;
+    tenantId: TenantId;
+    locationId: LocationId;
+    employeeId: EmployeeId;
     externalEventId: string;
   }): Promise<Result<void, AppointmentCalendarError>>;
 }

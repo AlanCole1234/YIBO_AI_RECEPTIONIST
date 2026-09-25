@@ -2,52 +2,174 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../../src/api/index.js";
 import { buildApplication } from "../../src/bootstrap/index.js";
+import { AGENT_TOOL_DEFINITIONS } from "../../src/modules/agents/index.js";
+import { createAdminTestSession } from "../helpers/admin-session.js";
 
 let server: FastifyInstance | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
 
 describe("agent configuration API", () => {
+  it("publishes every non-developer tool with complete dashboard metadata", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
+
+    const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
+    const body = response.json<{ availableTools: Array<Record<string, unknown>> }>();
+    const expected = AGENT_TOOL_DEFINITIONS
+      .filter(({ name }) => name !== "enable_developer_test_mode" && name !== "delete_test_appointments")
+      .map(({ name }) => name);
+
+    expect(body.availableTools.map(({ name }) => name)).toEqual(expected);
+    expect(body.availableTools.map(({ name }) => name)).toContain("update_customer");
+    for (const descriptor of body.availableTools) {
+      expect(descriptor).toEqual(expect.objectContaining({
+        name: expect.any(String),
+        description: expect.any(String),
+        title: expect.any(String),
+        help: expect.any(String),
+        route: expect.any(String),
+        icon: expect.any(String),
+        kind: expect.stringMatching(/^(consult|mutate|external)$/),
+      }));
+    }
+    const create = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "create_appointment")!;
+    const cancel = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "cancel_appointment")!;
+    const reschedule = AGENT_TOOL_DEFINITIONS.find(({ name }) => name === "reschedule_appointment")!;
+    expect(create.description).toContain("successful public result");
+    expect(create.inputSchema).toMatchObject({ properties: {
+      employeeId: { description: expect.stringContaining("opaque professional reference") },
+    } });
+    expect(cancel.inputSchema).toMatchObject({
+      required: ["appointmentReference"], properties: { appointmentReference: expect.any(Object) },
+    });
+    expect(reschedule.inputSchema).toMatchObject({
+      required: ["appointmentReference", "startAt"], properties: { appointmentReference: expect.any(Object) },
+    });
+    expect(JSON.stringify(cancel.inputSchema)).not.toContain("appointmentId");
+    expect(JSON.stringify(reschedule.inputSchema)).not.toContain("appointmentId");
+  });
+
   it("reads the tenant configuration and applies updates to the shared agent service", async () => {
     const app = buildApplication();
     server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
 
-    const response = await server.inject({ method: "GET", url: "/api/configuration" });
+    const response = await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      current: { locale: "es-MX", conversation: { model: "gpt-realtime-2.1" } },
-      recommended: { locale: "es-MX" },
+    const body = response.json<{
+      modelCapabilities: Array<Record<string, unknown>>;
+      availableTools: unknown[];
+      current: Record<string, unknown>;
+    }>();
+    expect(body).toMatchObject({
+      current: { schemaVersion: 4, identity: { locale: "es-MX" }, conversation: { model: "gpt-realtime-2.1" } },
+      recommended: { schemaVersion: 4, identity: { locale: "es-MX" } },
       secrets: { apiKeyConfigured: false },
     });
-    expect(response.json<{ availableTools: unknown[] }>().availableTools).toHaveLength(6);
+    expect(body.modelCapabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "gpt-realtime-2.1",
+        voices: expect.arrayContaining(["marin", "cedar"]),
+        limits: expect.objectContaining({
+          responseOutputTokens: { minimum: 1, maximum: 4096, uiMinimum: 64, step: 64 },
+        }),
+        controls: expect.objectContaining({ reasoningEfforts: ["minimal", "low", "medium", "high"] }),
+      }),
+    ]));
+    expect(body.availableTools).toHaveLength(8);
 
-    const current = response.json<{ current: Record<string, unknown> }>().current;
+    const current = body.current;
     const update = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      payload: { ...current, voice: "cedar" },
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
+      payload: { ...current, audio: { ...(current.audio as object), voice: "cedar" } },
     });
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toMatchObject({
-      configuration: { voice: "cedar" },
+      configuration: { audio: { voice: "cedar" } },
       appliesTo: "next-conversation",
     });
-    expect(await app.agentConfiguration.get(app.tenantId)).toMatchObject({ voice: "cedar" });
+    expect(await app.agentConfiguration.get(app.tenantId)).toMatchObject({ audio: { voice: "cedar" } });
+    await expect(app.adminAudit.listByTenant(app.tenantId)).resolves.toMatchObject([{
+      entityType: "agent_configuration",
+      action: "update",
+      entityVersion: "4",
+      diff: { audio: {
+        before: expect.objectContaining({ voice: "marin" }),
+        after: expect.objectContaining({ voice: "cedar" }),
+      } },
+    }]);
   });
 
   it("rejects invalid configuration without changing the current value", async () => {
     const app = buildApplication();
     server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
     const before = await app.agentConfiguration.get(app.tenantId);
 
     const response = await server.inject({
       method: "PUT",
       url: "/api/configuration",
-      payload: { ...before, instructions: "" },
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
+      payload: { ...before, identity: { ...before!.identity, instructions: "" } },
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ error: { code: "INVALID_AGENT_CONFIGURATION" } });
     expect(await app.agentConfiguration.get(app.tenantId)).toEqual(before);
+  });
+
+  it("rejects unsupported model and voice combinations", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
+    const current = await app.agentConfiguration.get(app.tenantId);
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/configuration",
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
+      payload: { ...current, audio: { ...current!.audio, voice: "not-a-realtime-voice" } },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "INVALID_AGENT_CONFIGURATION", message: expect.stringContaining("voice is not supported") },
+    });
+  });
+
+  it("rejects Developer Test Mode tools in persisted administrator configuration", async () => {
+    const app = buildApplication();
+    server = await createApiServer(app);
+    const session = await createAdminTestSession(app, server);
+    const current = await app.agentConfiguration.get(app.tenantId);
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/configuration",
+      headers: { ...session.mutationHeaders, "if-match": `"${(await server.inject({ method: "GET", url: "/api/configuration", headers: session.readHeaders })).json().revision}"` },
+      payload: {
+        ...current,
+        enabledTools: [...current!.enabledTools, "enable_developer_test_mode"],
+        toolPolicies: {
+          ...current!.toolPolicies,
+          channels: {
+            ...current!.toolPolicies.channels,
+            voice_lab: {
+              ...current!.toolPolicies.channels.voice_lab,
+              enabledTools: [...current!.toolPolicies.channels.voice_lab.enabledTools, "enable_developer_test_mode"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "INVALID_AGENT_CONFIGURATION", message: expect.stringContaining("enabledTools") },
+    });
   });
 });

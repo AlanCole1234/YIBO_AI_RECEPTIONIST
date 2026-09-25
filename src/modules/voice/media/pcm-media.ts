@@ -1,7 +1,7 @@
-import type { AudioFrame } from "../../conversation/index.js";
+import { REALTIME_AUDIO_TRANSPORT, type AudioFrame } from "../../conversation/index.js";
 
-export const REALTIME_SAMPLE_RATE = 24_000;
-export const REALTIME_CODEC = "pcm_s16le";
+export const REALTIME_SAMPLE_RATE = REALTIME_AUDIO_TRANSPORT.sampleRate;
+export const REALTIME_CODEC = REALTIME_AUDIO_TRANSPORT.codec;
 
 export interface FloatAudioChunk {
   samples: Float32Array;
@@ -75,6 +75,84 @@ export function splitRealtimeFrame(frame: AudioFrame, durationMs = 20): AudioFra
   return frames;
 }
 
+export const TELEPHONE_SAMPLE_RATE = 8_000;
+
+/** Converts an incoming 8 kHz µ-law RTP payload into the PCM format Realtime expects. */
+export function ulawToRealtimeFrame(payload: Uint8Array): AudioFrame {
+  const samples = new Float32Array(payload.length);
+  for (let index = 0; index < payload.length; index += 1) samples[index] = decodeUlaw(payload[index] ?? 0xff);
+  return floatAudioToRealtimeFrame({ samples, sampleRate: TELEPHONE_SAMPLE_RATE, channels: 1 });
+}
+
+/** Converts one Realtime PCM frame to an 8 kHz µ-law RTP payload. */
+export function realtimeFrameToUlaw(frame: AudioFrame): Uint8Array {
+  const converter = new RealtimeToUlawStream();
+  return converter.convert(frame);
+}
+
+/**
+ * Stateful 24 kHz PCM -> 8 kHz PCMU converter for realtime output chunks.
+ * A 31-tap windowed-sinc low-pass filter prevents aliasing before decimation.
+ * Keep one instance for an entire assistant turn; recreating this per OpenAI
+ * delta causes audible discontinuities at chunk boundaries.
+ */
+export class RealtimeToUlawStream {
+  private readonly history = new Float32Array(DECIMATOR_TAPS.length);
+  private historyWriteAt = 0;
+  private samplesSeen = 0;
+  private decimationPhase = 0;
+
+  convert(frame: AudioFrame): Uint8Array {
+  if (frame.codec !== REALTIME_CODEC || frame.sampleRate !== REALTIME_SAMPLE_RATE || frame.channels !== 1) {
+    throw new Error("Expected mono pcm_s16le at 24000 Hz");
+  }
+    const output = new Uint8Array(Math.floor(frame.data.byteLength / 6));
+    let written = 0;
+  const view = new DataView(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength);
+    for (let index = 0; index < frame.data.byteLength / 2; index += 1) {
+      this.push(view.getInt16(index * 2, true) / 0x8000);
+      this.decimationPhase = (this.decimationPhase + 1) % 3;
+      if (this.decimationPhase !== 0) continue;
+      output[written] = encodeUlaw(this.filteredSample());
+      written += 1;
+    }
+    return output.subarray(0, written);
+  }
+
+  reset(): void {
+    this.history.fill(0);
+    this.historyWriteAt = 0;
+    this.samplesSeen = 0;
+    this.decimationPhase = 0;
+  }
+
+  private push(sample: number): void {
+    this.history[this.historyWriteAt] = sample;
+    this.historyWriteAt = (this.historyWriteAt + 1) % this.history.length;
+    this.samplesSeen += 1;
+  }
+
+  private filteredSample(): number {
+    let value = 0;
+    const taps = Math.min(this.samplesSeen, DECIMATOR_TAPS.length);
+    for (let index = 0; index < taps; index += 1) {
+      const sourceIndex = (this.historyWriteAt - 1 - index + this.history.length) % this.history.length;
+      value += (this.history[sourceIndex] ?? 0) * (DECIMATOR_TAPS[index] ?? 0);
+    }
+    return Math.max(-1, Math.min(1, value));
+  }
+}
+
+/** Exposed for standards-vector tests and telephone codec diagnostics. */
+export function pcm16ToUlaw(sample: number): number {
+  return encodeUlaw(Math.max(-0x8000, Math.min(0x7fff, Math.round(sample))) / 0x8000);
+}
+
+/** Exposed for standards-vector tests and telephone codec diagnostics. */
+export function ulawToPcm16(value: number): number {
+  return Math.round(decodeUlaw(value) * 0x8000);
+}
+
 function mixToMono(samples: Float32Array, channels: number): Float32Array {
   const length = Math.floor(samples.length / channels);
   const mono = new Float32Array(length);
@@ -100,6 +178,44 @@ function resampleLinear(samples: Float32Array, fromRate: number, toRate: number)
     output[index] = a + (b - a) * fraction;
   }
   return output;
+}
+
+const DECIMATOR_TAPS = createLowPassTaps(31, 3_400 / REALTIME_SAMPLE_RATE);
+
+function createLowPassTaps(length: number, cutoff: number): Float32Array {
+  const taps = new Float32Array(length);
+  const center = (length - 1) / 2;
+  let total = 0;
+  for (let index = 0; index < length; index += 1) {
+    const distance = index - center;
+    const sinc = distance === 0 ? 2 * cutoff : Math.sin(2 * Math.PI * cutoff * distance) / (Math.PI * distance);
+    const hamming = 0.54 - 0.46 * Math.cos((2 * Math.PI * index) / (length - 1));
+    taps[index] = sinc * hamming;
+    total += taps[index] ?? 0;
+  }
+  for (let index = 0; index < length; index += 1) taps[index] = (taps[index] ?? 0) / total;
+  return taps;
+}
+
+function decodeUlaw(value: number): number {
+  const inverted = (~value) & 0xff;
+  const sign = inverted & 0x80;
+  const exponent = (inverted >> 4) & 0x07;
+  const mantissa = inverted & 0x0f;
+  const magnitude = ((mantissa << 3) + 0x84) << exponent;
+  const pcm = sign ? 0x84 - magnitude : magnitude - 0x84;
+  return Math.max(-1, Math.min(1, pcm / 0x8000));
+}
+
+function encodeUlaw(sample: number): number {
+  let pcm = Math.round(Math.max(-1, Math.min(1, sample)) * 0x7fff);
+  const sign = pcm < 0 ? 0x80 : 0;
+  if (pcm < 0) pcm = -pcm;
+  pcm = Math.min(32_635, pcm) + 0x84;
+  let exponent = 7;
+  for (let mask = 0x4000; exponent > 0 && (pcm & mask) === 0; mask >>= 1) exponent -= 1;
+  const mantissa = (pcm >> (exponent + 3)) & 0x0f;
+  return ~(sign | (exponent << 4) | mantissa) & 0xff;
 }
 
 function ascii(data: Uint8Array, offset: number, length: number): string {

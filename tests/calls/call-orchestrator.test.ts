@@ -8,7 +8,9 @@ import { ScriptedVoiceMediaGateway, type ConversationTransport } from "../../src
 const business: BusinessProfile = {
   region: "US",
   tenantId: "tenant-smileline", businessId: "business-smileline", name: "SmileLine Dental", timezone: "America/Denver", locale: "en-US", active: true,
-  calledNumbers: ["+13035550123"], employees: [], services: [], openingHours: [],
+  calledNumbers: ["+13035550123"], employees: [{ id: "employee-1", displayName: "Dr. Lee", active: true }],
+  services: [{ id: "service-1", name: "Consultation", durationMinutes: 30, bufferMinutes: 0, eligibleEmployeeIds: ["employee-1"] }],
+  openingHours: [],
 };
 
 const incoming = { type: "INCOMING_CALL" as const, callId: "call-1", from: "+13035550999", to: "+13035550123", occurredAt: "2026-08-09T18:00:00.000Z" };
@@ -30,7 +32,8 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
       conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal" as const, turnDetection: {} },
     },
   }];
-  const agents = new AgentDefinitionService(new InMemoryAgentConfigurationSource(configurations), toolExecutor);
+  const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
+  const agents = new AgentDefinitionService(new InMemoryAgentConfigurationSource(configurations), toolExecutor, directory);
   const transportClose = vi.fn(async () => undefined);
   const transport: ConversationTransport = {
     inboundAudio: noAudio(),
@@ -41,7 +44,6 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
   voice.register(incoming.callId, transport);
   const runtime = new ScriptedConversationRuntime();
   const conversations = new ConversationService({ runtime });
-  const directory = new BusinessDirectoryService(new InMemoryBusinessRepository([business]));
   return {
     orchestrator: new CallOrchestratorService(directory, customers, telephony, agents, voice, conversations, repository),
     repository,
@@ -59,12 +61,12 @@ describe("CallOrchestratorService", () => {
     await system.orchestrator.handleTelephonyEvent(incoming);
 
     expect(system.repository.stateHistory.map((entry) => entry.state)).toEqual(["RINGING", "ANSWERED", "AI_CONNECTING", "IN_CONVERSATION"]);
-    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, customerId: "customer-1", from: incoming.from, to: incoming.to, state: "IN_CONVERSATION" });
+    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ tenantId: business.tenantId, locationId: "default", customerId: "customer-1", from: incoming.from, to: incoming.to, state: "IN_CONVERSATION" });
     expect(system.voice.openedCallIds).toEqual([incoming.callId]);
     expect(system.runtime.openedInputs).toEqual([{
       conversationId: incoming.callId,
       agent: expect.objectContaining({
-        instructions: "Help the caller",
+        instructions: expect.stringContaining("<editable_guidance>\nHelp the caller\n</editable_guidance>"),
         locale: "en-US",
         tools: expect.arrayContaining([expect.objectContaining({ name: "check_availability" })]),
       }),
@@ -97,6 +99,20 @@ describe("CallOrchestratorService", () => {
     expect(system.runtime.latestSession.closeCount).toBe(1);
     expect(system.transportClose).toHaveBeenCalledTimes(1);
     expect(system.repository.stateHistory.at(-1)).toEqual({ callId: incoming.callId, state: "COMPLETED" });
+  });
+
+  it("closes media after a transferred call without replacing its terminal state", async () => {
+    const system = createOrchestrator();
+    await system.orchestrator.handleTelephonyEvent(incoming);
+    await system.repository.updateState(incoming.callId, "TRANSFERRED", "2026-08-09T18:02:00.000Z");
+
+    await system.orchestrator.handleTelephonyEvent({
+      type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:03:00.000Z",
+    });
+
+    expect(system.runtime.latestSession.closeCount).toBe(1);
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
+    await expect(system.repository.findByCallId(incoming.callId)).resolves.toMatchObject({ state: "TRANSFERRED" });
   });
 
   it("fails and hangs up when an agent definition cannot be prepared", async () => {

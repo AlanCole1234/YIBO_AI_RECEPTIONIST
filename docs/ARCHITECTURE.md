@@ -1,267 +1,300 @@
 # Arquitectura actual de YIBO
 
-> Estado analizado: 23 de agosto de 2026. Este documento describe el código que existe hoy. El archivo `YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md` sigue siendo la arquitectura objetivo y el contrato de diseño.
+> Verificado contra el código el 19 de septiembre de 2026. El avance posterior se consulta en
+> [PROJECT_STATUS.md](PROJECT_STATUS.md); los cambios de arquitectura se
+> registran en [adr/](adr/README.md).
 
-## 1. Resumen ejecutivo
+## Resumen
 
-YIBO está planteado como un **monolito modular** en TypeScript, organizado con **arquitectura hexagonal (puertos y adaptadores)**. El producto objetivo es una recepcionista telefónica multi-tenant capaz de conversar mediante IA, consultar disponibilidad, administrar citas y transferir llamadas.
+YIBO es un monolito modular TypeScript con puertos y adaptadores. La aplicación
+local ejecutable combina API Fastify, dashboard Vue, SQLite regional, OpenAI
+Realtime, Google Calendar y adaptadores de telefonía/voz.
 
-La regla esencial es:
+La frontera esencial es:
 
-> La IA conversa; el dominio de YIBO valida, decide y ejecuta; telefonía sólo transporta la llamada.
-
-El repositorio contiene un núcleo de dominio y aplicación bien probado, pero todavía no contiene una aplicación desplegable. No hay composition root, servidor/API, adaptador de telefonía, proveedor de IA real ni persistencia conectada. Las implementaciones disponibles son principalmente en memoria.
-
-## 2. Vista del sistema
+> El modelo conversa y solicita herramientas; el dominio valida y ejecuta.
 
 ```mermaid
 flowchart LR
-    Caller["Persona que llama"] --> Tel["Telefonía (pendiente)"]
-    Tel --> Calls["calls"]
-    Calls --> Business["business"]
-    Calls --> Customers["customers"]
-    Calls --> Agents["agents"]
-    Calls --> Voice["voice"]
-    Voice --> VoiceAI["Proveedor de voz/IA (pendiente)"]
-    Agents --> Tools["ToolExecutor"]
-    Tools --> Scheduling["scheduling"]
-    Tools --> Appointments["appointments"]
-    Appointments --> Scheduling
-    Scheduling --> Calendar["CalendarPort"]
-    Appointments --> Calendar
-    Calendar --> Adapter["Adaptador en memoria / proveedor real pendiente"]
+  TEL["Telefonía / Voice Lab"] --> DID["Número marcado → tenant/location"]
+  DID --> CALLS["calls"]
+  CALLS --> AGENTS["agents: definición y tools"]
+  CALLS --> VOICE["voice: transporte PCM"]
+  AGENTS --> CONV["conversation: lifecycle"]
+  VOICE --> CONV
+  CONV --> RT["OpenAI Realtime / scripted runtime"]
+  RT -->|"tool request"| CONV
+  CONV --> EXEC["ToolExecutor"]
+  EXEC --> SCHED["scheduling"]
+  EXEC --> APPT["appointments"]
+  EXEC --> CUST["customers"]
+  APPT --> NOTIFY["notifications"]
+  SCHED --> CAL["Google / in-memory calendar"]
+  APPT --> CAL
 ```
 
-El flujo existe como contratos y servicios desacoplados. Todavía falta conectarlos en un proceso ejecutable.
+## Procesos y composición
 
-## 3. Estructura real del repositorio
+- `src/main.ts` inicia la API configurada.
+- `src/bootstrap/` abre la base regional, migra, siembra el tenant local y
+  conecta servicios, repositorios y adaptadores.
+- `src/api/` publica health, negocio, clientes, disponibilidad, citas,
+  configuración del agente y OAuth de Google.
+- `apps/dev-voice/` ofrece el WebSocket local de prueba de voz.
+- `dashboard/src/` contiene el dashboard mantenible.
 
-```text
-YIBO/
-├── src/
-│   ├── modules/
-│   │   ├── business/       configuración del negocio
-│   │   ├── customers/      identidad y contacto del cliente
-│   │   ├── scheduling/     cálculo y validación de disponibilidad
-│   │   ├── appointments/   ciclo de vida de citas
-│   │   ├── agents/         sesión de IA y herramientas seguras
-│   │   ├── voice/          puente de audio bidireccional
-│   │   ├── calls/          orquestación de la llamada
-│   │   └── integrations/   adaptador de calendario en memoria
-│   └── shared/             Result e identificadores compartidos
-├── tests/                  pruebas unitarias por módulo
-├── dashboard/dist/         build compilado; no hay fuente del dashboard
-├── data/                   SQLite no rastreado por Git ni conectado al código
-├── docs/                   documentación operativa
-└── YIBO_ARCHITECTURE_AND_CODEX_CONTRACTS.md
-```
+El runtime se elige por configuración: `in-memory` para desarrollo aislado u
+`openai-realtime` para una sesión speech-to-speech. Conversation es el único
+dueño de la sesión; Voice sólo transporta PCM mono de 24 kHz.
 
-La forma interna esperada de cada módulo es:
+## Propiedad por módulo
 
-```text
-domain/          reglas y entidades puras
-application/     casos de uso y orquestación
-ports/           interfaces requeridas por el módulo
-infrastructure/  implementaciones de los puertos
-index.ts         API pública del módulo
-```
+| Módulo | Responsabilidad actual |
+|---|---|
+| `business` | Perfil del tenant, servicios, empleados, números, horario, locale y zona |
+| `customers` | Identidad y contacto tenant-scoped |
+| `scheduling` | Cálculo y validación de slots contra reglas y calendarios |
+| `appointments` | Crear, consultar, cancelar y reprogramar con idempotencia |
+| `agents` | Configuración, definición de tools y frontera de confianza |
+| `conversation` | Lifecycle Realtime, audio, tool calls, interrupción y consumo |
+| `voice` | Transporte bidireccional de frames de audio |
+| `calls` | Lifecycle de llamada y contexto confiable |
+| `telephony` | Contrato y gateway Asterisk |
+| `integrations` | Google OAuth/Calendar y calendario en memoria |
+| `billing` | Lectura opcional de costos de organización OpenAI |
+| `notifications` | Correo transaccional posterior al commit y registro seguro de entregas |
 
-No todos los módulos necesitan todas las carpetas. La regla importante es que las dependencias externas entren por puertos y que otros módulos consuman el `index.ts` público.
+Business ya define el contrato validado de siguiente generación: catálogos de
+servicios y profesionales compartidos y sucursales con `LocationId`, dirección,
+zona, locale, números, horarios, cierres, políticas, precios y asignaciones de
+calendario. El formato histórico se reconoce como v1 y un upgrader puro,
+idempotente y validado produce la única forma v2, incluyendo la sucursal
+`default` y defaults conservadores. `BusinessDirectory` entrega siempre esa
+forma canónica aunque la persistencia todavía contenga v1. El número marcado
+resuelve exactamente un `{tenantId, locationId}` activo; Calls conserva ambos y
+los propaga como contexto confiable a AgentDefinition, tools, Scheduling y
+Appointments. Los fixtures MX/US y el repositorio en memoria también almacenan
+v2; aceptar v1 queda limitado a fronteras de migración compatibles.
 
-## 4. Capas y dirección de dependencias
+## Configuración del agente
 
-```mermaid
-flowchart TB
-    Infrastructure["Infrastructure: memoria, DB, calendarios, telefonía"] --> Ports["Ports: interfaces"]
-    Application["Application: casos de uso"] --> Ports
-    Application --> Domain["Domain: entidades e invariantes"]
-    Ports --> Domain
-    Bootstrap["Bootstrap / composition root (pendiente)"] --> Infrastructure
-    Bootstrap --> Application
-```
+La configuración se guarda por tenant en `agent_configurations` como JSON y se
+lee al iniciar cada conversación. Contiene instrucciones, locale, voz,
+herramientas habilitadas, modelo, límite de salida, razonamiento y VAD. Los
+cambios del dashboard aplican a la conversación siguiente.
 
-Las clases de aplicación reciben sus dependencias por constructor. Esto permite sustituir memoria por PostgreSQL, Google Calendar, Asterisk u otro proveedor sin cambiar las reglas centrales.
+`AgentDefinitionService` filtra herramientas antes de abrir la sesión.
+`OpenAIRealtimeAdapter` traduce la definición neutral al payload del proveedor.
+Por llamada, `ConfirmationGateToolExecutor` precede al ejecutor de límites: liga
+las mutaciones configuradas a un token, argumentos y secuencia de turno antes de
+permitir que una solicitud alcance el dominio.
+La fábrica versionada `createDefaultAgentConfiguration` y `AgentPromptCompiler`
+son la autoridad de defaults y reglas; el adaptador traduce el contrato del proveedor.
+Los tokens y el estado efímero de tools se ligan al scope confiable completo: tenant,
+sucursal, llamada, cliente y autorización de modo de prueba.
 
-Dependencias reales principales:
+## Disponibilidad y citas
 
-| Módulo | Consume | Motivo |
-|---|---|---|
-| `business` | `shared` | resultados tipados e IDs |
-| `customers` | `shared` | IDs y resultado |
-| `scheduling` | API pública de `business`, puertos propios, `shared` | reglas, horarios y conflictos |
-| `appointments` | APIs públicas de `business` y `scheduling`, puertos propios | revalidar y confirmar citas |
-| `agents` | APIs públicas de `scheduling` y `appointments` | ejecutar tools controladas |
-| `voice` | puerto propio de proveedor IA | transportar audio |
-| `calls` | API pública de `business` y puertos propios | coordinar el flujo completo |
-| `integrations` | actualmente puertos internos de calendario | implementar calendario compartido |
+Scheduling genera slots según `slotIncrementMinutes` de la sucursal (15 en
+los fixtures iniciales) y cruza:
 
-### Observación de frontera
+1. zona horaria y horario de la sucursal resuelta;
+2. profesional activo y asignado al servicio en esa sucursal;
+3. duración y buffer;
+4. citas confirmadas locales disponibles para el adaptador;
+5. ocupación externa mediante Google FreeBusy.
 
-`integrations/calendar/in-memory-calendar-adapter.ts` importa directamente los archivos de puertos internos de `appointments` y `scheduling`, no sus `index.ts`. Funciona, pero contradice parcialmente la regla de consumir contratos públicos. Conviene exportar esos puertos desde las APIs públicas o mover un contrato común de calendario a una ubicación estable antes de crear el adaptador real.
+El horario particular del profesional se intersecta por día e intervalo con el
+de la sucursal. Una lista particular vacía significa herencia explícita del
+horario de sucursal; la indisponibilidad se representa desactivando la
+asignación, no mediante un significado ambiguo de lista vacía.
+Los cierres se configuran como rangos de reloj local y Scheduling los convierte
+con la zona IANA de la sucursal tanto al listar como al revalidar. El motivo
+administrativo no forma parte de `AvailableSlot` ni de los errores para caller.
+La política completa de cada sucursal tiene una API administrativa versionada
+en `/api/admin/locations/:locationId/scheduling-policy`; sólo admite el esquema
+soportado y un servicio predeterminado activo de esa sucursal.
+Scheduling aplica `slotIncrementMinutes`, anticipación, horizonte y máximo de
+resultados al listar y al revalidar. Appointments aplica por dominio los avisos
+mínimos de cancelación y reprogramación; el prompt no puede evadirlos.
+La capacidad del profesional permanece en 1 y se aplica además el límite
+concurrente de la sucursal. Las reservas se serializan por `{tenant, location}`
+para que profesionales distintos no excedan el último cupo durante una carrera.
 
-## 5. Responsabilidad de cada módulo
+La interfaz de oficina consume el mismo servicio de Scheduling para mostrar huecos
+y el mismo servicio de Appointments para mutar. Los eventos de cita forman una línea
+de tiempo inmutable de operación. El correo es un efecto posterior al éxito: una
+falla de proveedor se registra, pero no revierte la cita ni el calendario.
 
-### `business`
+Appointments revalida el slot bajo un guard, guarda `PENDING_CONFIRMATION`, crea
+el evento externo y sólo entonces guarda `CONFIRMED`. La reprogramación Google modifica el evento original con PATCH condicional
+por etag, verificando ownership; conserva su ID y no crea un reemplazo.
+La cancelación también verifica ownership y usa el etag. La cancelación y reprogramación verifican propiedad del cliente en la
+frontera de tools. Al crear, la cita congela el nombre y `Money` de la oferta;
+reprogramar o cambiar el catálogo no modifica ese snapshot histórico.
 
-Es dueño del perfil del tenant: nombre, zona horaria, locale, números telefónicos, empleados, servicios y horario de apertura. Resuelve el negocio por `tenantId` o por número marcado y valida la configuración.
+La lectura de próximas citas filtra en el repositorio por tenant, location,
+customer, estado confirmado e instante actual. El ejecutor del agente proyecta
+después una vista pública con referencias efímeras ligadas a la llamada; los IDs
+persistidos no cruzan la frontera del modelo. Cancelación y reprogramación sólo
+aceptan esas referencias en la misma llamada, las resuelven en memoria y repiten
+la comprobación de ownership antes de invocar el dominio.
 
-No administra clientes ni transacciones de citas.
+## Persistencia e integraciones
 
-### `customers`
+- SQLite se separa por región MX/US y todas las claves operativas incluyen
+  `tenant_id`.
+- El bootstrap configurado usa repositorios SQLite para negocio, clientes,
+  citas y llamadas; las referencias profesionales consideran también citas
+  persistidas antes de permitir una eliminación.
+- Las migraciones viven en `src/infrastructure/database/migrations/`; la v7
+  agrega `location_id` a números, llamadas y citas y la v8 agrega la versión
+  optimista del documento de negocio. La v9 rellena nombre/precio histórico en
+  citas existentes. Todas conservan los registros previos.
+- Google OAuth guarda tokens cifrados por tenant. Toda asignación nueva o
+  modificada se consulta contra Google antes de activarse; la API administrativa
+  publica estados seguros (`accessible`, desconectado, prohibido, no encontrado
+  o no disponible), nunca credenciales.
+- Google Calendar resuelve `{calendarId, timezone}` desde
+  `{tenantId, locationId, employeeId}` confiable. La asignación del profesional
+  gana y el default de sucursal actúa como fallback. `GOOGLE_CALENDAR_ID` sólo
+  existe como importación transitoria al documento, no dirige operaciones.
+  FreeBusy, alta y cancelación usan esa misma resolución; los logs conservan
+  IDs correlacionables y metadata operativa, pero no calendar IDs, tokens ni PII.
+- El modo de prueba usa negocio, agenda, repositorio de citas y calendario en
+  memoria aislados. Sus tools no forman parte del catálogo administrable: sólo
+  se incorporan a una definición Voice Lab autorizada por el servidor y la
+  frontera Realtime rechaza su presencia en telefonía aunque reciba una
+  definición construida incorrectamente.
+- Cada sucursal puede guardar un destino de transferencia tipado como teléfono
+  normalizado o extensión numérica. La API versionada no admite URI, SIP ni un
+  destino proporcionado por el modelo.
+- `TelephonyHumanTransferAdapter` resuelve ese destino con el contexto confiable,
+  persiste `TRANSFERRING` y luego `TRANSFERRED`; un fallo del gateway compensa el
+  estado a `IN_CONVERSATION` para que el agente pueda seguir atendiendo.
+- La configuración del agente es un documento versionado. Los repositorios
+  convierten la forma histórica sin versión a la forma canónica v4 y SQLite la
+  reescribe al primer acceso; versiones futuras desconocidas fallan cerradas.
+- `AgentPromptCompiler` convierte la guía editable en una sección delimitada y
+  añade identidad, locale, zona de la sucursal, tools habilitadas, confirmaciones
+  efectivas y reglas inmutables. Describe sólo capacidades disponibles y mantiene
+  al backend como autoridad de toda mutación. `AgentDefinitionService` falla si
+  no puede obtener ese contexto usando el tenant/location confiable de la llamada.
+- Los resultados de tools son DTO públicos. En particular, crear una cita sólo
+  devuelve confirmación, servicio, horario y precio histórico presentable; la
+  entidad con IDs confiables permanece dentro de Appointments.
+- `buildRealtimeSessionUpdate` es la única frontera que traduce una definición
+  validada al contrato `session.update`; valida de nuevo capacidades antes de
+  que el adaptador abra una conexión con el proveedor.
 
-Busca o crea clientes por teléfono dentro de un tenant, normaliza teléfono/nombre/email y evita duplicar números en el mismo tenant. Las consultas incluyen `tenantId`, por lo que el aislamiento está incorporado al contrato.
+## Invariantes
 
-### `scheduling`
+- Las sesiones de producto (`phone` y `voice_lab`) usan modalidad de audio y
+  PCM16 little-endian mono a 24 kHz. Codec, tasa, canales y formato proveedor
+  proceden de una sola constante de transporte y no son configuración admin.
+- El modelo no elige `tenantId`, `locationId`, `callId`, `customerId` ni
+  idempotency key.
+- Campos confiables enviados por una tool son rechazados.
+- Instantes persistidos y contratos internos usan ISO UTC; la conversación usa
+  la zona IANA del negocio.
+- Consultar disponibilidad no reserva.
+- Una cita no se anuncia como creada hasta quedar `CONFIRMED`.
+- SDKs externos permanecen en infraestructura.
+- No se persisten audio ni transcripciones.
+- Las herramientas de desarrollo no se registran en sesiones normales.
 
-Calcula slots cada 15 minutos y valida un slot específico. Cruza:
+## Seguridad administrativa
 
-1. horario del negocio;
-2. horario del empleado;
-3. duración y buffer del servicio;
-4. citas confirmadas locales;
-5. ocupación del calendario externo;
-6. zona horaria IANA del negocio.
+Los endpoints administrativos usan sesiones firmadas en cookie HttpOnly. El
+rol `tenant_admin` administra agente, negocio y calendarios; `operator` puede
+consultar el negocio y operar clientes, disponibilidad y citas. Las mutaciones
+exigen el `Origin` configurado y ningún endpoint acepta tenant o región desde
+datos no confiables. Cada mutación administrativa actual registra sujeto,
+tenant, entidad, acción, versión, instante y diff; credenciales, PII e
+instrucciones se sustituyen por marcadores o huellas antes de persistir.
+El dashboard restaura la sesión exclusivamente mediante `/api/auth/me`; nunca
+lee la cookie ni guarda credenciales. Login y logout usan la misma cookie
+HttpOnly. El shell programa la expiración local con el `expiresAt` público y
+regresa al login ante cualquier `401`. La navegación elimina vistas de agente,
+negocio y Calendar para `operator`, y evita incluso sus lecturas iniciales; el
+backend sigue siendo la autoridad final y devuelve `403` si se evade la UI.
+La configuración multi-sucursal completa se lee y reemplaza mediante
+`/api/admin/business-configuration`; `PUT` exige `If-Match`, incrementa la
+versión atómicamente y responde `409 CONFIGURATION_VERSION_CONFLICT` si otro
+editor ganó la carrera.
+El catálogo tenant-wide de servicios cuenta además con endpoints CRUD en
+`/api/admin/services`; cada mutación usa la misma versión del documento,
+auditoría y protección contra borrar o desactivar referencias asignadas.
+`/api/admin/professionals` administra el catálogo de profesionales y
+`/api/admin/locations/:locationId/professionals/:professionalId` administra su
+asignación, servicios, horario y calendario por sucursal. Las referencias en
+asignaciones o citas deben migrarse antes de desactivar o eliminar.
+Cada oferta sucursal–servicio expresa su precio como
+`Money { amountMinor, currency }`; Business exige unidades menores enteras no
+negativas y una moneda ISO 4217. El precio sigue siendo informativo, sin pagos.
 
-Consultar disponibilidad no reserva nada. La validación definitiva ocurre nuevamente al crear una cita.
+## Superficie y brechas activas
 
-### `appointments`
+Tras autenticarse, el dashboard permite probar voz, configurar agente/tools,
+conectar Google, consultar disponibilidad, crear/buscar citas y cambiar zona
+horaria. El editor del agente usa el esquema canónico v4 y construye sus controles
+de modelo/audio desde el registro de capacidades publicado por la API; no mantiene
+listas locales de modelos o voces. Los campos incompatibles se ocultan o muestran
+un error específico y bloquean el guardado. El mismo editor cubre comportamiento,
+silencios, políticas por canal, confirmaciones, límites, reintentos y escalamiento;
+helpers puros mantienen sincronizadas las dependencias entre tools y políticas.
+Las vistas se filtran por rol. UI-005–UI-009 administran sucursales, catálogos,
+precios, profesionales, asignaciones/horarios, calendarios y citas por cliente y
+sucursal. Los editores conservan borradores ante conflictos; negocio usa versión
+numérica y agente revisión opaca con `If-Match`. Ver [runbook administrativo](OPERATIONS_RUNBOOK.md).
 
-Es dueño de las mutaciones de cita: crear, cancelar, reprogramar y consultar. La creación:
+Las brechas, orden y evidencia actual se mantienen exclusivamente en
+`PROJECT_STATUS.md` para evitar que este documento vuelva a convertirse en un
+roadmap obsoleto.
 
-1. valida datos e idempotencia;
-2. verifica cliente, servicio y empleado;
-3. entra al guard de concurrencia;
-4. revalida el slot;
-5. guarda `PENDING_CONFIRMATION`;
-6. crea el evento externo;
-7. guarda `CONFIRMED` o `FAILED`.
 
-La cancelación sincroniza primero el calendario y después el estado local. La reprogramación crea el reemplazo, cancela el evento anterior y compensa cancelando el reemplazo si falla el segundo paso.
-
-### `agents`
-
-Abre la sesión del agente con instrucciones/configuración por tenant y registra cuatro herramientas: consultar disponibilidad, crear cita, cancelar cita y transferir a humano.
-
-`ToolExecutor` es la frontera de confianza. Rechaza argumentos desconocidos y campos confiables (`tenantId`, `callId`, `customerId`, `idempotencyKey`) enviados por el modelo. Esos valores sólo llegan desde el contexto de llamada. También comprueba propiedad del cliente antes de cancelar.
-
-### `voice`
-
-Conecta audio entrante con un proveedor de voz y devuelve el audio generado hacia telefonía. Verifica que la identidad de llamada coincida y hace cierre idempotente.
-
-### `calls`
-
-Orquesta eventos de telefonía. Para una llamada entrante: resuelve negocio, crea registro, contesta, encuentra/crea cliente, abre agente, abre voz y marca conversación activa. En hangup cierra voz, luego agente, y termina el registro.
-
-Los estados `TRANSFERRING` y `TRANSFERRED` están definidos, pero el flujo de transferencia todavía no está conectado al orquestador.
-
-### `integrations`
-
-Sólo contiene un calendario en memoria que satisface tanto consultas de ocupación como creación/cancelación de eventos. Es útil para pruebas, no para producción.
-
-## 6. Flujos críticos
-
-### Entrada de llamada
+## Telefonía integrada y límites de validación
 
 ```mermaid
 sequenceDiagram
-    participant T as Telefonía
-    participant C as Calls
-    participant B as Business
-    participant U as Customers
-    participant A as Agents
-    participant V as Voice
-    T->>C: INCOMING_CALL
-    C->>B: negocio por número marcado
-    C->>C: crear RINGING
-    C->>T: answer
-    C->>U: findOrCreateByPhone
-    C->>A: startSession(contexto confiable)
-    C->>V: start
-    C->>C: IN_CONVERSATION
+  participant PBX as Asterisk ARI
+  participant Calls as CallOrchestrator
+  participant Media as RTP gateway
+  participant Conv as Conversation
+  participant Tools as Agent tools/domain
+  participant Google as Google Calendar
+  PBX->>Calls: ingreso con número marcado
+  Calls->>Calls: resolver tenant/sucursal activos
+  Calls->>Media: bridge y External Media
+  Calls->>Conv: una sesión con contexto confiable
+  Media->>Conv: PCMU 8 kHz a PCM16 mono 24 kHz
+  Conv->>Tools: solicitud del modelo
+  Tools->>Tools: política, confirmación, ownership y revalidación
+  Tools->>Google: operación en calendario resuelto
+  Google-->>Tools: resultado
+  Tools-->>Conv: DTO público de éxito o fallo
+  Conv->>Media: audio PCM para salida PCMU
+  PBX->>Calls: hangup
+  Calls->>Conv: cerrar sesión
+  Calls->>Media: liberar RTP, External Media y bridge
 ```
 
-### Creación de cita por IA
+Sólo el proceso API habilita ARI; Voice Lab conserva su transporte local.
+Las pruebas E2E usan ARI/Realtime/HTTP simulados y RTP UDP real local; no prueban
+carrier, credenciales live, inteligibilidad ni despedida autónoma. El guard de
+reservas verificado es de proceso único, no un lock distribuido. La restauración
+de SQLite no revierte cambios externos de Google. Ver [recuperación](MIGRATION_RECOVERY.md)
+y [operaciones](OPERATIONS_RUNBOOK.md).
 
-```mermaid
-sequenceDiagram
-    participant AI as Modelo IA
-    participant X as ToolExecutor
-    participant P as Appointments
-    participant S as Scheduling
-    participant R as Repositorio
-    participant K as Calendario
-    AI->>X: create_appointment(argumentos no confiables)
-    X->>X: validar esquema + contexto
-    X->>P: comando con tenant/customer confiables
-    P->>R: comprobar idempotencia
-    P->>S: revalidar slot bajo guard
-    P->>R: guardar PENDING_CONFIRMATION
-    P->>K: crear evento
-    K-->>P: eventId
-    P->>R: guardar CONFIRMED
-    P-->>X: cita confirmada
-    X-->>AI: resultado seguro
-```
+Fin intencional: [ADR-008](adr/ADR-008-intentional-call-completion.md) agrega
+`end_call` como capacidad de sesión phone cuando el transporte soporta drain.
+Conversation espera finalización de respuesta/audio y playback; no modifica
+catálogos ni configuración persistida de tools. Ver [CALL_COMPLETION.md](CALL_COMPLETION.md).
 
-## 7. Decisiones e invariantes que no deben romperse
+### Protección de rutas reservadas (CLOSE-002 / ADR-009)
 
-- `tenantId` proviene de un contexto confiable, nunca del modelo.
-- Todas las fechas persistidas y contratos internos usan ISO 8601 UTC; las reglas humanas usan la zona IANA del negocio.
-- Scheduling consulta; Appointments muta.
-- Toda creación revalida disponibilidad dentro de un guard de concurrencia.
-- La idempotencia evita duplicados en reintentos.
-- Nunca se anuncia una cita como creada si no está `CONFIRMED`.
-- Los errores del dominio son tipados; al modelo se le entrega un mensaje seguro, no excepciones internas.
-- SDKs de proveedores deben permanecer dentro de adaptadores.
-- Los módulos no deben importar infraestructura de otros módulos.
-
-## 8. Estado de calidad comprobado
-
-- TypeScript `strict` y `noUncheckedIndexedAccess` activados.
-- Typecheck exitoso con el compilador local.
-- 9 archivos de prueba, 44 pruebas aprobadas.
-- Cobertura conductual de multi-tenancy, idempotencia, concurrencia, calendario, tools, voz y ciclo básico de llamada.
-
-Esto no equivale a cobertura total ni a una prueba end-to-end del producto real. Las pruebas actuales usan dobles o adaptadores en memoria.
-
-## 9. Brechas y riesgos actuales
-
-### Bloqueantes para ejecutar el producto
-
-1. No existe `bootstrap` o composition root que instancie y conecte los módulos.
-2. No existe aplicación API ni proceso de entrada.
-3. No existe módulo/adaptador de telefonía (Asterisk/ARI).
-4. No existe proveedor real de IA/voz.
-5. No existe repositorio persistente conectado; SQLite en `data/` no es usado por `src/`.
-6. No existe adaptador de calendario externo real.
-7. No existe configuración/secretos por entorno y tenant.
-
-### Importantes antes de producción
-
-- Observabilidad estructurada y correlación por `callId`/`tenantId` no implementadas.
-- No hay migraciones ni esquema de base de datos versionado.
-- El guard de concurrencia en memoria sólo protege un proceso y bloquea por empleado completo, no por intervalo.
-- Los registros de llamada se guardan sólo en memoria y no incluyen historial de transiciones.
-- Los timestamps de transiciones usan el `occurredAt` del evento inicial durante el arranque, no un reloj de aplicación.
-- Un fallo durante el arranque de llamada no aplica una rutina única de compensación para todos los recursos abiertos.
-- La transferencia humana no actualiza el estado de `calls`.
-- `reschedule_appointment` existe en dominio, pero no está expuesto como tool del agente.
-- No hay autenticación/autorización de dashboard ni política implementada de privacidad de audio/transcripciones.
-- `dashboard/dist` es un artefacto compilado sin código fuente mantenible en este repositorio.
-- README y estructura objetivo están desactualizados respecto al código real.
-
-## 10. Diseño objetivo inmediato
-
-El siguiente hito debe conservar el monolito modular y añadir una capa exterior pequeña:
-
-```text
-apps/api o src/bootstrap
-  ├── configuración
-  ├── construcción de repositorios/adaptadores
-  ├── wiring de servicios
-  ├── lifecycle/shutdown
-  └── endpoints/webhooks de entrada
-```
-
-La infraestructura concreta implementa los puertos actuales. Si un puerto no alcanza, primero se registra el cambio de contrato/ADR y luego se adapta a consumidores e implementaciones.
-
+Business persistence rejects effective calendar-ID changes referenced by non-cancelled
+appointments, including pending and failed rows. SQLite performs the reference read
+and write in one transaction; in-memory storage uses a synchronous reference reader.
+Full-document and targeted updates share this rule. No Google event migration or
+schema change is introduced; see [route protection](BOOKED_CALENDAR_ROUTES.md).

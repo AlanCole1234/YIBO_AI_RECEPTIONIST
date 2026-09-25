@@ -1,3 +1,4 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import type { AgentDefinitionFactory } from "../../agents/index.js";
 import type {
@@ -15,6 +16,7 @@ import type {
 const terminalStates = new Set<CallState>(["COMPLETED", "FAILED", "TRANSFERRED"]);
 
 export class CallOrchestratorService implements CallOrchestrator {
+  private readonly incomingCalls = new Map<string, Promise<void>>();
   private readonly sessions = new Map<string, ConversationSession>();
 
   constructor(
@@ -29,8 +31,18 @@ export class CallOrchestratorService implements CallOrchestrator {
   ) {}
 
   async handleTelephonyEvent(event: TelephonyEvent): Promise<void> {
-    if (event.type === "INCOMING_CALL") return this.handleIncoming(event);
-    if (event.type === "CALL_HUNG_UP") return this.shutdown(event.callId, event.occurredAt);
+    if (event.type === "INCOMING_CALL") {
+      const existing = this.incomingCalls.get(event.callId);
+      if (existing) return existing;
+      const starting = this.handleIncoming(event).finally(() => this.incomingCalls.delete(event.callId));
+      this.incomingCalls.set(event.callId, starting);
+      return starting;
+    }
+    if (event.type === "CALL_HUNG_UP") {
+      try { await this.incomingCalls.get(event.callId); }
+      finally { await this.shutdown(event.callId, event.occurredAt); }
+      return;
+    }
     // DTMF is persisted by the telephony implementation if required; it does not alter call state.
   }
 
@@ -41,15 +53,16 @@ export class CallOrchestratorService implements CallOrchestrator {
   private async handleIncoming(event: Extract<TelephonyEvent, { type: "INCOMING_CALL" }>): Promise<void> {
     if (await this.calls.findByCallId(event.callId)) return;
 
-    const business = await this.businessDirectory.getBusinessByCalledNumber(event.to);
-    if (!business.ok) {
+    const location = await this.businessDirectory.resolveLocationByCalledNumber(event.to);
+    if (!location.ok) {
       await this.telephony.hangup(event.callId);
       return;
     }
 
     const record: CallRecord = {
       callId: event.callId,
-      tenantId: business.value.tenantId,
+      tenantId: location.value.tenantId,
+      locationId: location.value.locationId,
       from: event.from,
       to: event.to,
       state: "RINGING",
@@ -57,6 +70,7 @@ export class CallOrchestratorService implements CallOrchestrator {
       updatedAt: event.occurredAt,
     };
     await this.calls.create(record);
+    operationalLog("call.started", {}, record);
 
     const answered = await this.telephony.answer(event.callId);
     if (!answered.ok) return this.fail(record.callId, event.occurredAt);
@@ -70,6 +84,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     const agent = await this.agents.prepare({
       callId: record.callId,
       tenantId: record.tenantId,
+      locationId: record.locationId,
       customerId: customer.value.id,
       ...(this.developerTestModeAuthorized ? { developerTestModeAuthorized: true as const } : {}),
     });
@@ -93,17 +108,32 @@ export class CallOrchestratorService implements CallOrchestrator {
 
     this.sessions.set(record.callId, conversation);
     await this.transition(record.callId, "IN_CONVERSATION", event.occurredAt);
+    void conversation.completed.then(async completion => {
+      operationalLog("call.session_ended", { phase: completion.status }, record);
+      if (this.sessions.get(record.callId) !== conversation) return;
+      this.sessions.delete(record.callId);
+      try { await conversation.close(); }
+      finally {
+        const latest = await this.calls.findByCallId(record.callId);
+        if (latest && !terminalStates.has(latest.state) && latest.state !== "TRANSFERRING") {
+          await this.transition(record.callId, completion.status === "failed" ? "FAILED" : "COMPLETED", new Date().toISOString());
+          await this.telephony.hangup(record.callId);
+        }
+      }
+    }).catch(() => operationalLog("call.cleanup.failed", {}, record));
   }
 
   private async shutdown(callId: string, occurredAt: string): Promise<void> {
     const record = await this.calls.findByCallId(callId);
-    if (!record || terminalStates.has(record.state)) return;
+    if (!record) return;
+    operationalLog("call.hangup", {}, record);
 
     const session = this.sessions.get(callId);
     if (session) {
-      await session.close();
       this.sessions.delete(callId);
+      await session.close();
     }
+    if (terminalStates.has(record.state)) return;
     await this.transition(callId, "COMPLETED", occurredAt);
   }
 

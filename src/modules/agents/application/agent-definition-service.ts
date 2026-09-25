@@ -7,12 +7,18 @@ import type {
   PrepareAgentDefinitionCommand,
   ToolExecutor,
 } from "./contracts.js";
-import { AGENT_TOOL_DEFINITIONS } from "./tool-definitions.js";
+import { AGENT_TOOL_DEFINITIONS, isDeveloperTestTool } from "./tool-definitions.js";
+import { resolvedAiCapabilities, type BusinessDirectory, type LocationAiCapabilities } from "../../business/index.js";
+import { AgentPromptCompiler } from "./agent-prompt-compiler.js";
+import { PolicyEnforcingToolExecutor } from "./policy-enforcing-tool-executor.js";
+import { ConfirmationGateToolExecutor } from "./confirmation-gate-tool-executor.js";
 
 export class AgentDefinitionService implements AgentDefinitionFactory {
   constructor(
     private readonly configuration: AgentConfigurationSource,
     private readonly toolExecutor: ToolExecutor,
+    private readonly businesses: BusinessDirectory,
+    private readonly prompts: AgentPromptCompiler = new AgentPromptCompiler(),
   ) {}
 
   async prepare(command: PrepareAgentDefinitionCommand) {
@@ -20,23 +26,73 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     if (!configuration) {
       return failure<AgentDefinitionError>({ code: "CONFIGURATION_NOT_FOUND" });
     }
+    const location = await this.businesses.getLocation(command.tenantId, command.locationId);
+    if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
+
+    const channel = command.developerTestModeAuthorized ? "voice_lab" : "phone";
+    if (channel === "phone" && configuration.audio.turnDetection.type === "manual") {
+      return failure<AgentDefinitionError>({ code: "CHANNEL_CONFIGURATION_INCOMPATIBLE" });
+    }
+    const channelPolicy = configuration.toolPolicies.channels[channel];
+    const businessCapabilities = resolvedAiCapabilities(location.value.location);
+    const behavior = structuredClone(configuration.behavior);
+    if (!businessCapabilities.offerAlternatives) behavior.slotOffering.maximumOptions = 1;
+    if (!businessCapabilities.offerEarliest && behavior.slotOffering.strategy === "earliest_first") {
+      behavior.slotOffering.strategy = "match_requested_time";
+    }
+    const channelTools = new Set(channelPolicy.toolChoice === "none" ? [] : channelPolicy.enabledTools);
+    const tools = AGENT_TOOL_DEFINITIONS.filter((tool) =>
+      isDeveloperTestTool(tool.name)
+        ? command.developerTestModeAuthorized && channelPolicy.toolChoice !== "none"
+        : configuration.enabledTools.includes(tool.name) && channelTools.has(tool.name)
+          && capabilityAllowsTool(tool.name, businessCapabilities),
+    );
+    const instructions = this.prompts.compile({
+      editableInstructions: configuration.identity.instructions,
+      locale: configuration.identity.locale,
+      businessName: location.value.business.name,
+      locationName: location.value.location.name,
+      locationTimezone: location.value.location.timezone,
+      enabledTools: tools.map(({ name }) => name),
+      confirmationRequiredFor: configuration.toolPolicies.confirmations.requiredFor
+        .filter((name) => tools.some((tool) => tool.name === name)),
+      behavior,
+      priceDisclosureAllowed: businessCapabilities.quotePrices,
+      emailCollectionAllowed: businessCapabilities.collectEmail,
+      afterHoursBehavior: businessCapabilities.afterHoursBehavior,
+    });
 
     const definition: AgentDefinition = {
-      instructions: configuration.instructions,
-      locale: configuration.locale,
-      ...(configuration.voice ? { voice: configuration.voice } : {}),
+      instructions,
+      locale: configuration.identity.locale,
+      voice: configuration.audio.voice,
       conversation: structuredClone(configuration.conversation),
-      tools: AGENT_TOOL_DEFINITIONS.filter((tool) =>
-        isDeveloperTestTool(tool.name)
-          ? command.developerTestModeAuthorized
-          : configuration.enabledTools.includes(tool.name),
+      audio: structuredClone(configuration.audio),
+      behavior,
+      toolChoice: channelPolicy.toolChoice,
+      parallelToolCalls: channelPolicy.parallelToolCalls,
+      channel,
+      tools,
+      toolExecutor: new ConfirmationGateToolExecutor(
+        new PolicyEnforcingToolExecutor(
+          this.toolExecutor,
+          tools.map(({ name }) => name),
+          configuration.toolPolicies,
+        ),
+        configuration.toolPolicies.confirmations.requiredFor,
       ),
-      toolExecutor: this.toolExecutor,
       trustedContext: { ...command },
     };
     return success(definition);
   }
 }
 
-const isDeveloperTestTool = (name: string): boolean =>
-  name === "enable_developer_test_mode" || name === "delete_test_appointments";
+const capabilityAllowsTool = (tool: string, capabilities: LocationAiCapabilities): boolean => {
+  if (tool === "create_appointment") return capabilities.bookAppointments;
+  if (tool === "reschedule_appointment") return capabilities.rescheduleAppointments;
+  if (tool === "cancel_appointment") return capabilities.cancelAppointments;
+  if (tool === "get_service_information") return capabilities.describeServices;
+  if (tool === "update_customer") return capabilities.collectPhone || capabilities.collectEmail;
+  if (tool === "transfer_to_human") return capabilities.transferToHuman;
+  return true;
+};

@@ -1,11 +1,10 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type { GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
+import type { GoogleCalendarAccessStatus, GoogleIntegrationStatus, GoogleToken, GoogleTokenStore } from "./contracts.js";
 
 export interface GoogleOAuthConfig {
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
-  calendarId?: string;
   stateSigningKey?: string;
 }
 
@@ -20,8 +19,12 @@ export class GoogleOAuthService {
 
   async status(tenantId: string): Promise<GoogleIntegrationStatus> {
     const configured = this.isConfigured();
-    const token = configured ? await this.tokens.get(tenantId) : null;
-    return { configured, connected: token !== null, ...(this.config.calendarId ? { calendarId: this.config.calendarId } : {}) };
+    if (!configured) return { configured: false, connected: false };
+    try {
+      return { configured: true, connected: (await this.accessToken(tenantId)) !== null };
+    } catch {
+      return { configured: true, connected: false };
+    }
   }
 
   authorizationUrl(tenantId: string, returnTo: string): string | null {
@@ -67,13 +70,18 @@ export class GoogleOAuthService {
     if (new Date(current.expiresAt).valueOf() > Date.now() + 60_000) return current.accessToken;
     if (!current.refreshToken || !this.isConfigured()) return null;
 
-    const response = await this.fetcher("https://oauth2.googleapis.com/token", {
-      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
-        refresh_token: current.refreshToken, grant_type: "refresh_token",
-      }),
-    });
+    let response: Response;
+    try {
+      response = await this.fetcher("https://oauth2.googleapis.com/token", {
+        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: this.config.clientId!, client_secret: this.config.clientSecret!,
+          refresh_token: current.refreshToken, grant_type: "refresh_token",
+        }),
+      });
+    } catch {
+      return null;
+    }
     if (!response.ok) return null;
     const payload = await response.json() as { access_token?: string; expires_in?: number };
     if (!payload.access_token) return null;
@@ -85,8 +93,50 @@ export class GoogleOAuthService {
     return refreshed.accessToken;
   }
 
+  async verifyCalendarAccess(tenantId: string, calendarId: string): Promise<GoogleCalendarAccessStatus> {
+    if (!this.isConfigured()) return "integration_not_configured";
+    const token = await this.accessToken(tenantId);
+    if (!token) return "disconnected";
+    try {
+      const timeMin = new Date();
+      const timeMax = new Date(timeMin.valueOf() + 60_000);
+      const response = await this.fetcher("https://www.googleapis.com/calendar/v3/freeBusy", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          timeZone: "UTC",
+          items: [{ id: calendarId }],
+        }),
+      });
+      if (response.status === 403) {
+        const payload = await response.json().catch(() => null) as {
+          error?: { errors?: Array<{ reason?: string }> };
+        } | null;
+        return payload?.error?.errors?.some(({ reason }) => reason === "accessNotConfigured")
+          ? "api_not_enabled"
+          : "forbidden";
+      }
+      if (response.status === 404) return "not_found";
+      if (response.status === 401) return "disconnected";
+      if (!response.ok) return "unavailable";
+      const payload = await response.json() as {
+        calendars?: Record<string, { errors?: Array<{ reason?: string }> }>;
+      };
+      const calendar = payload.calendars?.[calendarId] ?? Object.values(payload.calendars ?? {})[0];
+      if (!calendar) return "unavailable";
+      const reasons = calendar.errors?.map(({ reason }) => reason) ?? [];
+      if (reasons.includes("notFound")) return "not_found";
+      if (reasons.includes("forbidden")) return "forbidden";
+      return reasons.length === 0 ? "accessible" : "unavailable";
+    } catch {
+      return "unavailable";
+    }
+  }
+
   private isConfigured(): boolean {
-    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.calendarId && this.config.stateSigningKey);
+    return Boolean(this.config.clientId && this.config.clientSecret && this.config.redirectUri && this.config.stateSigningKey);
   }
 
   private signState(value: AuthorizationState): string {

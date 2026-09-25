@@ -1,6 +1,8 @@
+import { operationalLog } from "../../../shared/observability/operational-log.js";
 import OpenAI from "openai";
 import { OpenAIRealtimeWS } from "openai/realtime/ws";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
+import type { ConversationToolName } from "../ports/conversation-runtime-port.js";
 import type {
   ConversationRuntimeEvent,
   AssistantPlaybackPosition,
@@ -10,16 +12,18 @@ import type {
   ToolResultEnvelope,
 } from "../ports/conversation-runtime-port.js";
 import type { AudioFrame } from "../ports/conversation-runtime-port.js";
-
-const DEFAULT_MAX_OUTPUT_TOKENS = 512;
-const DEFAULT_VAD_SILENCE_DURATION_MS = 800;
-const DEFAULT_IDLE_TIMEOUT_MS = 6_000;
+import { REALTIME_AUDIO_TRANSPORT } from "../domain/realtime-transport-profile.js";
+import { buildRealtimeSessionUpdate } from "./realtime-session-payload.js";
 
 export interface OpenAIRealtimeAdapterOptions {
   apiKey: string;
+  /** @deprecated Session model comes from AgentConfiguration. */
   model?: string;
+  /** @deprecated Session output limit comes from AgentConfiguration. */
   maxOutputTokens?: number;
+  /** @deprecated Test-only fallback. Product channels resolve their modality from trusted server context. */
   mode?: "text" | "audio";
+  /** @deprecated Session VAD comes from AgentConfiguration. */
   turnDetection?: ServerTurnDetectionOptions;
   logger?: RealtimeErrorLogger;
   connectionFactory?: RealtimeConnectionFactory;
@@ -50,35 +54,23 @@ export interface RealtimeConnection {
 }
 
 export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
-  private readonly model: string;
-  private readonly maxOutputTokens: number;
-  private readonly mode: "text" | "audio";
-  private readonly turnDetection: ServerTurnDetectionOptions;
+  private readonly fallbackMode: "text" | "audio";
   private readonly logger: RealtimeErrorLogger;
   private readonly connectionFactory: RealtimeConnectionFactory;
 
   constructor(private readonly options: OpenAIRealtimeAdapterOptions) {
     if (!options.apiKey.trim()) throw new Error("OpenAIRealtimeAdapter requires an API key");
-    this.model = options.model?.trim() || "gpt-realtime-2.1";
-    this.maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
-    this.mode = options.mode ?? "audio";
-    this.turnDetection = validateTurnDetection(options.turnDetection ?? {});
-    if (!Number.isInteger(this.maxOutputTokens) || this.maxOutputTokens < 1 || this.maxOutputTokens > 4096) {
-      throw new Error("maxOutputTokens must be an integer between 1 and 4096");
-    }
+    this.fallbackMode = options.mode ?? "audio";
     this.logger = options.logger ?? consoleLogger;
     this.connectionFactory = options.connectionFactory ?? sdkConnectionFactory;
   }
 
   async openSession(input: OpenConversationInput): Promise<ConversationRuntimeSession> {
-    const model = input.agent.conversation.model || this.model;
-    const maxOutputTokens = input.agent.conversation.maxOutputTokens || this.maxOutputTokens;
-    const turnDetection = validateTurnDetection(input.agent.conversation.turnDetection);
-    const threshold = turnDetection.threshold ?? this.turnDetection.threshold;
-    const prefixPaddingMs = turnDetection.prefixPaddingMs ?? this.turnDetection.prefixPaddingMs;
-    const silenceDurationMs = turnDetection.silenceDurationMs ?? this.turnDetection.silenceDurationMs ?? DEFAULT_VAD_SILENCE_DURATION_MS;
+    const model = input.agent.conversation.model;
+    const mode = input.agent.channel ? REALTIME_AUDIO_TRANSPORT.modality : this.fallbackMode;
+    const sessionUpdate = buildRealtimeSessionUpdate(input.agent, mode);
     let connection: RealtimeConnection;
-    this.logger.info?.("OpenAI Realtime connection starting", { model, mode: this.mode });
+    this.logger.info?.("OpenAI Realtime connection starting", { model, mode });
     try {
       connection = await this.connectionFactory.connect({
         apiKey: this.options.apiKey,
@@ -88,76 +80,28 @@ export class OpenAIRealtimeAdapter implements ConversationRuntimePort {
       this.logger.error("OpenAI Realtime WebSocket connection failed", connectionErrorDetails(error));
       throw error;
     }
-    this.logger.info?.("OpenAI Realtime connection established", { model, mode: this.mode });
-    const session = new OpenAIRealtimeSession(connection, input, this.logger, this.mode);
-    connection.send({
-      type: "session.update",
-      session: {
-        type: "realtime",
-        model,
-        output_modalities: [this.mode],
-        instructions: [
-          input.agent.instructions,
-          "Keep responses concise, but always finish the current sentence naturally.",
-          "Speak warmly and conversationally, with natural phrasing and without sounding scripted.",
-          input.agent.tools.some((tool) => tool.name === "check_availability")
-            ? "You have authorized access to the clinic calendar only through the provided backend tools. Never claim you cannot access the calendar directly; call check_availability whenever a caller asks about dates or availability. Use the tool result as the sole source of appointment times. Do not ask callers for service IDs or internal names. Use the optional patient-facing service field only for Cleaning or Consultation; omit it to use the clinic default. If a tool result says requestedTimeAvailable is true, clearly say that time is available; if false, say it is unavailable and offer earliestSlot. Never reveal why a time is busy or any other patient's details."
-            : "Do not claim calendar access when a calendar tool is not provided.",
-          "For a new booking, first ask exactly one question: 'What day would you like to come in?' Do not ask for a time of day, service, or personal details first. For supported natural dates, call check_availability with dateExpression; it resolves the actual date in the clinic timezone and checks the real Google Calendar. Offer only earliestSlot first, in one short sentence. After the caller accepts, collect the required contact details when update_customer is available, then use create_appointment and only confirm it after the tool succeeds. When a verified caller asks to reschedule a current appointment, check the requested new time first and use reschedule_appointment only with the known appointment ID and a verified slot. After an idle caller turn, offer one gentle, brief prompt; do not repeatedly prompt when the caller remains silent.",
-          input.agent.tools.some((tool) => tool.name === "update_customer")
-            ? "After the caller accepts a verified time, ask exactly one question at a time: first 'What's your first and last name?', then 'What's the best phone number to reach you?', then 'Is this for a cleaning or a consultation?'. After name and phone are collected, call update_customer. Use the caller's Cleaning or Consultation answer as the service argument for create_appointment; never expose IDs. Do not ask for symptoms or medical details."
-            : "",
-          input.agent.tools.some((tool) => tool.name === "enable_developer_test_mode")
-            ? "This is an authorized local Developer Test Mode session. When the developer says 'test mode', call enable_developer_test_mode and say it is enabled only after success. In Test Mode, use the normal check_availability and create_appointment tools, but skip patient questions. For an available slot, create it as the supplied test customer and state the exact time only after success. Use delete_test_appointments only when asked to remove this session's test bookings."
-            : "",
-        ].filter(Boolean).join("\n"),
-        ...(this.mode === "audio" ? {
-          audio: {
-            input: {
-              format: { type: "audio/pcm", rate: 24_000 },
-              noise_reduction: { type: "near_field" },
-              turn_detection: {
-                type: this.turnDetection.type ?? "server_vad",
-                create_response: true,
-                interrupt_response: true,
-                idle_timeout_ms: DEFAULT_IDLE_TIMEOUT_MS,
-                ...(threshold === undefined ? {} : { threshold }),
-                ...(prefixPaddingMs === undefined ? {} : { prefix_padding_ms: prefixPaddingMs }),
-                ...(silenceDurationMs === undefined ? {} : { silence_duration_ms: silenceDurationMs }),
-              },
-            },
-            output: {
-              format: { type: "audio/pcm", rate: 24_000 },
-              voice: input.agent.voice ?? "marin",
-            },
-          },
-        } : {}),
-        tools: input.agent.tools.map((tool) => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-        })),
-        tool_choice: "auto",
-        parallel_tool_calls: false,
-        max_output_tokens: maxOutputTokens,
-        reasoning: { effort: input.agent.conversation.reasoningEffort },
-        tracing: null,
-      },
-    });
+    this.logger.info?.("OpenAI Realtime connection established", { model, mode });
+    const session = new OpenAIRealtimeSession(connection, input, this.logger, mode);
+    connection.send(sessionUpdate);
+    if (input.agent.behavior.greeting.mode === "automatic") {
+      connection.send({
+        type: "response.create",
+        response: {
+          instructions: `Use the language and regional pronunciation required by locale ${JSON.stringify(input.agent.locale)}. Say exactly this greeting and add nothing else: ${JSON.stringify(input.agent.behavior.greeting.message)}.`,
+        },
+      });
+      this.logger.info?.("OpenAI Realtime automatic greeting requested");
+    }
     this.logger.info?.("OpenAI Realtime session.update sent", {
       model,
-      mode: this.mode,
-      outputAudioFormat: this.mode === "audio" ? "pcm_s16le/24000/mono" : undefined,
-      turnDetection: this.mode === "audio" ? {
-        type: this.turnDetection.type ?? "server_vad",
-        createResponse: true,
-        interruptResponse: true,
-        idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
-        ...(threshold === undefined ? {} : { threshold }),
-        ...(prefixPaddingMs === undefined ? {} : { prefixPaddingMs }),
-        ...(silenceDurationMs === undefined ? {} : { silenceDurationMs }),
-      } : undefined,
+      mode,
+      outputAudioFormat: mode === "audio"
+        ? `${REALTIME_AUDIO_TRANSPORT.codec}/${REALTIME_AUDIO_TRANSPORT.sampleRate}/mono`
+        : undefined,
+      turnDetection: mode === "audio" ? input.agent.audio.turnDetection : undefined,
+      noiseReduction: mode === "audio" ? input.agent.audio.noiseReduction : undefined,
+      tracing: input.agent.conversation.tracing,
+      truncation: input.agent.conversation.truncation.mode,
     });
     return session;
   }
@@ -167,13 +111,22 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
   private readonly queue = new AsyncEventQueue<ConversationRuntimeEvent>();
   private readonly allowedTools: Set<string>;
   private closed = false;
+  private endingCall = false;
+  private suppressedEndResponseId?: string;
   private readonly audioContentIndexes = new Map<string, number>();
   private readonly truncatedAssistantTurns = new Set<string>();
   private state: RealtimeTurnState = "listening";
   private activeResponseId?: string;
   private toolResponsePending = false;
+  private responseRequested = false;
+  private readonly deliveredToolResults = new Set<string>();
+  private readonly automaticTurnResponse: boolean;
   private inputAudioFrames = 0;
   private callerIsSpeaking = false;
+  private readonly behavior: OpenConversationInput["agent"]["behavior"];
+  private readonly automaticSilenceResponse: boolean;
+  private silencePromptCount = 0;
+  private suppressNextSilenceResponse = false;
 
   constructor(
     private readonly connection: RealtimeConnection,
@@ -182,12 +135,18 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     private readonly mode: "text" | "audio",
   ) {
     this.allowedTools = new Set(input.agent.tools.map((tool) => tool.name));
+    this.behavior = structuredClone(input.agent.behavior);
+    this.automaticTurnResponse = input.agent.audio.turnDetection.type !== "manual"
+      && input.agent.audio.turnDetection.createResponse;
+    this.automaticSilenceResponse = input.agent.audio.turnDetection.type === "server_vad"
+      && input.agent.audio.turnDetection.createResponse;
     connection.onEvent((event) => this.handleEvent(event));
     connection.onError((error) => this.handleError(error));
     connection.onClose((reason) => this.finish(reason));
   }
 
   async sendText(text: string): Promise<void> {
+    this.endingCall = false;
     const normalized = text.trim();
     if (!normalized) throw new Error("Conversation text must not be empty");
     this.assertOpen();
@@ -200,6 +159,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       },
     });
     this.logger.info?.("OpenAI Realtime response.create sent", { source: "text_turn" });
+    this.responseRequested = true;
     this.connection.send({ type: "response.create" });
     this.setState("thinking", { source: "text_turn" });
   }
@@ -209,7 +169,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     if (this.mode !== "audio") {
       throw new Error("OpenAIRealtimeAdapter is configured for text-only input and output");
     }
-    if (frame.codec !== "pcm_s16le" || frame.sampleRate !== 24_000 || frame.channels !== 1) {
+    if (frame.codec !== REALTIME_AUDIO_TRANSPORT.codec
+      || frame.sampleRate !== REALTIME_AUDIO_TRANSPORT.sampleRate
+      || frame.channels !== REALTIME_AUDIO_TRANSPORT.channels) {
       throw new Error("OpenAI Realtime audio requires mono pcm_s16le at 24000 Hz");
     }
     this.connection.send({
@@ -228,8 +190,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     }
   }
 
-  async sendToolResult(result: ToolResultEnvelope): Promise<void> {
+  async sendToolResult(result: ToolResultEnvelope, options?: { requestResponse: boolean }): Promise<void> {
     this.assertOpen();
+    if (this.deliveredToolResults.has(result.toolCallId)) return;
     this.connection.send({
       type: "conversation.item.create",
       item: {
@@ -240,21 +203,24 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
           : { ok: false, error: result.error }),
       },
     });
-    if (this.callerIsSpeaking) {
-      this.logger.info?.("OpenAI Realtime tool result will be included in the caller's next server-VAD response", { state: this.state });
-      return;
-    }
-    if (this.activeResponseId) {
-      this.toolResponsePending = true;
-      this.logger.info?.("OpenAI Realtime tool result queued until the active response completes", { state: this.state });
-      return;
-    }
+    this.deliveredToolResults.add(result.toolCallId);
+    if (options?.requestResponse === false) { this.endingCall = true; return; }
+    this.endingCall = false;
+    this.toolResponsePending = true;
+    this.flushToolResponse();
+  }
+
+  private flushToolResponse(): void {
+    if (!this.toolResponsePending || this.callerIsSpeaking || this.activeResponseId || this.responseRequested) return;
+    this.toolResponsePending = false;
+    this.responseRequested = true;
     this.connection.send({ type: "response.create" });
     this.logger.info?.("OpenAI Realtime response.create sent", { source: "tool_result" });
     this.setState("thinking", { source: "tool_result" });
   }
 
   async interrupt(position?: AssistantPlaybackPosition): Promise<void> {
+    this.endingCall = false;
     this.assertOpen();
     // With interrupt_response=true, OpenAI cancels the response on VAD speech start.
     // We only synchronize the amount of audio the caller actually heard.
@@ -288,6 +254,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   private handleEvent(value: unknown): void {
     if (this.closed || !isRecord(value) || typeof value.type !== "string") return;
+    if (this.suppressedEndResponseId && value.response_id === this.suppressedEndResponseId) return;
     this.logger.info?.("OpenAI Realtime event received", eventLogDetails(value));
     switch (value.type) {
       case "session.created":
@@ -302,6 +269,15 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       case "input_audio_buffer.timeout_triggered":
         this.logger.info?.("OpenAI Realtime idle timeout triggered", eventLogDetails(value));
         this.queue.push({ type: "silence.timeout" });
+        if (!this.automaticSilenceResponse) return;
+        if (this.silencePromptCount >= this.behavior.silence.maxPrompts) {
+          this.suppressNextSilenceResponse = true;
+          this.logger.info?.("OpenAI Realtime silence prompt limit reached", {
+            maxPrompts: this.behavior.silence.maxPrompts,
+          });
+        } else {
+          this.silencePromptCount += 1;
+        }
         return;
       case "response.output_text.delta":
         if (typeof value.delta === "string") {
@@ -323,9 +299,9 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
             assistantTurnId: value.item_id,
             frame: {
               data: Buffer.from(value.delta, "base64"),
-              codec: "pcm_s16le",
-              sampleRate: 24_000,
-              channels: 1,
+              codec: REALTIME_AUDIO_TRANSPORT.codec,
+              sampleRate: REALTIME_AUDIO_TRANSPORT.sampleRate,
+              channels: REALTIME_AUDIO_TRANSPORT.channels,
             },
           });
           this.setState("assistant_speaking", { assistantTurnId: value.item_id });
@@ -349,8 +325,11 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.handleToolCall(value);
         return;
       case "input_audio_buffer.speech_started":
+        this.endingCall = false;
         this.logger.info?.("OpenAI Realtime speech started", eventLogDetails(value));
         this.callerIsSpeaking = true;
+        this.silencePromptCount = 0;
+        this.suppressNextSilenceResponse = false;
         this.setState("user_speaking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_started" });
         return;
@@ -359,31 +338,47 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
         this.callerIsSpeaking = false;
         this.setState("thinking", { source: "server_vad" });
         this.queue.push({ type: "user.speech_stopped" });
+        if (!this.automaticTurnResponse) this.flushToolResponse();
         return;
       case "response.created":
+        if (this.endingCall) {
+          this.suppressedEndResponseId = isRecord(value.response) && typeof value.response.id === "string" ? value.response.id : undefined;
+          this.connection.send({ type: "response.cancel" });
+          return;
+        }
         this.logger.info?.("OpenAI Realtime response created", eventLogDetails(value));
         this.activeResponseId = responseId(value);
+        // A server-created turn consumes queued results; a locally requested
+        // turn may have been requested before a later result was delivered.
+        if (!this.responseRequested) this.toolResponsePending = false;
+        this.responseRequested = false;
+        if (this.suppressNextSilenceResponse) {
+          this.suppressNextSilenceResponse = false;
+          this.connection.send({ type: "response.cancel" });
+          this.logger.info?.("OpenAI Realtime silence response cancelled", {
+            maxPrompts: this.behavior.silence.maxPrompts,
+          });
+        }
         this.setState("thinking", { ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
         this.queue.push({ type: "assistant.response_created", ...(this.activeResponseId ? { responseId: this.activeResponseId } : {}) });
         return;
       case "response.done":
+        if (isRecord(value.response) && value.response.id === this.suppressedEndResponseId && this.suppressedEndResponseId) {
+          this.suppressedEndResponseId = undefined;
+          return;
+        }
         this.logger.info?.("OpenAI Realtime response done", eventLogDetails(value));
         const status = responseStatus(value);
         if (status === "cancelled") this.logger.info?.("OpenAI Realtime response cancelled", eventLogDetails(value));
         this.activeResponseId = undefined;
-        if (status === "cancelled") this.toolResponsePending = false;
+        this.responseRequested = false;
         // A cancellation can arrive after the caller has already started speaking.
         // Preserve that fact so a late tool result cannot start a competing response.
         this.setState(this.callerIsSpeaking ? "user_speaking" : "listening", { reason: status ?? "done" });
         this.logger.info?.("OpenAI Realtime response state reset", { reason: status ?? "done" });
         this.queue.push({ type: "assistant.response_done", ...(status ? { status } : {}) });
         this.handleUsage(value.response);
-        if (this.toolResponsePending && !this.callerIsSpeaking && status !== "cancelled") {
-          this.toolResponsePending = false;
-          this.connection.send({ type: "response.create" });
-          this.logger.info?.("OpenAI Realtime response.create sent", { source: "queued_tool_result" });
-          this.setState("thinking", { source: "queued_tool_result" });
-        }
+        if (!(this.callerIsSpeaking && this.automaticTurnResponse)) this.flushToolResponse();
         return;
       case "error":
         this.handleProviderEventError(value.error);
@@ -410,7 +405,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     this.queue.push({
       type: "tool.call",
       toolCallId: event.call_id,
-      name: event.name as "check_availability" | "create_appointment" | "update_customer" | "cancel_appointment" | "reschedule_appointment" | "transfer_to_human" | "enable_developer_test_mode" | "delete_test_appointments",
+      name: event.name as ConversationToolName,
       arguments: argumentsValue,
     });
   }
@@ -420,12 +415,20 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     const usage = response.usage;
     const inputDetails = isRecord(usage.input_token_details) ? usage.input_token_details : {};
     const outputDetails = isRecord(usage.output_token_details) ? usage.output_token_details : {};
+    const cachedDetails = isRecord(inputDetails.cached_tokens_details) ? inputDetails.cached_tokens_details : {};
     const output = Array.isArray(response.output) ? response.output : [];
     this.queue.push({
       type: "usage",
       ...(number(usage.input_tokens) ? { inputTokens: usage.input_tokens as number } : {}),
       ...(number(usage.output_tokens) ? { outputTokens: usage.output_tokens as number } : {}),
       ...(number(usage.total_tokens) ? { totalTokens: usage.total_tokens as number } : {}),
+      ...(number(inputDetails.text_tokens) ? { inputTextTokens: inputDetails.text_tokens as number } : {}),
+      ...(number(outputDetails.text_tokens) ? { outputTextTokens: outputDetails.text_tokens as number } : {}),
+      ...(number(inputDetails.audio_tokens) ? { inputAudioTokens: inputDetails.audio_tokens as number } : {}),
+      ...(number(outputDetails.audio_tokens) ? { outputAudioTokens: outputDetails.audio_tokens as number } : {}),
+      ...(number(inputDetails.cached_tokens) ? { cachedInputTokens: inputDetails.cached_tokens as number } : {}),
+      ...(number(cachedDetails.text_tokens) ? { cachedInputTextTokens: cachedDetails.text_tokens as number } : {}),
+      ...(number(cachedDetails.audio_tokens) ? { cachedInputAudioTokens: cachedDetails.audio_tokens as number } : {}),
       ...(number(inputDetails.audio_tokens) ? { inputAudioMs: (inputDetails.audio_tokens as number) * 100 } : {}),
       ...(number(outputDetails.audio_tokens) ? { outputAudioMs: (outputDetails.audio_tokens as number) * 50 } : {}),
       toolCalls: output.filter((item) => isRecord(item) && item.type === "function_call").length,
@@ -479,19 +482,33 @@ class SDKRealtimeConnection implements RealtimeConnection {
   private readonly opened: Promise<void>;
   private eventHandler?: (event: unknown) => void;
   private readonly pendingEvents: unknown[] = [];
+  private errorHandler?: (error: { message: string; code?: string }) => void;
+  private readonly pendingErrors: Array<{ message: string; code?: string }> = [];
 
   constructor(input: { apiKey: string; model: string }) {
     const client = new OpenAI({ apiKey: input.apiKey });
-    this.realtime = new OpenAIRealtimeWS({ model: input.model }, client);
+    this.realtime = new OpenAIRealtimeWS({ model: input.model, options: { handshakeTimeout: 10_000 } }, client);
+    // Attach before awaiting open: the SDK otherwise reports startup errors as
+    // unhandled promise rejections even when the raw socket has an error listener.
+    this.realtime.on("error", (error) => {
+      // Provider error events already travel through the event handler.
+      if (error.error) return;
+      const details = { message: error.message };
+      if (this.errorHandler) this.errorHandler(details);
+      else this.pendingErrors.push(details);
+    });
     this.opened = new Promise((resolve, reject) => {
       const onOpen = () => { cleanup(); resolve(); };
       const onError = (error: Error) => { cleanup(); reject(error); };
+      const onClose = () => { cleanup(); reject(new Error("Realtime connection closed before opening")); };
       const cleanup = () => {
         this.realtime.socket.off("open", onOpen);
         this.realtime.socket.off("error", onError);
+        this.realtime.socket.off("close", onClose);
       };
       this.realtime.socket.once("open", onOpen);
       this.realtime.socket.once("error", onError);
+      this.realtime.socket.once("close", onClose);
     });
     this.realtime.on("event", (event: RealtimeServerEvent) => {
       if (this.eventHandler) this.eventHandler(event);
@@ -517,10 +534,8 @@ class SDKRealtimeConnection implements RealtimeConnection {
   }
 
   onError(handler: (error: { message: string; code?: string }) => void): void {
-    this.realtime.on("error", (error) => handler({
-      message: error.message,
-      ...(error.error?.code ? { code: error.error.code } : {}),
-    }));
+    this.errorHandler = handler;
+    for (const error of this.pendingErrors.splice(0)) handler(error);
   }
 
   onClose(handler: (reason?: string) => void): void {
@@ -537,8 +552,11 @@ const sdkConnectionFactory: RealtimeConnectionFactory = {
 };
 
 const consoleLogger: RealtimeErrorLogger = {
-  info: (message, details) => console.log(message, details ?? {}),
-  error: (message, details) => console.error(message, details ?? {}),
+  info: (message, details) => {
+    if (message === "OpenAI Realtime event received" || message === "OpenAI Realtime input_audio_buffer.append sent") return;
+    operationalLog(`realtime.${message.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, details);
+  },
+  error: (_message, details) => operationalLog("realtime.error", details),
 };
 
 function connectionErrorDetails(error: unknown): { code: string; error: string } {
@@ -634,18 +652,3 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const number = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-
-function validateTurnDetection(options: ServerTurnDetectionOptions): ServerTurnDetectionOptions {
-  if (options.threshold !== undefined && (options.threshold < 0 || options.threshold > 1)) {
-    throw new Error("VAD threshold must be between 0 and 1");
-  }
-  for (const [name, value] of [
-    ["prefixPaddingMs", options.prefixPaddingMs],
-    ["silenceDurationMs", options.silenceDurationMs],
-  ] as const) {
-    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
-      throw new Error(`${name} must be a non-negative integer`);
-    }
-  }
-  return { ...options };
-}

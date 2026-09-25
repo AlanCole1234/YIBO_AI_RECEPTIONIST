@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BusinessDirectoryService,
   InMemoryBusinessRepository,
+  upgradeBusinessProfile,
   type BusinessProfile,
 } from "../../src/modules/business/index.js";
 
@@ -24,8 +25,7 @@ describe("BusinessDirectoryService", () => {
     const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
 
     await expect(service.getBusinessByCalledNumber("+1 303-555-0123")).resolves.toEqual({
-      ok: true,
-      value: profile,
+      ok: true, value: upgradeBusinessProfile(profile),
     });
   });
 
@@ -47,29 +47,72 @@ describe("BusinessDirectoryService", () => {
     });
   });
 
-  it("prevents a service from referencing an employee in another tenant", async () => {
+  it("rejects a cross-tenant professional reference at the in-memory boundary", () => {
     const invalidProfile = {
       ...profile,
       services: [{ ...profile.services[0]!, eligibleEmployeeIds: ["not-in-this-tenant"] }],
     };
-    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([invalidProfile]));
-
-    await expect(service.getBusinessProfile(profile.tenantId)).resolves.toMatchObject({
-      ok: false,
-      error: { code: "BUSINESS_CONFIGURATION_INVALID" },
-    });
+    expect(() => new InMemoryBusinessRepository([invalidProfile]))
+      .toThrow("unknown professional not-in-this-tenant");
   });
 
   it("saves a valid IANA timezone and rejects an invalid one", async () => {
     const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
 
-    await expect(service.updateBusinessTimezone(profile.tenantId, "America/Denver")).resolves.toEqual({
-      ok: true,
-      value: { ...profile, timezone: "America/Denver" },
+    await expect(service.updateBusinessTimezone(profile.tenantId, "America/Denver")).resolves.toMatchObject({
+      ok: true, value: { locations: [{ id: "default", timezone: "America/Denver" }] },
     });
     await expect(service.updateBusinessTimezone(profile.tenantId, "Not/A-Timezone")).resolves.toMatchObject({
       ok: false,
       error: { code: "BUSINESS_CONFIGURATION_INVALID" },
+    });
+  });
+
+  it("resolves tenant and location exclusively from the called number", async () => {
+    const multiLocation = upgradeBusinessProfile(profile);
+    const north = structuredClone(multiLocation.locations[0]!);
+    north.id = "north";
+    north.name = "North";
+    north.timezone = "America/Chicago";
+    north.calledNumbers = ["+13125550123"];
+    multiLocation.locations.push(north);
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([multiLocation]));
+
+    await expect(service.resolveLocationByCalledNumber("+1 312 555 0123")).resolves.toMatchObject({
+      ok: true,
+      value: {
+        tenantId: profile.tenantId,
+        locationId: "north",
+        location: { timezone: "America/Chicago" },
+      },
+    });
+    await expect(service.getLocation(profile.tenantId, "missing")).resolves.toEqual({
+      ok: false,
+      error: { code: "LOCATION_NOT_FOUND" },
+    });
+  });
+
+  it("uses optimistic versions for complete administrative updates", async () => {
+    const service = new BusinessDirectoryService(new InMemoryBusinessRepository([profile]));
+    const current = await service.getBusinessConfiguration(profile.tenantId);
+    if (!current.ok) throw new Error("Expected business configuration");
+
+    const first = await service.updateBusinessConfiguration(profile.tenantId, {
+      ...current.value.configuration,
+      name: "SmileLine Updated",
+    }, current.value.version);
+    expect(first).toMatchObject({
+      ok: true,
+      value: { version: 2, configuration: { name: "SmileLine Updated" } },
+    });
+
+    await expect(service.updateBusinessConfiguration(
+      profile.tenantId,
+      current.value.configuration,
+      current.value.version,
+    )).resolves.toEqual({
+      ok: false,
+      error: { code: "CONFIGURATION_VERSION_CONFLICT", currentVersion: 2 },
     });
   });
 });

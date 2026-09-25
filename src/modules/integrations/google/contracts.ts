@@ -12,5 +12,13 @@ export interface GoogleTokenStore {
 export interface GoogleIntegrationStatus {
   configured: boolean;
   connected: boolean;
-  calendarId?: string;
 }
+
+export type GoogleCalendarAccessStatus =
+  | "accessible"
+  | "integration_not_configured"
+  | "api_not_enabled"
+  | "disconnected"
+  | "forbidden"
+  | "not_found"
+  | "unavailable";

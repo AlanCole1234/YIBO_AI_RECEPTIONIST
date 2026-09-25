@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import type { AgentDefinition, AgentToolResult, ToolExecutor } from "../../src/modules/agents/index.js";
+import { operationalLog } from "../../src/shared/observability/operational-log.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
   ConversationService,
   ScriptedConversationRuntime,
@@ -9,6 +10,7 @@ import {
 
 const trustedContext = {
   tenantId: "tenant-1",
+  locationId: "default",
   callId: "call-1",
   customerId: "customer-1",
 };
@@ -36,7 +38,18 @@ function fixture(inboundAudio: AsyncIterable<AudioFrame> = stream()) {
     instructions: "Help the caller safely.",
     locale: "es-MX",
     voice: "neutral",
-    conversation: { model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal", turnDetection: {} },
+    conversation: {
+      model: "gpt-realtime-2.1", maxOutputTokens: 512, reasoningEffort: "minimal",
+      tracing: "disabled", truncation: { mode: "auto" },
+    },
+    audio: {
+      voice: "neutral", noiseReduction: "near_field",
+      turnDetection: { type: "server_vad", createResponse: true, interruptResponse: true },
+    },
+    behavior: structuredClone(DEFAULT_AGENT_BEHAVIOR),
+    toolChoice: "auto",
+    parallelToolCalls: false,
+    channel: "phone",
     tools: [{
       name: "check_availability",
       description: "Find available appointment times",
@@ -68,6 +81,28 @@ const start = (value: ReturnType<typeof fixture>) => value.service.start({
 });
 
 describe("ConversationService", () => {
+  it("correlates tool diagnostics and emits one summary on cleanup without caller content", async () => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+    const value = fixture();
+    value.execute.mockImplementation(async (_context, call) => {
+      await Promise.resolve();
+      operationalLog("calendar.test", { transcript: "private caller words", calendarId: "private@example.com" });
+      return { toolCallId: call.toolCallId, ok: false, error: { code: "CONFIRMATION_REQUIRED", messageForAgent: "private caller words", retryable: false } };
+    });
+    const session = await start(value);
+    try {
+      value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "secret-tool-id", name: "create_appointment", arguments: { name: "Patient Secret" } });
+      await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toHaveLength(1));
+      await session.close(); await session.close();
+      const records = logged.mock.calls.map(([line]) => JSON.parse(String(line)));
+      const tool = records.find(record => record.event === "calendar.test");
+      const summary = records.filter(record => record.event === "conversation.latency_summary" && record.metric === "session_duration");
+      expect(summary).toHaveLength(1); expect(tool.call).toBe(summary[0].call); expect(tool.tenant).toBe(summary[0].tenant);
+      expect(records.some(record => record.event === "conversation.confirmation")).toBe(true);
+      expect(JSON.stringify(records)).not.toMatch(/private caller words|private@example.com|Patient Secret|secret-tool-id/);
+    } finally { await session.close(); logged.mockRestore(); }
+  });
+
   it("opens one runtime session and moves audio in both directions without assuming a codec", async () => {
     const inbound = [audio(1, "audio/custom-a"), audio(2, "audio/custom-b")];
     const value = fixture(stream(...inbound));
@@ -80,6 +115,11 @@ describe("ConversationService", () => {
         locale: value.agent.locale,
         voice: value.agent.voice,
         conversation: value.agent.conversation,
+        audio: value.agent.audio,
+        behavior: value.agent.behavior,
+        toolChoice: value.agent.toolChoice,
+        parallelToolCalls: value.agent.parallelToolCalls,
+        channel: value.agent.channel,
         tools: value.agent.tools,
       },
     }]);
@@ -98,6 +138,7 @@ describe("ConversationService", () => {
     const value = fixture();
     const session = await start(value);
 
+    value.runtime.latestSession.emit({ type: "user.speech_started" });
     value.runtime.latestSession.emit({
       type: "tool.call",
       toolCallId: "tool-42",
@@ -105,7 +146,7 @@ describe("ConversationService", () => {
       arguments: { serviceId: "service-1" },
     });
 
-    await eventually(() => expect(value.execute).toHaveBeenCalledWith(trustedContext, {
+    await eventually(() => expect(value.execute).toHaveBeenCalledWith({ ...trustedContext, turnSequence: 1 }, {
       toolCallId: "tool-42",
       name: "check_availability",
       arguments: { serviceId: "service-1" },
@@ -116,6 +157,36 @@ describe("ConversationService", () => {
       data: { slots: ["2026-08-26T15:00:00.000Z"] },
     }]));
 
+    await session.close();
+  });
+
+  it("forwards a confirmation token to the runtime without placing it in trusted context", async () => {
+    const value = fixture();
+    value.execute.mockResolvedValueOnce({
+      toolCallId: "mutation-1",
+      ok: false,
+      error: {
+        code: "CONFIRMATION_REQUIRED",
+        messageForAgent: "Ask the caller to confirm.",
+        retryable: false,
+        confirmationToken: "opaque-token",
+      },
+    });
+    const session = await start(value);
+    value.runtime.latestSession.emit({
+      type: "tool.call", toolCallId: "mutation-1", name: "create_appointment", arguments: {},
+    });
+
+    await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toEqual([{
+      toolCallId: "mutation-1",
+      ok: false,
+      error: {
+        code: "CONFIRMATION_REQUIRED",
+        message: "Ask the caller to confirm.",
+        retryable: false,
+        confirmationToken: "opaque-token",
+      },
+    }]));
     await session.close();
   });
 
@@ -289,6 +360,25 @@ describe("ConversationService", () => {
   });
 });
 
+describe("integrated lifecycle deadlines",()=>{
+ it("returns an uncertain mutation once and prevents another mutation after timeout",async()=>{
+  vi.useFakeTimers();const value=fixture();let resolve!: (r:AgentToolResult)=>void;
+  value.execute.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));const session=await start(value);
+  try {
+   value.runtime.latestSession.emit({type:"tool.call",toolCallId:"slow",name:"create_appointment",arguments:{}});
+   await vi.advanceTimersByTimeAsync(12000);
+   expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ok:false,error:{code:"ACTION_OUTCOME_UNKNOWN"}});
+   resolve({toolCallId:"slow",ok:true,data:{}});await vi.advanceTimersByTimeAsync(0);
+   value.runtime.latestSession.emit({type:"tool.call",toolCallId:"retry",name:"create_appointment",arguments:{}});await vi.advanceTimersByTimeAsync(0);
+   expect(value.execute).toHaveBeenCalledTimes(1);expect(value.runtime.latestSession.receivedToolResults).toHaveLength(2);
+  } finally {await session.close();expect(vi.getTimerCount()).toBe(0);vi.useRealTimers();}
+ });
+ it("settles an unexpected runtime stream end",async()=>{
+  const value=fixture();const session=await start(value);await value.runtime.latestSession.close();
+  expect(await session.completed).toMatchObject({status:"closed"});await session.close();expect(value.closeTransport).toHaveBeenCalledTimes(1);
+ });
+});
+
 async function eventually(assertion: () => void): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -302,3 +392,141 @@ async function eventually(assertion: () => void): Promise<void> {
   }
   throw lastError;
 }
+
+
+describe("intentional phone completion", () => {
+  let value: ReturnType<typeof fixture>;
+  let session: Awaited<ReturnType<typeof start>>;
+  let idle: () => void;
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    value = fixture();
+    value.transport.outboundAudio.onPlaybackIdle = callback => { idle = callback; return vi.fn(); };
+    session = await start(value);
+  });
+  afterEach(async () => { await session.close(); vi.useRealTimers(); });
+  const flush = () => vi.advanceTimersByTimeAsync(0);
+  async function farewell() {
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "final" });
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "farewell", frame: audio(1) });
+    await flush();
+  }
+  async function end(id = "end", args: unknown = {}) {
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: id, name: "end_call", arguments: args });
+    await flush();
+  }
+  async function done() {
+    value.runtime.latestSession.emit({ type: "assistant.audio_completed", assistantTurnId: "farewell" });
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "completed" });
+    await flush();
+  }
+
+  it.each([true, false])("waits for final generation and audio drain, idle first=%s", async idleFirst => {
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    await farewell(); await end();
+    if (idleFirst) { idle(); await flush(); } else await done();
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    if (idleFirst) await done(); else idle();
+    await vi.advanceTimersByTimeAsync(19);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await session.completed).toEqual({ status: "closed", reason: "conversation_completed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(delivery).toHaveBeenCalledWith({ toolCallId: "end", ok: true, data: { ending: true } }, { requestResponse: false });
+    expect(value.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(["voice_lab", "disabled", "parallel", "no-playback-signal"])("does not expose call end for %s", async mode => {
+    await session.close();
+    if (mode === "voice_lab") value.agent.channel = "voice_lab";
+    if (mode === "disabled") value.agent.toolChoice = "none";
+    if (mode === "parallel") value.agent.parallelToolCalls = true;
+    if (mode === "no-playback-signal") delete value.transport.outboundAudio.onPlaybackIdle;
+    session = await start(value);
+    expect(value.runtime.openedInputs.at(-1)!.agent.tools.some(tool => tool.name === "end_call")).toBe(false);
+    await farewell(); await end();
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+  });
+
+  it("allows a farewell after a known failed booking without claiming booking success", async () => {
+    value.execute.mockResolvedValue({ toolCallId: "failed-booking", ok: false, error: { code: "CALENDAR_SYNC_FAILED", messageForAgent: "Not booked", retryable: false } });
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "failed-booking", name: "create_appointment", arguments: {} });
+    await flush(); await farewell(); await end(); await done(); idle();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(value.runtime.latestSession.receivedToolResults).toEqual([
+      expect.objectContaining({ ok: false }), { toolCallId: "end", ok: true, data: { ending: true } },
+    ]);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not end an ordinary completed response", async () => {
+    await farewell(); await done(); idle(); await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { callId: "foreign" }, null, []])("rejects an end request without current farewell or with hostile args %j", async args => {
+    if (JSON.stringify(args) !== "{}") await farewell();
+    await end("bad", args);
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("ignores duplicate delivery and acknowledges repeated end IDs without extra speech", async () => {
+    const delivery = vi.spyOn(value.runtime.latestSession, "sendToolResult");
+    await farewell(); await end(); await end(); await end("repeat");
+    expect(delivery).toHaveBeenCalledTimes(2);
+    expect(delivery.mock.calls.every(([, options]) => options?.requestResponse === false)).toBe(true);
+    await done(); idle(); await vi.advanceTimersByTimeAsync(20);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["speech", "text", "interrupt"])("cancels end when caller intervenes through %s", async kind => {
+    await farewell(); await end(); await done(); idle();
+    if (kind === "speech") value.runtime.latestSession.emit({ type: "user.speech_started" });
+    if (kind === "text") await session.sendText("One more question");
+    if (kind === "interrupt") await session.interrupt();
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("does not accept an end request while a booking is pending or uncertain", async () => {
+    value.execute.mockImplementation(() => new Promise(() => {}));
+    await farewell();
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "booking", name: "create_appointment", arguments: {} });
+    await flush(); await farewell(); await end("pending");
+    expect(value.runtime.latestSession.receivedToolResults[0]).toMatchObject({ ok: false });
+    await vi.advanceTimersByTimeAsync(12_001); await farewell(); await end("uncertain");
+    expect(value.runtime.latestSession.receivedToolResults.at(-1)).toMatchObject({ ok: false });
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("waits for the end acknowledgment before closing", async () => {
+    let release!: () => void;
+    vi.spyOn(value.runtime.latestSession, "sendToolResult").mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    await farewell(); await end(); await done(); idle(); await vi.advanceTimersByTimeAsync(30);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    release(); await vi.advanceTimersByTimeAsync(20);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a pending end when the response is cancelled", async () => {
+    await farewell(); await end();
+    value.runtime.latestSession.emit({ type: "assistant.response_done", status: "cancelled" });
+    idle(); await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).not.toHaveBeenCalled();
+  });
+
+  it("bounds missing completion signals and cleans up once", async () => {
+    await farewell(); await end();
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await session.completed).toMatchObject({ status: "failed" });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("caller hangup cancels the end deadline", async () => {
+    await farewell(); await end(); await session.close();
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(value.runtime.latestSession.closeCount).toBe(1);
+  });
+});

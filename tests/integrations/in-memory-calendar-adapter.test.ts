@@ -3,6 +3,7 @@ import { InMemoryCalendarAdapter } from "../../src/modules/integrations/index.js
 
 const event = {
   tenantId: "tenant-smileline",
+  locationId: "default",
   appointmentId: "appointment-1",
   employeeId: "dr-lee",
   title: "Cleaning · Maria Johnson",
@@ -27,7 +28,7 @@ describe("InMemoryCalendarAdapter", () => {
     await calendar.createEvent({ ...event, appointmentId: "appointment-2", employeeId: "dr-patel", idempotencyKey: "second" });
 
     await expect(calendar.getBusyIntervals({
-      tenantId: event.tenantId, employeeId: event.employeeId,
+      tenantId: event.tenantId, locationId: event.locationId, employeeId: event.employeeId,
       rangeStart: "2026-08-10T15:00:00.000Z", rangeEnd: "2026-08-10T17:00:00.000Z",
     })).resolves.toEqual({ ok: true, value: [{ startAt: event.startAt, endAt: event.endAt }] });
   });
@@ -37,10 +38,10 @@ describe("InMemoryCalendarAdapter", () => {
     const created = await calendar.createEvent(event);
     if (!created.ok) throw new Error("Expected event creation to succeed");
 
-    await expect(calendar.cancelEvent({ tenantId: event.tenantId, externalEventId: created.value.externalEventId }))
+    await expect(calendar.cancelEvent({ tenantId: event.tenantId, locationId: event.locationId, employeeId: event.employeeId, externalEventId: created.value.externalEventId }))
       .resolves.toEqual({ ok: true, value: undefined });
     await expect(calendar.getBusyIntervals({
-      tenantId: event.tenantId, employeeId: event.employeeId,
+      tenantId: event.tenantId, locationId: event.locationId, employeeId: event.employeeId,
       rangeStart: "2026-08-10T15:00:00.000Z", rangeEnd: "2026-08-10T17:00:00.000Z",
     })).resolves.toEqual({ ok: true, value: [] });
   });
@@ -50,7 +51,19 @@ describe("InMemoryCalendarAdapter", () => {
     const created = await calendar.createEvent(event);
     if (!created.ok) throw new Error("Expected event creation to succeed");
 
-    await expect(calendar.cancelEvent({ tenantId: "another-tenant", externalEventId: created.value.externalEventId }))
+    await expect(calendar.cancelEvent({ tenantId: "another-tenant", locationId: event.locationId, employeeId: event.employeeId, externalEventId: created.value.externalEventId }))
       .resolves.toEqual({ ok: false, error: { code: "EVENT_NOT_FOUND" } });
+  });
+
+  it("does not report another location's events for a shared professional", async () => {
+    const calendar = new InMemoryCalendarAdapter();
+    await calendar.createEvent(event);
+    await expect(calendar.getBusyIntervals({
+      tenantId: event.tenantId,
+      locationId: "north",
+      employeeId: event.employeeId,
+      rangeStart: "2026-08-10T15:00:00.000Z",
+      rangeEnd: "2026-08-10T17:00:00.000Z",
+    })).resolves.toEqual({ ok: true, value: [] });
   });
 });
