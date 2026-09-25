@@ -31,6 +31,14 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
       .map((appointment) => ({ ...appointment }));
   }
 
+  async findInRange(query: { tenantId: string; locationId: string; rangeStart: string; rangeEnd: string }): Promise<Appointment[]> {
+    return [...this.appointments.values()]
+      .filter(item => item.tenantId === query.tenantId && item.locationId === query.locationId
+        && item.startAt < query.rangeEnd && item.endAt > query.rangeStart)
+      .sort((a, b) => a.startAt.localeCompare(b.startAt) || a.id.localeCompare(b.id))
+      .map(item => ({ ...item }));
+  }
+
   async hasProfessionalReferences(query: { tenantId: TenantId; professionalId: string; locationId?: string }) {
     return [...this.appointments.values()].some((appointment) => appointment.tenantId === query.tenantId
       && appointment.employeeId === query.professionalId

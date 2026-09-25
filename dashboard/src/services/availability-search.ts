@@ -3,6 +3,7 @@ import { api, ApiError, type AvailabilityLocation, type Slot } from "./api.js";
 import { localParts } from "../../../src/modules/scheduling/domain/time.js";
 
 type AvailabilityClient = Pick<typeof api, "appointmentLocations" | "availability" | "createAppointment">;
+export interface AvailabilityPreferences { locationId?: string; serviceId?: string; employeeId?: string; day?: string }
 export const slotKey = (slot: Slot): string => `${slot.employeeId}:${slot.startAt}:${slot.endAt}`;
 
 function parseDay(day: string): Date {
@@ -92,7 +93,7 @@ export function createAvailabilitySearch(client: AvailabilityClient = api, now =
   const stopService = watch(() => state.filters.serviceId, () => { state.filters.employeeId = ""; }, { flush: "sync" });
   const stopFilters = watch(() => Object.values(state.filters), clear, { flush: "sync" });
 
-  async function load() {
+  async function load(preferences?: AvailabilityPreferences) {
     if (state.loadingLocations || state.booking || disposed) return;
     clear(); state.loadingLocations = true; state.metadataError = "";
     try {
@@ -100,9 +101,21 @@ export function createAvailabilitySearch(client: AvailabilityClient = api, now =
       if (disposed) return;
       state.locations = result.locations.filter(item => item.active);
       state.loaded = true;
+      if (preferences?.locationId && state.locations.some(item => item.id === preferences.locationId)) {
+        state.filters.locationId = preferences.locationId;
+      }
       if (!location.value) state.filters.locationId = state.locations[0]?.id ?? "";
+      if (preferences?.serviceId && location.value?.services.some(item => item.id === preferences.serviceId)) {
+        state.filters.serviceId = preferences.serviceId;
+      } else if (preferences?.employeeId && !preferences.serviceId) {
+        state.filters.serviceId = location.value?.services.find(item => item.eligibleEmployeeIds.includes(preferences.employeeId!))?.id ?? "";
+      }
       if (!service.value) state.filters.serviceId = location.value?.services[0]?.id ?? "";
+      if (preferences?.employeeId && professionals.value.some(item => item.id === preferences.employeeId)) {
+        state.filters.employeeId = preferences.employeeId;
+      }
       if (!professionals.value.some(item => item.id === state.filters.employeeId)) state.filters.employeeId = "";
+      if (preferences?.day) state.filters.day = preferences.day;
       if (!state.filters.day && location.value) {
         const local = localParts(now(), location.value.timezone);
         state.filters.day = nextDay(`${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`);

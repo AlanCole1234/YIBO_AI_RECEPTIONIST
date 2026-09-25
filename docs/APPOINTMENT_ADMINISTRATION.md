@@ -1,5 +1,11 @@
 # Appointment administration — UI-008
 
+**Current front-desk UI:** the Product/UX
+[Appointments Calendar checkpoint](PRODUCT_UX_APPOINTMENTS_CALENDAR.md) replaces
+ID-based navigation with day/week/agenda views and inline manual booking. It reuses
+the editor and mutation contracts below and adds a bounded all-customer calendar
+read. The following UI-008 implementation/validation record is historical.
+
 Operators and tenant administrators use **Appointments** to select a location,
 list a customer's upcoming confirmed appointments by customer ID, or look up an
 appointment by ID. The existing customer creation flow supplies the current

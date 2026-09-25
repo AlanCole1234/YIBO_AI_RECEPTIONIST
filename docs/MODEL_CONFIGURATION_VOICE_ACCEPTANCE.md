@@ -4,6 +4,11 @@ September 24, 2026, `codex/product-ux-improvements`. `1184fff` is unchanged.
 Runtime/configuration acceptance passed; physical microphone, listening and browser
 barge-in acceptance remain manual. This is not a new development checkpoint.
 
+**User acceptance update — September 24, 2026:** the user accepted the remaining
+manual Voice Lab checks for now and authorized Appointments Calendar UI. The
+matrix below records what automation actually observed; this update does not
+claim additional microphone/listening measurements.
+
 ## What actually ran
 
 - Seven real `gpt-realtime-2.1` audio conversations through the existing Voice Lab

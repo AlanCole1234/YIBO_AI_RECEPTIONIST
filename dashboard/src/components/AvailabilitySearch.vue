@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import type { Appointment, Customer, Slot } from "../services/api";
-import { createAvailabilitySearch, availabilityTime, slotKey } from "../services/availability-search";
+import { createAvailabilitySearch, availabilityTime, slotKey, type AvailabilityPreferences } from "../services/availability-search";
 import { useUnsavedChanges } from "../services/unsaved-changes";
 
-const props = defineProps<{ customer?: Customer; canManageSettings: boolean }>();
-const emit = defineEmits<{ booked: [appointment: Appointment]; customerNeeded: []; settings: [locationId: string] }>();
+const props = defineProps<{ customer?: Customer; canManageSettings: boolean; initialPreferences?: AvailabilityPreferences; autoSearch?: boolean }>();
+const emit = defineEmits<{ booked: [appointment: Appointment]; customerNeeded: []; settings: [locationId: string]; busy: [value: boolean] }>();
 const search = createAvailabilitySearch();
 const { state, location, service, professionals } = search;
 useUnsavedChanges(() => false, () => state.booking);
@@ -20,7 +20,8 @@ async function book() {
   const appointment = await search.book(props.customer.id);
   if (appointment) emit("booked", appointment);
 }
-onMounted(search.load);
+watch(() => state.booking, value => emit("busy", value), { flush: "sync" });
+onMounted(async () => { await search.load(props.initialPreferences); if (props.autoSearch && state.loaded) await search.search(); });
 onBeforeUnmount(search.dispose);
 </script>
 
@@ -59,6 +60,7 @@ onBeforeUnmount(search.dispose);
     <p v-else-if="state.phase === 'idle' && state.loaded && !state.error">Choose your preferences and search to see verified appointment times.</p>
     <div v-if="state.phase === 'results'" class="results">
       <p role="status">{{ search.requested.value.length }} {{ search.requested.value.length === 1 ? 'option' : 'options' }} in your requested period · {{ search.alternatives.value.length }} {{ search.alternatives.value.length === 1 ? 'alternative' : 'alternatives' }}.</p>
+      <p>Looking for a later time? Set a preferred time range. Results follow this location’s search limit.</p>
       <p v-if="!state.slots.length">No times found for these preferences. Try a different date, time range or professional.</p>
       <p v-else-if="!search.requested.value.length">No times were found in your requested period. The alternatives below are outside it.</p>
       <template v-for="group in groups" :key="group.key">

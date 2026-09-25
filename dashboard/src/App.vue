@@ -7,7 +7,7 @@ import AgentConfigurationPanel from "./components/AgentConfigurationPanel.vue";
 import AgentVoiceLab from "./components/AgentVoiceLab.vue";
 import AdminLogin from "./components/AdminLogin.vue";
 import LocationSettings from "./components/LocationSettings.vue";
-import AppointmentAdministration from "./components/AppointmentAdministration.vue";
+import AppointmentCalendar from "./components/AppointmentCalendar.vue";
 import CalendarSettings from "./components/CalendarSettings.vue";
 import CatalogSettings from "./components/CatalogSettings.vue";
 import AvailabilitySearch from "./components/AvailabilitySearch.vue";
@@ -206,7 +206,7 @@ function statusLabel(status: string): string {
       </section>
 
       <section v-else-if="section === 'appointments'" class="view">
-        <AppointmentAdministration :initial-customer-id="customer?.id" :initial-appointment-id="createdAppointment?.id" :initial-location-id="createdAppointment?.locationId" />
+        <AppointmentCalendar :customer="customer" :initial-appointment="createdAppointment" @customer-selected="customer = $event" />
       </section>
 
       <section v-else-if="section === 'calendars'" class="view">

@@ -39,6 +39,21 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     })) };
   });
 
+  server.get<{ Params: { locationId: string }; Querystring: { rangeStart?: unknown; rangeEnd?: unknown } }>(
+    "/api/locations/:locationId/appointment-calendar", { preHandler: createAdminGuard(app, "operator") }, async (request, reply) => {
+      const { rangeStart, rangeEnd } = request.query;
+      if (typeof rangeStart !== "string" || typeof rangeEnd !== "string"
+        || Object.keys(request.query).some(key => !["rangeStart", "rangeEnd"].includes(key))) {
+        return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
+      }
+      const result = await app.appointments.listCalendarAppointments({
+        tenantId: app.tenantId, locationId: request.params.locationId, rangeStart, rangeEnd,
+      });
+      if (!result.ok) { const error = toHttpError(result.error); return reply.code(error.statusCode).send(error.payload); }
+      return { appointments: result.value };
+    },
+  );
+
   server.get<{ Params: { locationId: string }; Querystring: { customerId?: string } }>(
     "/api/locations/:locationId/appointments", { preHandler: createAdminGuard(app, "operator") }, async (request, reply) => {
       if (typeof request.query.customerId !== "string" || !request.query.customerId.trim()) return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });

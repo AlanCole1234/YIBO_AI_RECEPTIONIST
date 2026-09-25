@@ -1,6 +1,8 @@
 export { AppointmentServiceImpl } from "./application/appointment-service.js";
 export type {
   AppointmentLookupError,
+  AppointmentCalendarQuery,
+  AppointmentCalendarEntry,
   AppointmentService,
   CancelAppointmentCommand,
   CancelAppointmentError,

@@ -49,6 +49,11 @@ export interface Appointment {
   status: string;
   externalCalendarEventId?: string;
 }
+export interface AppointmentCalendarEntry extends Appointment {
+  customerName?: string;
+  customerPhone?: string;
+  professionalName: string;
+}
 export interface GoogleCalendarStatus { configured: boolean; connected: boolean }
 export type AdminRole = "tenant_admin" | "operator";
 export interface AdminPrincipal {
@@ -239,6 +244,8 @@ export const api = {
   createAppointment: (input: { locationId?: string; customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
     request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
   appointmentLocations: () => request<{ locations: AvailabilityLocation[] }>("/api/appointment-locations"),
+  appointmentCalendar: (locationId: string, range: { rangeStart: string; rangeEnd: string }) =>
+    request<{ appointments: AppointmentCalendarEntry[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointment-calendar?${new URLSearchParams(range)}`),
   customerAppointments: (locationId: string, customerId: string) => request<{ appointments: Appointment[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments?${new URLSearchParams({ customerId })}`),
   locationAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}`),
   cancelAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),

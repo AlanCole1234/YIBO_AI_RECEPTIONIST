@@ -3,6 +3,31 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Product/UX — Appointments Calendar UI — 24 de septiembre de 2026
+
+- **Checkpoint completo** en `codex/product-ux-improvements`; conserva `7510f7a`
+  y todos los checkpoints anteriores. El usuario aceptó por ahora las comprobaciones
+  manuales de Voice Lab y autorizó expresamente este alcance.
+- Appointments ofrece día, semana y agenda; navegación por fecha, sucursal,
+  profesional y citas canceladas. Muestra nombres del cliente/profesional, estado,
+  zona local y precios históricos; incluye citas pasadas y estados que necesitan revisión.
+- Reserva manual con cliente por teléfono reutiliza el find-or-create existente,
+  Availability UI y los APIs actuales. Reprogramar/cancelar reutiliza el editor,
+  políticas de aviso, validación de capacidad/slots, identidad del evento y Calendar.
+- Nuevo read de calendario (máximo 31 días, sin truncar citas) reutiliza repositorios
+  SQLite/in-memory, CustomerReader y configuración existente. Aislamiento de
+  región/tenant/sucursal; sin migración, nuevo motor, Customer Profiles ni Email Notifications.
+- **119 checks focales distintos aprobados** (26 nuevos), ambos typechecks y build.
+  Browser aislado: crear → reprogramar → cancelar, persistencia al abrir otra página,
+  mismo ID/evento sin duplicados, hora liberada, filtros, historial y layout móvil 390 px.
+  Cita de prueba cancelada; configuración live, telefonía/7001, OAuth/Google y main intactos.
+- [Alcance, API, evidencia, límites y puntos de integración](PRODUCT_UX_APPOINTMENTS_CALENDAR.md).
+  Pendiente antes del piloto: smoke test de UI contra un Calendar de prueba real.
+  Las citas conservan el contrato existente sin versión/CAS; no se promete protección
+  nueva entre procesos o contra ediciones simultáneas.
+- Siguiente checkpoint recomendado: **protección de conflictos al editar citas**
+  para varios usuarios de oficina. No iniciado; coordinar contratos con el compañero.
+
 ## Product/UX — aceptación aislada de reglas de voz — 24 de septiembre de 2026
 
 - `1184fff` se conserva. Siete conversaciones de audio sintético con Realtime real
@@ -16,9 +41,10 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   conservando timestamps originales. Sin cambios al motor de agenda o parser.
 - **127 checks focales aprobados**, ambos typechecks y build. Configuración sintética
   restaurada exactamente; captura deshabilitada; `main`, servicio telefónico y OAuth intactos.
-- **Pendiente manual**: escuchar cadencia, micrófono, barge-in y reinicio/audio en navegador.
+- **Aceptación del usuario**: las comprobaciones manuales de cadencia, micrófono,
+  barge-in y reinicio/audio son aceptables por ahora; no se afirman nuevas mediciones automáticas.
   [Matriz PASS / MANUAL REQUIRED, fallos observados y guion exacto](MODEL_CONFIGURATION_VOICE_ACCEPTANCE.md).
-  No se inició otro checkpoint. Después: acordar Appointments Calendar UI con el compañero.
+  El usuario autorizó después Appointments Calendar UI; resultado arriba.
 
 ## Product/UX — Model Configuration Pipeline — 24 de septiembre de 2026
 
@@ -36,9 +62,8 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   sintético: guardado/reload, aislamiento entre sucursales, validación, herencia,
   teclado y ancho móvil. Sin llamada/modelo live, Calendar/OAuth ni telefonía.
 - [Campos/defaults/consumidores, evidencia y límites](MODEL_CONFIGURATION_PIPELINE.md).
-  Aceptación de audio sintético completada después; escuchar/micrófono manual pendiente arriba.
-  Siguiente checkpoint recomendado: acordar alcance de Appointments Calendar
-  con el compañero antes de iniciarlo. No se inició otro checkpoint ni se mezcló main.
+  Aceptación de audio sintético completada después; el usuario aceptó por ahora la
+  parte manual y autorizó Appointments Calendar UI (arriba). Sin merge a main.
 
 ## Product/UX — Checkpoint C — 23 de septiembre de 2026
 

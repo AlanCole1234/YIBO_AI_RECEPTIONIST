@@ -13,6 +13,7 @@ import type {
 import type { AppointmentRepository } from "../ports/appointment-repository.js";
 import type {
   AppointmentLookupError,
+  AppointmentCalendarQuery,
   AppointmentService,
   CancelAppointmentCommand,
   CancelAppointmentError,
@@ -222,6 +223,41 @@ export class AppointmentServiceImpl implements AppointmentService {
       ...query,
       startsAtOrAfter: this.clock.now().toISOString(),
     });
+  }
+
+  async listCalendarAppointments(query: AppointmentCalendarQuery) {
+    const iso = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+    const validDay = (value: string) => {
+      const day = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+      return Number.isFinite(day.valueOf()) && day.toISOString().slice(0, 10) === value.slice(0, 10);
+    };
+    const start = Date.parse(query.rangeStart), end = Date.parse(query.rangeEnd);
+    if (!iso.test(query.rangeStart) || !iso.test(query.rangeEnd) || !validDay(query.rangeStart) || !validDay(query.rangeEnd) || !Number.isFinite(start)
+      || !Number.isFinite(end) || end <= start || end - start > 31 * 86_400_000) {
+      return failure({ code: "VALIDATION_ERROR" as const, message: "Choose a period of at most 31 days with explicit time zones." });
+    }
+    // Read configuration directly so inactive locations/professionals do not hide historical bookings.
+    const context = await this.businesses.getBusinessConfiguration(query.tenantId);
+    if (!context.ok || !context.value.configuration.locations.some(item => item.id === query.locationId)) {
+      return failure({ code: "VALIDATION_ERROR" as const, message: "Location is unavailable." });
+    }
+    const appointments = await this.repository.findInRange({
+      ...query, rangeStart: new Date(start).toISOString(), rangeEnd: new Date(end).toISOString(),
+    });
+    const customers = new Map<string, Awaited<ReturnType<CustomerReader["get"]>>>();
+    for (const customerId of new Set(appointments.map(item => item.customerId))) {
+      customers.set(customerId, await this.customers.get(query.tenantId, customerId));
+    }
+    return success(appointments.map(item => {
+      const customer = customers.get(item.customerId);
+      return {
+        ...item,
+        ...(customer?.name ? { customerName: customer.name } : {}),
+        ...(customer ? { customerPhone: customer.phone } : {}),
+        professionalName: context.value.configuration.professionals.find(person => person.id === item.employeeId)?.displayName
+          ?? "Unlisted professional",
+      };
+    }));
   }
 }
 

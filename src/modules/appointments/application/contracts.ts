@@ -49,6 +49,20 @@ export interface ListUpcomingAppointmentsQuery {
   customerId: CustomerId;
 }
 
+export interface AppointmentCalendarQuery {
+  tenantId: TenantId;
+  locationId: LocationId;
+  rangeStart: ISODateTime;
+  rangeEnd: ISODateTime;
+}
+
+/** Office-facing read projection; customer/profile storage stays with Customers. */
+export interface AppointmentCalendarEntry extends Appointment {
+  customerName?: string;
+  customerPhone?: string;
+  professionalName: string;
+}
+
 export type CreateAppointmentError =
   | { code: "SLOT_NO_LONGER_AVAILABLE" }
   | { code: "CUSTOMER_NOT_FOUND" }
@@ -88,4 +102,7 @@ export interface AppointmentService {
     query: GetAppointmentQuery,
   ): Promise<Result<Appointment, AppointmentLookupError>>;
   listUpcomingAppointments(query: ListUpcomingAppointmentsQuery): Promise<Appointment[]>;
+  listCalendarAppointments(query: AppointmentCalendarQuery): Promise<Result<
+    AppointmentCalendarEntry[], { code: "VALIDATION_ERROR"; message: string }
+  >>;
 }
