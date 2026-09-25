@@ -16,7 +16,8 @@
     "dev:voice:transcript": "tsx --env-file=.env apps/dev-voice/server.ts --transcript",
     "build": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json && vite build --config dashboard/vite.config.ts",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:preflight": "node scripts/release-preflight.mjs"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
