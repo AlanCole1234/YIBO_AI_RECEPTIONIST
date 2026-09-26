@@ -26,11 +26,37 @@ The last recorded routing attempt restored 7001 and verified the original file,
 claim is made about current live state. That rollback remains the required stable
 baseline; do not repeat the old routing change automatically.
 
+## Follow-up: local network blocker identified
+
+Read-only checks later on September 26 again timed out for SSH and all four ARI
+endpoints. Tailscale's local status and preferences now establish a specific
+prerequisite that is missing:
+
+- Backend state `Stopped`, `WantRunning=false`, `LoggedOut=false`.
+- This Mac reports offline with no active Tailscale IP. The route to the configured
+  PBX uses the ordinary Wi-Fi interface/default gateway, rather than a Tailscale path.
+- The saved profile accepts private routes and Tailscale DNS; no exit node or
+  advertised routes are configured. No setting was changed during inspection.
+
+Reconnect the existing profile before drawing conclusions about PBX health. This
+finding explains the absent local private connection, but does not prove the PBX
+will be reachable afterward or resolve the earlier 7001 validation failure.
+
+The installed CLI documents that `tailscale up` **with no flags** reconnects without
+changing saved settings. Proposed action: run
+`/Applications/Tailscale.app/Contents/MacOS/Tailscale up`, then repeat only status,
+route, SSH and ARI reads. Do not use `--reset`, change profiles, enable an exit node
+or alter Asterisk. Reconnection activates the saved DNS/private routes on this Mac,
+so approval was requested under the user's working-phone preservation constraint.
+At this checkpoint no reconnect was performed; approval/operator reconnection is
+pending. No real call or RTP verification has occurred.
+
 ## Operator action and next safe steps
 
-1. Make the existing PBX reachable from this Mac on its private network (previously
-   Tailscale). Check the PBX host/network connection without changing its working
-   phone routes. No new DID or replacement infrastructure is needed for this check.
+1. Reconnect this Mac's existing Tailscale profile after approval (or have the
+   operator reconnect it), then verify private-network access to the PBX. If it
+   remains unreachable, check the PBX host/network connection without changing its
+   working phone routes. No new DID or infrastructure is needed for this check.
 2. Once reachable, inspect the loaded 7001 context, public route, registered ARI
    applications and active resources read-only. Diagnose the earlier
    `test_route_not_loaded` validation failure before proposing another change.

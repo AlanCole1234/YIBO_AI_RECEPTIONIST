@@ -150,6 +150,11 @@ change was attempted. Restore private-network access, inspect the previous 7001
 validation failure, and obtain fresh explicit approval before changing its stable
 rollback. [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
 
+Follow-up read-only diagnosis found this Mac's Tailscale backend stopped, no active
+private IP and PBX traffic routed through ordinary Wi-Fi. The saved profile remains
+signed in. Reconnecting it with unchanged settings is proposed, pending approval
+because it activates saved DNS/private routes. PBX health and 7001 remain unverified.
+
 ## Ordered remaining gates
 
 | Gate | State | Required evidence |
@@ -157,7 +162,7 @@ rollback. [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | SSH/ARI unreachable from this Mac; restore access, inspect/approve isolated route, then real human call and resource cleanup |
+| 5 — ACCEPT-001 | BLOCKED | Local Tailscale stopped; approved reconnect pending, then read-only PBX/7001 diagnosis, approved isolated route and real human call |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
 7001 remains rolled back. No Asterisk, Telnyx, ARI, RTP, live server or phone-route

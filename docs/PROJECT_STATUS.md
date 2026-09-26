@@ -7,11 +7,15 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
 - RISK-001 `3046c82` y Google real `a437ea2` completos y respaldados.
 - **ACCEPT-001 bloqueado**: SSH y GET ARI info/applications/channels/bridges
-  agotan timeout desde esta Mac. No confirma caída del servicio; red/host/firewall
-  aún sin diagnóstico. No se pudo verificar dialplan actual ni recursos activos.
+  agotan timeout desde esta Mac. Diagnóstico read-only adicional: Tailscale local
+  `Stopped`, `WantRunning=false`, sin IP privada activa; tráfico PBX por gateway Wi-Fi.
+  Perfil sigue autenticado, sin exit node. Esto no confirma caída del PBX ni resuelve
+  la validación 7001. Dialplan actual y recursos activos siguen sin verificar.
 - No llamada, subscription ARI, cambio de 7001/from-pstn, reload/restart ni nueva
   configuración. Se conserva el rollback previamente verificado.
-- Operador: restablecer acceso a PBX por red privada; después inspección read-only,
+- Propuesta pendiente de aprobación: reconectar perfil Tailscale existente con
+  `tailscale up` sin flags ni cambios de settings; activa DNS/rutas privadas guardadas.
+  No reconexión realizada. Después restablecer acceso PBX e inspección read-only,
   propuesta/permiso explícito para ruta aislada y llamada real del usuario.
   [Evidencia y pasos](LAUNCH_PHONE_PREFLIGHT.md). Despliegue/restore/piloto no iniciados.
 
