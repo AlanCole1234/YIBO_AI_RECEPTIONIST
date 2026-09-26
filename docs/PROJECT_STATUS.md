@@ -3,6 +3,18 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — preflight telefónico — 26 de septiembre de 2026
+
+- RISK-001 `3046c82` y Google real `a437ea2` completos y respaldados.
+- **ACCEPT-001 bloqueado**: SSH y GET ARI info/applications/channels/bridges
+  agotan timeout desde esta Mac. No confirma caída del servicio; red/host/firewall
+  aún sin diagnóstico. No se pudo verificar dialplan actual ni recursos activos.
+- No llamada, subscription ARI, cambio de 7001/from-pstn, reload/restart ni nueva
+  configuración. Se conserva el rollback previamente verificado.
+- Operador: restablecer acceso a PBX por red privada; después inspección read-only,
+  propuesta/permiso explícito para ruta aislada y llamada real del usuario.
+  [Evidencia y pasos](LAUNCH_PHONE_PREFLIGHT.md). Despliegue/restore/piloto no iniciados.
+
 ## Launch candidate — Google real — 26 de septiembre de 2026
 
 - **Checkpoint 4 completo**, código `3046c82` en `codex/yibo-launch-candidate`.

@@ -141,6 +141,15 @@ active lists and both local records cancelled. All operation claims released.
 [Real-provider evidence and isolation boundaries](LAUNCH_GOOGLE_ACCEPTANCE.md).
 The next gate requires an approved isolated phone path and a human caller.
 
+## 5. ACCEPT-001 preflight — blocked, 26 September 2026
+
+Read-only SSH and the exact ARI info/application/channel/bridge endpoints all timed
+out from this Mac. The current loaded routes and media state cannot be verified;
+this does not prove the phone service itself is down. No call or configuration
+change was attempted. Restore private-network access, inspect the previous 7001
+validation failure, and obtain fresh explicit approval before changing its stable
+rollback. [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
+
 ## Ordered remaining gates
 
 | Gate | State | Required evidence |
@@ -148,7 +157,7 @@ The next gate requires an approved isolated phone path and a human caller.
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | Dedicated safe test call path, human conversation/turn-taking, contact, booking/confirmation, goodbye and resource cleanup |
+| 5 — ACCEPT-001 | BLOCKED | SSH/ARI unreachable from this Mac; restore access, inspect/approve isolated route, then real human call and resource cleanup |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
 7001 remains rolled back. No Asterisk, Telnyx, ARI, RTP, live server or phone-route
