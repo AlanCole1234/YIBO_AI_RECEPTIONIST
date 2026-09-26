@@ -79,12 +79,33 @@ synthetic SQLite, in-memory Calendar and no live email/Realtime/telephony provid
 This is synthetic browser acceptance, not proof of real Google, microphone, phone
 or email delivery. The existing Product acceptance browser/setup is untouched.
 
+## 2. Full regression — complete, 25 September 2026
+
+Integration commit `6b82aa9` is pushed on the dedicated launch branch. The full
+suite passes **664 tests across 88 files**, with the existing optional live OpenAI
+test explicitly skipped (no API key supplied). Both typechecks and the production
+build pass. Coverage includes auth/roles/isolation, regional SQLite migrations,
+scheduling/calendar identity/routing, customer/office operations and notifications,
+configuration/runtime, conversation, Realtime adapter, ARI and local RTP teardown.
+
+The sandbox-only run initially blocked loopback UDP (`EPERM`). Running the fake
+PBX/media fixtures with local socket access resolved those environment failures.
+Two older booked-calendar-route tests then exposed missing contact confirmation
+in their scripts: they now assert the contact gate before using the same persisted
+contact flow as callers. Their routing, neighbor-event, repeated-reschedule,
+create-in-flight and cancellation assertions remain unchanged. No runtime
+workaround or test exclusion was added.
+
+The source feature branches remain `7078d49` and `785389f`; the launch merge's two
+parents prove both histories are retained. `main` was neither checked out nor
+modified. Next: appointment concurrency, before any multioperator business test.
+
 ## Ordered remaining gates
 
 | Gate | State | Required evidence |
 |---|---|---|
-| 2 — Full regression | NEXT | Full suite, both typechecks, production build; investigate failures rather than masking them |
-| 3 — RISK-001 | TODO | Concurrent reschedule/cancel/outcome protection, stale edits, two operators/processes, unchanged Google identity, failure recovery |
+| 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
+| 3 — RISK-001 | NEXT | Concurrent reschedule/cancel/outcome protection, stale edits, two operators/processes, unchanged Google identity, failure recovery |
 | 4 — Real Google | TODO | Test calendar: create, verify, reschedule twice, cancel; original event ID, no duplicates or affected neighbors, local consistency |
 | 5 — ACCEPT-001 | BLOCKED | Dedicated safe test call path, human conversation/turn-taking, contact, booking/confirmation, goodbye and resource cleanup |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |

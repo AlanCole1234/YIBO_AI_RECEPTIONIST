@@ -3,6 +3,19 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — regresión completa — 25 de septiembre de 2026
+
+- Integración `6b82aa9` respaldada en `origin/codex/yibo-launch-candidate`;
+  ramas fuente `7078d49` / `785389f` conservadas. Sin cambios a main ni servicios live.
+- **664 pruebas aprobadas, 1 live opcional omitida**, 88 archivos aprobados;
+  ambos typechecks y build de producción aprobados.
+- Fixtures RTP/PBX requieren sockets loopback fuera del sandbox. Dos scripts E2E
+  históricos de rutas Calendar ahora confirman/persisten contacto antes de reservar;
+  conservan todas sus verificaciones de identidad, vecinos, mapping, cambios y borrado.
+- **Checkpoint 2 completo.** Siguiente paso del PDF: **RISK-001**, concurrencia de
+  citas. Gates de Google real, teléfono, despliegue/restore y piloto pendientes.
+  [Registro de validación](LAUNCH_CANDIDATE.md).
+
 ## Launch candidate — integración — 25 de septiembre de 2026
 
 - Plan autorizado: `YIBO_Alan_Codex_Instructions.pdf`, leído completo (6 páginas).

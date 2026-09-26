@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { phoneOperations, tool, booking } from "../helpers/phone-operations.js";
+import { phoneOperations, tool, booking, confirmContact } from "../helpers/phone-operations.js";
 
 const blocked = { ok: false, error: { code: "CALENDAR_ROUTE_IN_USE" } };
 describe("booked calendar routing through phone and Google boundaries", () => {
@@ -7,9 +7,13 @@ describe("booked calendar routing through phone and Google boundaries", () => {
     const f = phoneOperations(50400);
     try {
       const first = await f.start();
+      expect(await tool(first, "create_appointment", booking)).toMatchObject({ ok: false, error: { code: "CONTACT_CONFIRMATION_REQUIRED" } });
+      expect(f.events.size).toBe(0);
+      expect(await confirmContact(first)).toMatchObject({ ok: true });
       expect(await tool(first, "create_appointment", booking)).toMatchObject({ ok: true });
       const originalId = [...f.events.keys()][0]!;
       const second = await f.start("caller-2", "+12025550102");
+      expect(await confirmContact(second, "02")).toMatchObject({ ok: true });
       expect(await tool(second, "create_appointment", { ...booking, startAt: "2026-09-21T18:00:00Z" })).toMatchObject({ ok: true });
       const neighbor = structuredClone([...f.events.values()].find(event => event.id !== originalId)!);
       const change = () => f.app.businessCatalog.updateLocationDefaultCalendar(f.app.tenantId, "default", "new@example.test", 1);
@@ -42,6 +46,7 @@ describe("booked calendar routing through phone and Google boundaries", () => {
     f.controls.holdCreate = new Promise<void>(resolve => { release = resolve; });
     try {
       const session = await f.start();
+      expect(await confirmContact(session)).toMatchObject({ ok: true });
       const pending = tool(session, "create_appointment", booking);
       await vi.waitFor(() => expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/events"))).toBe(true));
       expect(await f.app.businessCatalog.updateProfessionalCalendar(f.app.tenantId, "default", "employee-us-1", "other@example.test", 1)).toEqual(blocked);
