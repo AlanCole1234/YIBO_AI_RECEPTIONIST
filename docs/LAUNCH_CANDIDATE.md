@@ -127,13 +127,27 @@ local/Google state before removing the exact abandoned claim. All database write
 must upgrade together. Legacy unversioned HTTP clients remain compatible but do not
 gain stale-intent detection. See [contracts, evidence and recovery procedure](APPOINTMENT_EDIT_PROTECTION.md).
 
+## 4. Real Google — complete, 26 September 2026
+
+Code `3046c82` passed against the existing **YIBO Test Appointments** calendar using
+a fresh private configured application/database. Existing authorization refreshed
+successfully; no Calendar/OAuth settings or live token storage were changed.
+Real availability → create two synthetic appointments → verify → reschedule the
+primary twice → reject a stale cancellation → cancel → clean up the neighbor all
+passed. The original event ID and correct clinic-local instants were retained;
+no duplicates, all 15 pre-existing events unchanged, both test events removed from
+active lists and both local records cancelled. All operation claims released.
+
+[Real-provider evidence and isolation boundaries](LAUNCH_GOOGLE_ACCEPTANCE.md).
+The next gate requires an approved isolated phone path and a human caller.
+
 ## Ordered remaining gates
 
 | Gate | State | Required evidence |
 |---|---|---|
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
-| 4 — Real Google | NEXT | Test calendar: create, verify, reschedule twice, cancel; original event ID, no duplicates or affected neighbors, local consistency |
+| 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
 | 5 — ACCEPT-001 | BLOCKED | Dedicated safe test call path, human conversation/turn-taking, contact, booking/confirmation, goodbye and resource cleanup |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 

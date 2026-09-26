@@ -3,6 +3,25 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — Google real — 26 de septiembre de 2026
+
+- **Checkpoint 4 completo**, código `3046c82` en `codex/yibo-launch-candidate`.
+  Calendario existente **YIBO Test Appointments**, aplicación/SQLite privados nuevos,
+  datos sintéticos y telefonía/Realtime/email deshabilitados.
+- Grant existente refresca HTTP 200. Almacén original abierto sólo lectura, copia
+  cifrada privada; sin cambiar OAuth, mappings, configuración live ni main.
+- FreeBusy real → dos reservas → recuperar/verificar → dos reprogramaciones del
+  mismo ID → rechazo de cancelación obsoleta sin request a Google → cancelar.
+  HTTP 200/204; hora/zona local exactas, revisiones 2→3→4→5, sin duplicados.
+- Vecino sintético intacto durante cambios/cancelación; los **15 eventos previos**
+  conservan ID/etag. Limpieza verificada de ambas citas, estados locales CANCELLED,
+  IDs originales conservados y cero claims pendientes.
+- **38 verificaciones live y 31/31 pruebas Google focales aprobadas**. Typechecks,
+  build y suite 679+1 ya verdes para este mismo código; checkpoint sólo documental.
+- [Evidencia y límites](LAUNCH_GOOGLE_ACCEPTANCE.md). Siguiente gate: **ACCEPT-001**,
+  llamada real por ruta aislada aprobada. 7001 permanece revertido; no se reintentó
+  routing ni se simula una aceptación de voz. Despliegue/restore y piloto pendientes.
+
 ## Launch candidate — RISK-001 — 26 de septiembre de 2026
 
 - **Checkpoint 3 completo** en `codex/yibo-launch-candidate`; conserva integración
