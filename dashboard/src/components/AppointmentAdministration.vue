@@ -33,7 +33,7 @@ onMounted(async () => {
     <p>Look up an appointment or list a customer’s upcoming confirmed appointments at a location.</p></template>
     <p v-if="state.error" role="alert">{{ state.error }}</p><p v-if="state.message" role="status">{{ state.message }}</p>
     <button v-if="!embedded && !state.locations.length" :disabled="state.busy" @click="editor.load()">Load locations</button>
-    <button v-if="embedded && !state.selected && !state.busy" @click="editor.load().then(ok => ok && editor.lookup())">Reload appointment details</button>
+    <button v-if="embedded && (!state.selected || state.error)" :disabled="state.busy" @click="editor.load().then(ok => ok && editor.lookup())">Reload appointment details</button>
     <fieldset v-if="!embedded" :disabled="state.busy">
       <legend>Find appointments</legend>
       <label>Location<select v-model="state.locationId" @change="editor.clear()"><option v-for="item in state.locations" :key="item.id" :value="item.id">{{ item.name }}{{ item.active ? '' : ' (inactive)' }}</option></select></label>

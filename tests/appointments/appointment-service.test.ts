@@ -92,6 +92,7 @@ describe("AppointmentServiceImpl", () => {
     expect(result).toEqual({ ok: true, value: {
       id: "appointment-1",
       ...command,
+      version: 2,
       serviceNameSnapshot: "Consultation",
       priceAmountMinor: 0,
       priceCurrency: "MXN",

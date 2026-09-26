@@ -1,3 +1,4 @@
+import { parseIfMatch } from "../optimistic-version.js";
 import type { FastifyInstance } from "fastify";
 import type { YiboApplication } from "../../bootstrap/index.js";
 import { adminPrincipalFor, createAdminGuard } from "../admin-guard.js";
@@ -103,7 +104,12 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
           || (action === "reschedule" && (!("startAt" in body) || typeof body.startAt !== "string" || !body.startAt.trim()))) {
           return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
         }
-        const context = { tenantId: app.tenantId, ...request.params };
+        const expectedVersion = parseIfMatch(request.headers["if-match"]);
+        if (request.headers["if-match"] !== undefined && expectedVersion === null) {
+          return reply.code(400).send({ error: { code: "INVALID_IF_MATCH" } });
+        }
+        const context = { tenantId: app.tenantId, ...request.params,
+          ...(expectedVersion === null ? {} : { expectedVersion }) };
         const before = await app.appointments.getAppointment(context);
         const result = action === "cancel" ? await app.appointments.cancelAppointment(context)
           : await app.appointments.rescheduleAppointment({ ...context, startAt: (body as { startAt: string }).startAt });
@@ -174,9 +180,13 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       if (request.body?.outcome !== "COMPLETED" && request.body?.outcome !== "NO_SHOW") {
         return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
       }
+      const expectedVersion = parseIfMatch(request.headers["if-match"]);
+      if (request.headers["if-match"] !== undefined && expectedVersion === null) {
+        return reply.code(400).send({ error: { code: "INVALID_IF_MATCH" } });
+      }
       const before = await app.appointments.getAppointment({ tenantId: app.tenantId, ...request.params });
       const result = await app.appointments.markAppointmentOutcome({ tenantId: app.tenantId, ...request.params,
-        outcome: request.body.outcome });
+        outcome: request.body.outcome, ...(expectedVersion === null ? {} : { expectedVersion }) });
       if (!result.ok) { const error = toHttpError(result.error); return reply.code(error.statusCode).send(error.payload); }
       await app.adminAudit.recordMutation({ principal: adminPrincipalFor(request), entityType: "appointment",
         entityId: result.value.id, action: request.body.outcome.toLowerCase(), before: before.ok ? before.value : null,

@@ -100,13 +100,40 @@ The source feature branches remain `7078d49` and `785389f`; the launch merge's t
 parents prove both histories are retained. `main` was neither checked out nor
 modified. Next: appointment concurrency, before any multioperator business test.
 
+## 3. RISK-001 — complete, 26 September 2026
+
+Reproduced four races before the fix: delayed reschedule resurrecting a cancelled
+local appointment, lost office outcome, duplicate cancellation and stale history
+on queued reschedules. The existing appointment service now acquires its shared
+location guard before re-reading and comparing the displayed revision. SQLite
+migration 11 supplies persistent revisions and a claim shared by configured API
+and voice processes. Shipped UIs and voice references provide the revision; stale
+edits and competing writes return explicit conflicts before provider mutations.
+
+15 new regressions include two configured database connections, a real child
+process, crash recovery on disposable data, provider failure, repeated reschedules,
+cancel, unchanged event identity and an untouched neighboring booking. Final suite:
+**679 passed, 1 optional live-model test skipped** across 90 passing files. Both
+typechecks and production build passed. Synthetic MX/US migration copies now cover
+9→11, retained records/revision defaults, idempotence and reopening.
+
+Two-tab synthetic browser acceptance passed in Office and Product Appointments:
+stale cancellation rejected after each of two reschedules, explicit refresh/reload
+revealed the current time, reviewed cancellation succeeded once and freed the slot.
+No live providers or working services were involved.
+
+Claims do not expire automatically: after process death an operator must reconcile
+local/Google state before removing the exact abandoned claim. All database writers
+must upgrade together. Legacy unversioned HTTP clients remain compatible but do not
+gain stale-intent detection. See [contracts, evidence and recovery procedure](APPOINTMENT_EDIT_PROTECTION.md).
+
 ## Ordered remaining gates
 
 | Gate | State | Required evidence |
 |---|---|---|
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
-| 3 — RISK-001 | NEXT | Concurrent reschedule/cancel/outcome protection, stale edits, two operators/processes, unchanged Google identity, failure recovery |
-| 4 — Real Google | TODO | Test calendar: create, verify, reschedule twice, cancel; original event ID, no duplicates or affected neighbors, local consistency |
+| 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
+| 4 — Real Google | NEXT | Test calendar: create, verify, reschedule twice, cancel; original event ID, no duplicates or affected neighbors, local consistency |
 | 5 — ACCEPT-001 | BLOCKED | Dedicated safe test call path, human conversation/turn-taking, contact, booking/confirmation, goodbye and resource cleanup |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
@@ -117,14 +144,15 @@ test calendar and synthetic labels; never substitute a mocked result for it.
 
 ## Known limitations carried into later gates
 
-- Appointment rows still lack edit versions/CAS; the location guard is currently
-  process-local and cancellation/outcome do not participate. **RISK-001 is open.**
+- Shared-database writers must upgrade together. A crashed writer leaves its
+  location blocked until an operator reconciles the outcome and clears that exact
+  claim. Google/local writes are not one transaction; uncertain outcomes still need
+  inspection. Legacy HTTP clients without `If-Match` cannot detect stale user intent.
 - Office open-slot lists obey configured result limits; month/week views are not
   an exhaustive inventory of every free interval. Per-professional availability
   and Product date/time search remain available.
-- Office mutation loading/error feedback and concurrent-refresh behavior need
-  scrutiny during the conflict checkpoint; quick booking acts on slot selection
-  after a customer is chosen.
+- Office quick booking acts on slot selection after a customer is chosen. Review
+  this interaction with the office user during pilot acceptance.
 - `staffOverrideAllowed` is stored metadata, without an implemented policy bypass.
   `afterHoursBehavior` guides the prompt rather than enforcing a domain boundary.
   Same-day booking is enforced at create time, not throughout all availability and

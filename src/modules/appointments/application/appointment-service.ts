@@ -1,5 +1,6 @@
+import { AppointmentOperationInProgressError } from "../ports/appointment-dependencies.js";
 import { operationalLog } from "../../../shared/observability/operational-log.js";
-import { failure, success } from "../../../shared/domain/result.js";
+import { failure, success, type Result } from "../../../shared/domain/result.js";
 import type { Clock } from "../../../shared/application/system.js";
 import type { AppointmentNotificationService } from "../../notifications/index.js";
 import type { BusinessDirectory } from "../../business/index.js";
@@ -14,6 +15,7 @@ import type {
 import type { AppointmentRepository } from "../ports/appointment-repository.js";
 import type {
   AppointmentLookupError,
+  AppointmentEditConflict,
   AppointmentCalendarQuery,
   AppointmentService,
   CancelAppointmentCommand,
@@ -74,7 +76,7 @@ export class AppointmentServiceImpl implements AppointmentService {
     const service = configuration.value.business.services.find((candidate) => candidate.id === command.serviceId)!;
     const customer = await this.customers.get(command.tenantId, command.customerId);
 
-    return this.guard.execute(command.tenantId, command.locationId, command.employeeId, async () => {
+    return this.guarded(command, async () => {
       const raced = await this.repository.findByIdempotencyKey(command.tenantId, command.idempotencyKey);
       if (raced) {
         return sameRequest(raced, command) && raced.status === "CONFIRMED"
@@ -95,6 +97,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       const pending: Appointment = {
         id: this.createId(),
         ...command,
+        version: 1,
         serviceNameSnapshot: service.name,
         priceAmountMinor: offer.price.amountMinor,
         priceCurrency: offer.price.currency,
@@ -127,12 +130,13 @@ export class AppointmentServiceImpl implements AppointmentService {
       });
       if (!external.ok) {
         calendarLog("calendar.booking.failed", { tenantId: pending.tenantId, appointmentId: pending.id, code: external.error.code });
-        await this.repository.save({ ...pending, status: "FAILED" });
+        await this.repository.save({ ...pending, version: 2, status: "FAILED" });
         return failure<CreateAppointmentError>(calendarFailure(external.error));
       }
 
       const confirmed: Appointment = {
         ...pending,
+        version: 2,
         status: "CONFIRMED",
         externalCalendarEventId: external.value.externalEventId,
       };
@@ -145,51 +149,49 @@ export class AppointmentServiceImpl implements AppointmentService {
   }
 
   async cancelAppointment(command: CancelAppointmentCommand) {
-    const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
-    if (!appointment || appointment.locationId !== command.locationId) return failure<CancelAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
-    if (appointment.status === "CANCELLED") {
-      return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
-    }
-    const cancellationPolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
-    if (!cancellationPolicy.ok || cancellationPolicy.value.location.policies.cancellationAllowed === false
-      || minutesUntil(appointment.startAt, this.clock.now())
-      < cancellationPolicy.value.location.policies.minimumCancellationNoticeMinutes) {
-      return failure<CancelAppointmentError>({ code: "CANCELLATION_NOTICE_NOT_MET" });
-    }
-    if (appointment.externalCalendarEventId) {
-      const cancelled = await this.calendar.cancelEvent({
-        appointmentId: appointment.id,
-        tenantId: appointment.tenantId,
-        locationId: appointment.locationId,
-        employeeId: appointment.employeeId,
-        externalEventId: appointment.externalCalendarEventId,
-      });
-      if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
-    }
-    const result: Appointment = { ...appointment, status: "CANCELLED" };
-    await this.repository.save(result);
-    await this.record(result, "CANCELLED", "OFFICE");
-    await this.notify("CANCELLATION", result);
-    return success(result);
+    return this.mutate(command, async appointment => {
+      if (appointment.status === "CANCELLED") {
+        return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
+      }
+      const cancellationPolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
+      if (!cancellationPolicy.ok || cancellationPolicy.value.location.policies.cancellationAllowed === false
+        || minutesUntil(appointment.startAt, this.clock.now())
+        < cancellationPolicy.value.location.policies.minimumCancellationNoticeMinutes) {
+        return failure<CancelAppointmentError>({ code: "CANCELLATION_NOTICE_NOT_MET" });
+      }
+      if (appointment.externalCalendarEventId) {
+        const cancelled = await this.calendar.cancelEvent({
+          appointmentId: appointment.id,
+          tenantId: appointment.tenantId,
+          locationId: appointment.locationId,
+          employeeId: appointment.employeeId,
+          externalEventId: appointment.externalCalendarEventId,
+        });
+        if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
+      }
+      const result: Appointment = { ...appointment, version: (appointment.version ?? 1) + 1, status: "CANCELLED" };
+      await this.repository.save(result);
+      await this.record(result, "CANCELLED", "OFFICE");
+      await this.notify("CANCELLATION", result);
+      return success(result);
+    });
   }
 
   async rescheduleAppointment(command: RescheduleAppointmentCommand) {
     if (!validDate(command.startAt)) {
       return failure<RescheduleAppointmentError>({ code: "VALIDATION_ERROR", message: "startAt must be a valid ISO datetime" });
     }
-    const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
-    if (!appointment || appointment.locationId !== command.locationId) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
-    if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
-      return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
-    }
-    const reschedulePolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
-    if (!reschedulePolicy.ok || reschedulePolicy.value.location.policies.reschedulingAllowed === false
-      || minutesUntil(appointment.startAt, this.clock.now())
-      < reschedulePolicy.value.location.policies.minimumRescheduleNoticeMinutes) {
-      return failure<RescheduleAppointmentError>({ code: "RESCHEDULE_NOTICE_NOT_MET" });
-    }
+    return this.mutate(command, async appointment => {
+      if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
+        return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
+      }
+      const reschedulePolicy = await this.businesses.getLocation(appointment.tenantId, appointment.locationId);
+      if (!reschedulePolicy.ok || reschedulePolicy.value.location.policies.reschedulingAllowed === false
+        || minutesUntil(appointment.startAt, this.clock.now())
+        < reschedulePolicy.value.location.policies.minimumRescheduleNoticeMinutes) {
+        return failure<RescheduleAppointmentError>({ code: "RESCHEDULE_NOTICE_NOT_MET" });
+      }
 
-    return this.guard.execute(appointment.tenantId, appointment.locationId, appointment.employeeId, async () => {
       const slot = await this.scheduling.validateSlot({
         tenantId: appointment.tenantId,
         locationId: appointment.locationId,
@@ -217,6 +219,7 @@ export class AppointmentServiceImpl implements AppointmentService {
 
       const updated: Appointment = {
         ...appointment,
+        version: (appointment.version ?? 1) + 1,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
         externalCalendarEventId: appointment.externalCalendarEventId,
@@ -288,14 +291,37 @@ export class AppointmentServiceImpl implements AppointmentService {
   }
 
   async markAppointmentOutcome(command: MarkAppointmentOutcomeCommand) {
-    const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
-    if (!appointment || appointment.locationId !== command.locationId || appointment.status !== "CONFIRMED") {
-      return failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
+    return this.mutate(command, async appointment => {
+      if (appointment.status !== "CONFIRMED") return failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
+      const updated: Appointment = { ...appointment, version: (appointment.version ?? 1) + 1, outcomeStatus: command.outcome };
+      await this.repository.save(updated);
+      await this.record(updated, command.outcome, "OFFICE");
+      return success(updated);
+    });
+  }
+
+  private async mutate<E>(command: CancelAppointmentCommand, operation: (appointment: Appointment) => Promise<Result<Appointment, E>>)
+    : Promise<Result<Appointment, E | AppointmentLookupError | AppointmentEditConflict>> {
+    // The first read supplies only the lock scope. Never mutate this snapshot.
+    const scope = await this.repository.findById(command.tenantId, command.appointmentId);
+    if (!scope || scope.locationId !== command.locationId) return failure({ code: "APPOINTMENT_NOT_FOUND" });
+    return this.guarded<Appointment, E | AppointmentLookupError | AppointmentEditConflict>(scope, async () => {
+      const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
+      if (!appointment || appointment.locationId !== command.locationId) return failure<AppointmentLookupError>({ code: "APPOINTMENT_NOT_FOUND" });
+      if (command.expectedVersion !== undefined && command.expectedVersion !== (appointment.version ?? 1)) {
+        return failure<AppointmentEditConflict>({ code: "APPOINTMENT_VERSION_CONFLICT" });
+      }
+      return operation(appointment);
+    });
+  }
+
+  private async guarded<T, E>(scope: { tenantId: string; locationId: string; employeeId: string }, operation: () => Promise<Result<T, E>>)
+    : Promise<Result<T, E | AppointmentEditConflict>> {
+    try { return await this.guard.execute(scope.tenantId, scope.locationId, scope.employeeId, operation); }
+    catch (error) {
+      if (error instanceof AppointmentOperationInProgressError) return failure({ code: "APPOINTMENT_OPERATION_IN_PROGRESS" });
+      throw error;
     }
-    const updated: Appointment = { ...appointment, outcomeStatus: command.outcome };
-    await this.repository.save(updated);
-    await this.record(updated, command.outcome, "OFFICE");
-    return success(updated);
   }
 
   listCustomerHistory(tenantId: string, customerId: string, limit = 100) {

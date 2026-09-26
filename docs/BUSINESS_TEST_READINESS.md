@@ -1,5 +1,20 @@
 # REL-002 follow-up — readiness for a real business test
 
+## Launch candidate update — 26 September 2026
+
+The September 22 audit below is historical. The combined launch candidate now
+includes the Office/Customers and Product appointment calendar workflows with
+isolated synthetic browser acceptance. RISK-001 is reproduced and fixed with
+appointment revisions, a shared SQLite location guard and stale UI/voice rejection;
+679 tests pass, one optional live test is skipped, both typechecks/build pass.
+See [release gates](LAUNCH_CANDIDATE.md) and [conflict/recovery details](APPOINTMENT_EDIT_PROTECTION.md).
+The earlier ID-only workflow and missing concurrency protection are not the current
+candidate's state. Staff acceptance and the real Google/phone release gates remain
+separate; prior authorization history does not certify this combined candidate.
+7001 remains rolled back; no live routing or OAuth configuration was changed here.
+
+## Historical audit
+
 Date: 2026-09-22. Baseline `ea3ef50`, plus the small route-activation guard fix
 in this audit. Scope: repository evidence and targeted closure review, not a new
 live acceptance run. **Not yet ready to start a real end-to-end call in the current

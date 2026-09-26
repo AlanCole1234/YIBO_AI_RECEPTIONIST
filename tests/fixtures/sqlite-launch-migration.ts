@@ -42,6 +42,7 @@ try {
       const customers = new SqliteCustomerRepository(database, base.region);
       const notifications = new SqliteNotificationRepository(database, base.region);
       const appointment = await appointments.findById(base.tenantId, "same-id"); assert(appointment);
+      assert.equal(appointment.version, 1);
       assert.equal(appointment.externalCalendarEventId, "original-google-event"); assert.equal(appointment.priceAmountMinor, 12550);
       assert.equal(appointment.priceCurrency, "USD"); assert.equal(appointment.serviceNameSnapshot, "Historical consultation");
       const customer = await customers.findById(base.tenantId, "same-id"); assert(customer);
@@ -59,6 +60,7 @@ try {
       assert.equal((await notifications.list(base.tenantId, appointment.id)).length, 1);
       assert.equal((await notifications.list("foreign", appointment.id)).length, 0);
       assert.deepEqual(JSON.parse((database.prepare("SELECT profile_json FROM businesses WHERE region_id = ? AND tenant_id = ?").get(base.region, base.tenantId) as { profile_json: string }).profile_json), profile);
+      assert.equal((database.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version=11").get() as { n: number }).n, 1);
       assert.equal((database.prepare("SELECT COUNT(*) n FROM schema_migrations WHERE version=10").get() as { n: number }).n, 1);
     } finally { database.close(); }
     assert.deepEqual(readFileSync(sourcePath), before);
@@ -68,5 +70,5 @@ try {
       assert.equal((await new SqliteCustomerRepository(reopened, base.region).findById(base.tenantId, "same-id"))!.emailOptIn, false);
     } finally { reopened.close(); }
   }
-  console.log(JSON.stringify({ copies: ["MX", "US"], sourceUnchanged: true, migration10Idempotent: true, configurationPreserved: true, bothCalendarReads: true, customerHistoryAndNotifications: true }));
+  console.log(JSON.stringify({ copies: ["MX", "US"], sourceUnchanged: true, migration10Idempotent: true, migration11Idempotent: true, configurationPreserved: true, bothCalendarReads: true, customerHistoryAndNotifications: true }));
 } finally { rmSync(directory, { recursive: true, force: true }); }

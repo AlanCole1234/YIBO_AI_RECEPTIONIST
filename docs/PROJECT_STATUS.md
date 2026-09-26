@@ -3,6 +3,28 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — RISK-001 — 26 de septiembre de 2026
+
+- **Checkpoint 3 completo** en `codex/yibo-launch-candidate`; conserva integración
+  `6b82aa9` y regresión `1ce4b07`. Sin cambios a main ni configuración live.
+- Cuatro carreras reproducidas antes de corregir: reprogramación tardía revivía
+  cancelación local, outcome perdido, cancelación duplicada e historial desactualizado.
+- Crear/reprogramar/cancelar/outcome comparten guardia de sucursal y releen dentro
+  de ella. Migración 11 añade revisiones y claims SQLite entre procesos API/voz.
+  UI y referencias de voz comparan versión; conflictos rechazan sin escritura externa
+  ni reintento automático. Se mantiene el ID original y vecinos intactos.
+- **15 pruebas nuevas; 679 aprobadas, 1 live opcional omitida**, 90 archivos aprobados;
+  ambos typechecks/build. Copias MX/US 9→11, defaults/versiones, idempotencia y reopen.
+- Browser sintético 3113/5381: dos pestañas Office/Product rechazan cancelación
+  obsoleta, recargan hora actual y permiten cancelar tras revisión; dos cambios,
+  una cancelación e intervalo liberado. Sin proveedores live.
+- Claims no expiran: tras caída se reconcilia Google/local antes de liberar el claim
+  exacto. Todos los writers deben actualizarse juntos; clientes HTTP legacy sin
+  `If-Match` conservan compatibilidad, sin detección de intención obsoleta.
+- [Contrato, evidencia y recuperación](APPOINTMENT_EDIT_PROTECTION.md).
+  Siguiente gate del PDF: **Google real en calendario aislado**, después ACCEPT-001;
+  7001 permanece revertido, sin nueva autorización de routing.
+
 ## Launch candidate — regresión completa — 25 de septiembre de 2026
 
 - Integración `6b82aa9` respaldada en `origin/codex/yibo-launch-candidate`;
@@ -354,7 +376,7 @@ con `pnpm test` y `pnpm build`.
 | CLOSE-002 | DONE | Política de mapping protegida atómicamente por citas no canceladas; histórico/pending/fallos, override/fallback y E2E Google. Ver BOOKED_CALENDAR_ROUTES.md |
 | ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
 | DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
-| RISK-001 | TODO | Appointments: coherencia de cambios/cancelaciones simultáneos antes de pruebas multioperador; BUSINESS_TEST_READINESS.md |
+| RISK-001 | DONE | Revisiones + guardia SQLite compartida, relectura bajo lock, conflictos UI/voz, dos procesos/fallos/identidad; 679 pruebas, 1 live omitida; APPOINTMENT_EDIT_PROTECTION.md |
 | RISK-002 | TODO | Producto/secretaría: validar flujo por IDs y necesidad de agenda/búsqueda antes de uso diario; BUSINESS_TEST_READINESS.md |
 
 ## Plan de operaciones del negocio

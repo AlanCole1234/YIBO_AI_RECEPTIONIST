@@ -41,6 +41,7 @@ export interface AppointmentLocation { id: string; name: string; active: boolean
 export type AvailabilityLocation = AppointmentLocation;
 
 export interface Appointment {
+  version?: number;
   locationId: string;
   serviceNameSnapshot: string;
   priceAmountMinor: number;
@@ -277,10 +278,10 @@ export const api = {
     request<{ appointments: Appointment[]; slots: Slot[] }>(`/api/office/schedule?${new URLSearchParams(input)}`),
   customerAppointments: (locationId: string, customerId: string) => request<{ appointments: Appointment[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments?${new URLSearchParams({ customerId })}`),
   locationAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}`),
-  cancelAppointment: (locationId: string, id: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),
-  rescheduleAppointment: (locationId: string, id: string, startAt: string) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/reschedule`, { method: "POST", body: JSON.stringify({ startAt }) }),
+  cancelAppointment: (locationId: string, id: string, version = 1) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: { "if-match": `"${version}"` }, body: "{}" }),
+  rescheduleAppointment: (locationId: string, id: string, startAt: string, version = 1) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/reschedule`, { method: "POST", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ startAt }) }),
   appointmentTimeline: (locationId: string, id: string) => request<{ events: AppointmentEvent[]; notifications: NotificationDelivery[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/events`),
-  markAppointmentOutcome: (locationId: string, id: string, outcome: "COMPLETED" | "NO_SHOW") => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/outcome`, { method: "POST", body: JSON.stringify({ outcome }) }),
+  markAppointmentOutcome: (locationId: string, id: string, outcome: "COMPLETED" | "NO_SHOW", version = 1) => request<Appointment>(`/api/locations/${encodeURIComponent(locationId)}/appointments/${encodeURIComponent(id)}/outcome`, { method: "POST", headers: { "if-match": `"${version}"` }, body: JSON.stringify({ outcome }) }),
   appointment: (appointmentId: string) => request<Appointment>(`/api/appointments/${encodeURIComponent(appointmentId)}`),
   googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google/status"),
   googleCalendarConnect: (returnTo: string) => request<{ url: string }>(`/api/integrations/google/connect?${new URLSearchParams({ returnTo })}`),
