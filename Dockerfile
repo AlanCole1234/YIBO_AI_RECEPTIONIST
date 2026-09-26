@@ -1,4 +1,4 @@
-FROM node:22.5.1-bookworm-slim
+FROM node:22.13.0-bookworm-slim
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
