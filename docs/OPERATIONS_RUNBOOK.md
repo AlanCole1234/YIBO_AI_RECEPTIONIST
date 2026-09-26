@@ -5,7 +5,7 @@ not evidence that a deployment or live-provider acceptance test has run.
 
 ## Start a local test environment
 
-1. Use Node ≥22.5 and the repository's pnpm version. Run `pnpm install` in the
+1. Use Node ≥22.13 and the repository's pnpm version. Run `pnpm install --frozen-lockfile` in the
    intended checkout. Keep the preserved phone checkout and integration worktree separate.
 2. Create local `.env` from `.env.example`, keeping secrets out of Git. Review the
    [configuration catalog](CONFIGURATION_CATALOG.md) before enabling live providers.
@@ -21,8 +21,18 @@ not evidence that a deployment or live-provider acceptance test has run.
 5. Run `pnpm dev` for API, dashboard and local Voice Lab. Default endpoints are
    `http://localhost:3000`, `http://localhost:5173` and `http://localhost:4317`.
    Avoid a second API process connected to the same ARI application.
-6. Check `/api/health`, login and current tenant. Health only reports API liveness;
-   verify Google connection, calendar mapping, ARI and media separately.
+6. Before production startup, run `pnpm release:preflight` with the intended production environment.
+   Treat any failure as a deployment blocker; the preflight validates required secrets, HTTPS origins,
+   provider configuration shape, RTP port ranges and configured database paths, but it does not prove
+   live provider reachability.
+7. Check `/api/health`, login and current tenant. Health only reports API liveness;
+   verify `/api/admin/readiness`, Google connection, calendar mapping, ARI and media separately.
+
+For container deployment, build from the repository `Dockerfile`, inject secrets at runtime rather
+than baking `.env` into the image, persist the configured SQLite database paths on durable storage,
+and publish API port 3000 behind HTTPS/reverse proxy. The image binds `HOST=0.0.0.0` and includes a
+health check against `/api/health`. Dashboard assets are built by `pnpm build`; serving them remains
+an explicit deployment concern rather than an implicit side effect of the API process.
 
 Do not restart or reconfigure a working phone deployment as part of documentation
 verification. `pnpm build` checks types and builds dashboard assets; it is not a
