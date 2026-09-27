@@ -32,8 +32,23 @@ global reload or routing edit occurred.
 At **18:22:28 UTC**, all four ARI reads again returned HTTP 200 with zero channels,
 bridges and registered applications. No working YIBO process was started or
 restarted. The baseline dialplan is restored; isolated ingress and real audio
-remain untested. The earlier temporary isolated environment is missing and must
-be rebuilt privately before enabling an isolated call path.
+remain untested. The earlier temporary environment was missing; a fresh private
+setup has now been prepared as described below.
+
+## Isolated setup prepared — awaiting separate routing approval
+
+The launch code now runs in a new private **standby API on 3114**, with fresh
+synthetic SQLite, copied/re-encrypted test-calendar authorization, current agent
+defaults and email delivery disabled. No ARI connection or provider request occurs
+in standby. Older processes on 3000, 4317 and 3101/5274 retain their PIDs/listeners.
+All ten private UDP ports **50500–50509** were bindable and released; this does not
+prove remote RTP delivery. Existing working configuration 40000–40020 is unchanged.
+
+Read-only PBX inspection reconfirmed module/readability and unchanged loaded
+contexts, with a registered contact for the existing `yibo-audio-test` endpoint.
+The exact one-line 7001 candidate was prepared **locally only**. Health/auth checks
+and **29 focused phone/ARI/media tests** passed. No real call or new Google write
+was performed. [Reviewed change, rollback, evidence and human test script](LAUNCH_ISOLATED_PHONE_ROUTE_PROPOSAL.md).
 
 ## Historical read-only evidence — September 26
 
@@ -85,15 +100,14 @@ supersedes that pending reconnect; real call/RTP verification is still pending.
 
 1. **Completed:** approved Tailscale reconnect and separately approved permission
    repair/module load. Existing baseline contexts and destinations are verified.
-2. Determine the intended application lifecycle; no ARI
-   application is registered. Do not automatically start/restart the working service
-   or reroute 7001 while preparing the isolated setup.
-3. Prepare a fresh isolated application/database using the current launch commit,
-   separate ports and RTP 50500–50509; verify no overlap and bidirectional media
-   reachability. Do not enable an ingress that could receive production calls.
-4. Present the exact dedicated-route change and rollback procedure for **explicit
-   approval** before altering Asterisk/Telnyx or a working route. Historical approval
-   to attempt 7001 does not override the later instruction to preserve its rollback.
+2. **Completed:** fresh isolated standby API/database with separate ports and
+   synthetic data. No ARI application is registered; the working service is intact.
+3. Obtain separate explicit approval for the reviewed 7001-only change and isolated
+   ARI activation in the proposal above. Historical approval to attempt 7001 does
+   not override the later instruction to preserve its rollback.
+4. After approval, recheck the baseline, back up metadata, enable only the isolated
+   app, apply the exact change and verify/roll back as specified. Bidirectional
+   media reachability remains unverified until an actual call.
 5. After approved setup passes its safety checks, have the user place a real call
    from Linphone. Verify incoming/audio both ways, natural turn-taking and barge-in,
    no repeated questions, contact/availability/booking, one success confirmation,

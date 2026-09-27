@@ -3,6 +3,26 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — entorno telefónico aislado preparado — 27 de septiembre de 2026
+
+- API nueva **3114 en standby**, sin conexión ARI ni requests a proveedores.
+  SQLite privado/sintético nuevo, migración 11 y defaults de agente v4; sin datos
+  reales copiados ni delivery de emails. Grant del Calendar de prueba verificado
+  copiado desde almacén read-only y recifrado; fuente/.env originales intactos.
+- RTP **50500–50509**: diez puertos disponibles en interfaz privada, bind/cierre
+  sin paquetes. Configuración existente 40000–40020 intacta. Procesos 3000/4317 y
+  aceptación anterior 3101/5274 conservan PID/listeners; no se reiniciaron.
+- PBX read-only confirma permisos/módulo/rutas baseline y un contacto registrado
+  del endpoint Linphone `yibo-audio-test`. Candidate 7001 preparado sólo localmente:
+  un argumento Stasis de `yibo` a `yibo-accept001-isolated`; no aplicado al PBX.
+- Health **200**, acceso admin sin sesión **401**, **29 pruebas focales aprobadas**
+  en cuatro archivos de flujo telefónico/ARI/RTP. Sin cambios de código; no se
+  repitieron typechecks/build/suite completa ya verdes para este runtime.
+- **ACCEPT-001 sigue pendiente** de autorización separada para routing/activación
+  aislada y llamada humana. RTP remoto, conversación, confirmación hablada y
+  hangup real siguen sin verificar. [Propuesta exacta y guion](LAUNCH_ISOLATED_PHONE_ROUTE_PROPOSAL.md).
+  Sin cambios a main, Google/OAuth live, rutas públicas ni subsistemas del compañero.
+
 ## Launch candidate — recuperación del dialplan PBX — 27 de septiembre de 2026
 
 - Usuario aprobó expresamente el cambio de grupo y carga del módulo después del

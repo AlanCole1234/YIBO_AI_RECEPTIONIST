@@ -151,9 +151,12 @@ approval, the file was backed up preserving metadata, its group alone changed to
 Contents, owner, mode and Asterisk PID are unchanged. Both contexts now match the
 preserved September 23 snapshots: 7001 and the explicit public rules target normal
 `yibo`. No routing edit or service restart occurred. Post-repair ARI reads returned
-HTTP 200 with zero channels/bridges and no registered applications. Isolated setup
-must be rebuilt because its former temporary environment file is absent; isolated
-route approval and a real human call remain required.
+HTTP 200 with zero channels/bridges and no registered applications. A fresh private
+standby API on 3114 now uses synthetic data and the copied verified test-calendar
+grant; no ARI connection. UDP 50500–50509 binds locally without overlap. Health/auth
+checks and 29 focused phone/ARI/media tests pass. The exact 7001 candidate and
+rollback are prepared locally; separate route/activation approval and a real human
+call remain required. No further PBX mutation or provider write occurred.
 [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
 
 ## Ordered remaining gates
@@ -163,7 +166,7 @@ route approval and a real human call remain required.
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | Network and baseline dialplan restored with explicit approvals; fresh isolated setup, separate route approval and real human call remain |
+| 5 — ACCEPT-001 | BLOCKED | Network/dialplan restored; isolated standby ready, 29 focused tests pass; separate route/ARI activation approval and real human call remain |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
 7001 still targets normal `yibo`. The separately approved file-group repair and
