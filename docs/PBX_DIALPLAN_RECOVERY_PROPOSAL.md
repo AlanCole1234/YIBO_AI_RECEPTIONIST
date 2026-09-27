@@ -1,10 +1,32 @@
-# PBX dialplan read-permission repair — approval required
+# PBX dialplan read-permission repair — completed
 
-27 September 2026. **Proposed only; no PBX change has been applied.** The user
-approved reconnecting the existing Tailscale profile followed by read-only PBX
-inspection. That reconnect succeeded. It does not authorize this repair.
+27 September 2026. The user separately approved **permission repair and module
+load** after reviewing this proposal. The exact repair below passed at
+18:21:53 UTC. The earlier Tailscale reconnect approval was not treated as PBX
+repair authorization. No isolated routing change was made.
 
-## Verified problem
+## Execution and verification
+
+- Rechecked the expected hash, `root:root 0640`, inactive module and zero active
+  calls/channels before applying the approved action.
+- Created `/root/yibo-dialplan-permission-backup-20260927T182153Z-hwm70629`
+  with private directory permissions. Its `cp -a` file copy matches the original
+  hash, owner, group and mode; private metadata and before/after CLI snapshots
+  preserve the verification evidence. The September 23 backup remains intact.
+- Changed only `extensions.conf`'s group to `asterisk`. Owner remains `root`,
+  mode remains `0640`, and the SHA-256 below is unchanged. Readability as the
+  actual service user now passes.
+- Loaded the inactive `pbx_config.so` once; it is now **Running**. Both loaded
+  context displays match the September 23 baseline snapshots after whitespace
+  normalization. Extension 7001 and the explicit public DID rules target normal
+  `yibo`; no rule was edited.
+- Asterisk's systemd PID is unchanged. No restart, global reload, module unload,
+  other configuration change or call was performed.
+- At 18:22:28 UTC all four ARI inventory reads returned HTTP 200, with zero
+  channels, bridges and registered applications. The normal `yibo` application
+  was not started by this repair. This is not a completed phone-call test.
+
+## Verified problem before repair
 
 | Read-only check | Result |
 |---|---|
@@ -44,10 +66,10 @@ only cause of the earlier `test_route_not_loaded` check. Comparing restored text
 and already-loaded routes did not establish that the service could reread the file
 after a restart. No server metadata or content changed during this inspection.
 
-## Exact proposed repair
+## Exact approved repair
 
-Approval covers a maintenance action on the existing PBX, including activation of
-the **whole existing text dialplan**, not just extension 7001.
+The separate approval covered a maintenance action on the existing PBX, including
+activation of the **whole existing text dialplan**, not just extension 7001.
 
 1. Recheck the expected file hash, owner/group/mode, module state and active calls.
    Stop if another operator changed the file/state or any call is active.

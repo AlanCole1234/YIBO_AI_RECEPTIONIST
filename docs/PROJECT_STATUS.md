@@ -3,7 +3,24 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## Launch candidate — diagnóstico PBX — 27 de septiembre de 2026
+## Launch candidate — recuperación del dialplan PBX — 27 de septiembre de 2026
+
+- Usuario aprobó expresamente el cambio de grupo y carga del módulo después del
+  diagnóstico. Reparación completada a las **18:21:53 UTC**.
+- Backup privado con metadata verificada en
+  `/root/yibo-dialplan-permission-backup-20260927T182153Z-hwm70629`;
+  backup previo conservado. Sólo grupo de `extensions.conf`: `root` → `asterisk`.
+  Owner root, modo 0640 y SHA-256/contenido intactos; usuario del servicio ya puede leer.
+- `pbx_config.so` cargado una vez y Running; contextos 7001/from-pstn coinciden
+  con snapshots previos. 7001 y reglas públicas explícitas siguen en `yibo` normal.
+  Mismo PID Asterisk, sin reinicio, reload global, edición de rutas ni otro cambio.
+- ARI posterior **18:22:28 UTC**: cuatro GET HTTP 200, cero canales/bridges/apps.
+  No se inició/reinició servicio YIBO normal. [Evidencia y procedimiento](PBX_DIALPLAN_RECOVERY_PROPOSAL.md).
+- ACCEPT-001 pendiente: reconstruir entorno privado, aprobar por separado ruta
+  aislada y llamada humana. Sin cambios de código/main/Google; no se repitieron
+  suites/typechecks/build porque este checkpoint sólo registra la operación aprobada.
+
+## Launch candidate — diagnóstico PBX previo a reparación — 27 de septiembre de 2026
 
 - Reconexión Tailscale aprobada explícitamente y ejecutada sin flags/settings nuevos.
   Mac/PBX online, ruta privada restablecida; SSH y cuatro GET ARI HTTP 200.

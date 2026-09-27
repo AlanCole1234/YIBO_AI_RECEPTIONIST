@@ -144,14 +144,16 @@ The next gate requires an approved isolated phone path and a human caller.
 ## 5. ACCEPT-001 preflight — blocked, updated 27 September 2026
 
 The explicitly approved Tailscale reconnect succeeded without changing saved
-settings. SSH/ARI access is restored. Read-only inspection reproduced a different
-blocker: `extensions.conf` is `root:root 0640`, unreadable by the `asterisk` service
-user; `pbx_config.so` is Not Running and neither required context is loaded.
-The file contents match the rollback backup and preserve normal `yibo` routing.
-No PBX change was applied. Zero active calls/channels/bridges and no registered ARI
-applications were observed. A permission-only repair plus module load is proposed
-for separate approval; it activates existing public/test contexts. The isolated
-setup must also be rebuilt because its former temporary environment file is absent.
+settings. SSH/ARI access is restored. Read-only inspection reproduced an unreadable
+`root:root 0640` dialplan and an inactive `pbx_config.so`. With separate explicit
+approval, the file was backed up preserving metadata, its group alone changed to
+`asterisk`, and the inactive module loaded once on September 27 at 18:21:53 UTC.
+Contents, owner, mode and Asterisk PID are unchanged. Both contexts now match the
+preserved September 23 snapshots: 7001 and the explicit public rules target normal
+`yibo`. No routing edit or service restart occurred. Post-repair ARI reads returned
+HTTP 200 with zero channels/bridges and no registered applications. Isolated setup
+must be rebuilt because its former temporary environment file is absent; isolated
+route approval and a real human call remain required.
 [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
 
 ## Ordered remaining gates
@@ -161,11 +163,12 @@ setup must also be rebuilt because its former temporary environment file is abse
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | Network restored; unreadable dialplan/module inactive. Permission repair approval, then isolated setup/route approval and real human call |
+| 5 — ACCEPT-001 | BLOCKED | Network and baseline dialplan restored with explicit approvals; fresh isolated setup, separate route approval and real human call remain |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
-7001 remains rolled back. No Asterisk, Telnyx, ARI, RTP, live server or phone-route
-changes are authorized by this integration. Approval is needed before changing a
+7001 still targets normal `yibo`. The separately approved file-group repair and
+inactive-module load are complete; they do not authorize further Asterisk, Telnyx,
+ARI, RTP, live server or phone-route changes. Approval is needed before changing a
 working route or merging main. A real Google test must use an explicitly isolated
 test calendar and synthetic labels; never substitute a mocked result for it.
 

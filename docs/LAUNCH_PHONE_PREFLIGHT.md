@@ -5,7 +5,7 @@ RISK-001 is complete (`3046c82`), and real Google acceptance is complete
 ([evidence](LAUNCH_GOOGLE_ACCEPTANCE.md), `a437ea2`). The ordered next gate is the
 real isolated phone call. Deployment/restore and pilot onboarding have not begun.
 
-## Current result — approved reconnect and read-only diagnosis
+## Current result — approved reconnect and dialplan recovery
 
 The user explicitly approved reconnecting the existing Tailscale profile. On
 September 27, `tailscale up` with no flags returned success: backend Running, Mac
@@ -13,18 +13,27 @@ online, private address restored and PBX traffic through the VPN interface.
 At 18:07:27 UTC all four ARI reads returned HTTP 200; SSH also worked. No saved
 Tailscale settings were changed.
 
-The next blocker is now verified: Asterisk runs as `asterisk`, but
-`/etc/asterisk/extensions.conf` is `root:root 0640` and cannot be read by that user.
-The read failure was reproduced. `pbx_config.so` is Not Running and both required
-contexts are absent from memory. Current file contents exactly match the rollback
+Read-only diagnosis reproduced the next blocker: Asterisk runs as `asterisk`, but
+`/etc/asterisk/extensions.conf` was `root:root 0640` and unreadable by that user.
+At that inspection `pbx_config.so` was Not Running and both required contexts were
+absent from memory. File contents exactly matched the rollback
 backup, which includes the original `yibo` destinations. Zero active calls,
 channels, bridges and ARI applications were reported.
 
-No PBX configuration, file permissions, modules or routes were changed. The exact
-[permission repair and module-load proposal](PBX_DIALPLAN_RECOVERY_PROPOSAL.md)
-is ready for separate approval because it activates the existing public dialplan
-as well as 7001. The earlier temporary isolated environment is also missing and
-must be rebuilt privately before enabling an isolated call path.
+The user then explicitly approved the exact
+[permission repair and module load](PBX_DIALPLAN_RECOVERY_PROPOSAL.md).
+It passed at **18:21:53 UTC**: verified metadata-preserving backup, file group
+changed to `asterisk` with root owner/0640 mode/contents preserved, service read
+access restored, and the previously inactive module loaded once. Both loaded
+contexts match the September 23 snapshots, including 7001 and the explicit public
+rules targeting normal `yibo`. Asterisk's PID stayed unchanged; no restart,
+global reload or routing edit occurred.
+
+At **18:22:28 UTC**, all four ARI reads again returned HTTP 200 with zero channels,
+bridges and registered applications. No working YIBO process was started or
+restarted. The baseline dialplan is restored; isolated ingress and real audio
+remain untested. The earlier temporary isolated environment is missing and must
+be rebuilt privately before enabling an isolated call path.
 
 ## Historical read-only evidence — September 26
 
@@ -74,10 +83,9 @@ supersedes that pending reconnect; real call/RTP verification is still pending.
 
 ## Operator action and next safe steps
 
-1. Obtain approval for the exact permission repair/module-load proposal, then verify
-   the existing baseline contexts and unchanged destinations. Tailscale access is
-   restored; no further network change is needed for the current checks.
-2. Confirm the baseline and determine the intended application lifecycle; no ARI
+1. **Completed:** approved Tailscale reconnect and separately approved permission
+   repair/module load. Existing baseline contexts and destinations are verified.
+2. Determine the intended application lifecycle; no ARI
    application is registered. Do not automatically start/restart the working service
    or reroute 7001 while preparing the isolated setup.
 3. Prepare a fresh isolated application/database using the current launch commit,
