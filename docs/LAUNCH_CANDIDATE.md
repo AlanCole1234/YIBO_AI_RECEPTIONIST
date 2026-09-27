@@ -141,19 +141,18 @@ active lists and both local records cancelled. All operation claims released.
 [Real-provider evidence and isolation boundaries](LAUNCH_GOOGLE_ACCEPTANCE.md).
 The next gate requires an approved isolated phone path and a human caller.
 
-## 5. ACCEPT-001 preflight — blocked, 26 September 2026
+## 5. ACCEPT-001 preflight — blocked, updated 27 September 2026
 
-Read-only SSH and the exact ARI info/application/channel/bridge endpoints all timed
-out from this Mac. The current loaded routes and media state cannot be verified;
-this does not prove the phone service itself is down. No call or configuration
-change was attempted. Restore private-network access, inspect the previous 7001
-validation failure, and obtain fresh explicit approval before changing its stable
-rollback. [Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
-
-Follow-up read-only diagnosis found this Mac's Tailscale backend stopped, no active
-private IP and PBX traffic routed through ordinary Wi-Fi. The saved profile remains
-signed in. Reconnecting it with unchanged settings is proposed, pending approval
-because it activates saved DNS/private routes. PBX health and 7001 remain unverified.
+The explicitly approved Tailscale reconnect succeeded without changing saved
+settings. SSH/ARI access is restored. Read-only inspection reproduced a different
+blocker: `extensions.conf` is `root:root 0640`, unreadable by the `asterisk` service
+user; `pbx_config.so` is Not Running and neither required context is loaded.
+The file contents match the rollback backup and preserve normal `yibo` routing.
+No PBX change was applied. Zero active calls/channels/bridges and no registered ARI
+applications were observed. A permission-only repair plus module load is proposed
+for separate approval; it activates existing public/test contexts. The isolated
+setup must also be rebuilt because its former temporary environment file is absent.
+[Evidence and operator steps](LAUNCH_PHONE_PREFLIGHT.md).
 
 ## Ordered remaining gates
 
@@ -162,7 +161,7 @@ because it activates saved DNS/private routes. PBX health and 7001 remain unveri
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | Local Tailscale stopped; approved reconnect pending, then read-only PBX/7001 diagnosis, approved isolated route and real human call |
+| 5 — ACCEPT-001 | BLOCKED | Network restored; unreadable dialplan/module inactive. Permission repair approval, then isolated setup/route approval and real human call |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
 7001 remains rolled back. No Asterisk, Telnyx, ARI, RTP, live server or phone-route

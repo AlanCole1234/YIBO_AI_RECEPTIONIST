@@ -3,6 +3,23 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — diagnóstico PBX — 27 de septiembre de 2026
+
+- Reconexión Tailscale aprobada explícitamente y ejecutada sin flags/settings nuevos.
+  Mac/PBX online, ruta privada restablecida; SSH y cuatro GET ARI HTTP 200.
+- **Bloqueo reproducido**: `extensions.conf` es `root:root 0640`; el usuario
+  `asterisk` no puede leerlo. `pbx_config.so` Not Running; contextos 7001/from-pstn
+  ausentes de memoria. Archivo idéntico al backup de rollback, destinos `yibo` intactos.
+- Cero llamadas/canales/bridges y ninguna aplicación ARI registrada al inspeccionar.
+  Sin cambiar permisos, módulos, configuración, rutas o servicios del PBX.
+- [Propuesta exacta pendiente de aprobación](PBX_DIALPLAN_RECOVERY_PROPOSAL.md):
+  grupo del archivo a `asterisk`, conservando owner/mode/contenido; cargar únicamente
+  el módulo inactivo. Activa contextos públicos existentes, por eso requiere permiso.
+- Entorno aislado temporal anterior ya no contiene `.env`; reconstruirlo privadamente
+  antes de habilitar ingress. RTP de prueba previsto 50500–50509, separado de 40000–40020.
+- ACCEPT-001 sigue sin llamada real. Sin cambios de código, main o Google/OAuth.
+  Validación documental/read-only; typechecks/build/suite previos siguen como evidencia.
+
 ## Launch candidate — preflight telefónico — 26 de septiembre de 2026
 
 - RISK-001 `3046c82` y Google real `a437ea2` completos y respaldados.

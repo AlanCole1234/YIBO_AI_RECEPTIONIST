@@ -1,11 +1,32 @@
 # ACCEPT-001 — launch candidate phone preflight
 
-**BLOCKED / real call not performed — 26 September 2026.**
+**BLOCKED / real call not performed — updated 27 September 2026.**
 RISK-001 is complete (`3046c82`), and real Google acceptance is complete
 ([evidence](LAUNCH_GOOGLE_ACCEPTANCE.md), `a437ea2`). The ordered next gate is the
 real isolated phone call. Deployment/restore and pilot onboarding have not begun.
 
-## Read-only evidence
+## Current result — approved reconnect and read-only diagnosis
+
+The user explicitly approved reconnecting the existing Tailscale profile. On
+September 27, `tailscale up` with no flags returned success: backend Running, Mac
+online, private address restored and PBX traffic through the VPN interface.
+At 18:07:27 UTC all four ARI reads returned HTTP 200; SSH also worked. No saved
+Tailscale settings were changed.
+
+The next blocker is now verified: Asterisk runs as `asterisk`, but
+`/etc/asterisk/extensions.conf` is `root:root 0640` and cannot be read by that user.
+The read failure was reproduced. `pbx_config.so` is Not Running and both required
+contexts are absent from memory. Current file contents exactly match the rollback
+backup, which includes the original `yibo` destinations. Zero active calls,
+channels, bridges and ARI applications were reported.
+
+No PBX configuration, file permissions, modules or routes were changed. The exact
+[permission repair and module-load proposal](PBX_DIALPLAN_RECOVERY_PROPOSAL.md)
+is ready for separate approval because it activates the existing public dialplan
+as well as 7001. The earlier temporary isolated environment is also missing and
+must be rebuilt privately before enabling an isolated call path.
+
+## Historical read-only evidence — September 26
 
 - Attempted SSH to the previously configured PBX with batch authentication,
   strict existing host-key verification and an 8-second connection deadline.
@@ -48,18 +69,17 @@ changing saved settings. Proposed action: run
 route, SSH and ARI reads. Do not use `--reset`, change profiles, enable an exit node
 or alter Asterisk. Reconnection activates the saved DNS/private routes on this Mac,
 so approval was requested under the user's working-phone preservation constraint.
-At this checkpoint no reconnect was performed; approval/operator reconnection is
-pending. No real call or RTP verification has occurred.
+At that checkpoint no reconnect was performed. The September 27 update above
+supersedes that pending reconnect; real call/RTP verification is still pending.
 
 ## Operator action and next safe steps
 
-1. Reconnect this Mac's existing Tailscale profile after approval (or have the
-   operator reconnect it), then verify private-network access to the PBX. If it
-   remains unreachable, check the PBX host/network connection without changing its
-   working phone routes. No new DID or infrastructure is needed for this check.
-2. Once reachable, inspect the loaded 7001 context, public route, registered ARI
-   applications and active resources read-only. Diagnose the earlier
-   `test_route_not_loaded` validation failure before proposing another change.
+1. Obtain approval for the exact permission repair/module-load proposal, then verify
+   the existing baseline contexts and unchanged destinations. Tailscale access is
+   restored; no further network change is needed for the current checks.
+2. Confirm the baseline and determine the intended application lifecycle; no ARI
+   application is registered. Do not automatically start/restart the working service
+   or reroute 7001 while preparing the isolated setup.
 3. Prepare a fresh isolated application/database using the current launch commit,
    separate ports and RTP 50500–50509; verify no overlap and bidirectional media
    reachability. Do not enable an ingress that could receive production calls.
