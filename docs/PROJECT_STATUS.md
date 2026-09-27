@@ -3,15 +3,21 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## Estado actual — 21 de septiembre de 2026
+## Estado actual — 27 de septiembre de 2026
+
+- `main` contiene la integración de Business Operations y el cierre de bloqueantes de software para release.
+- Merge de bloqueantes de software: `173dec1`; cierre operativo/documental posterior: `25de52c`.
+- Último release gate verificado en GitHub Actions: instalación reproducible, typecheck, **482 pruebas aprobadas + 1 live omitida**, y build de producción aprobados.
+- El runtime de release exige Node **>=22.13** para ser compatible con pnpm 11.19.
+- El repositorio ya incluye preflight de producción, Dockerfile, healthcheck de contenedor, host configurable, documentación de despliegue y pruebas E2E sintéticas.
+- Únicos gates que siguen abiertos: **ACCEPT-001 / OPS-007** (aceptación live) y **DEPLOY-001** (host/datos/backups reales). No pueden declararse DONE sin credenciales e infraestructura objetivo.
+- Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md) y [aceptación de producción](PRODUCTION_RELEASE_ACCEPTANCE.md).
+
+### Checkpoint histórico previo — 21 de septiembre de 2026
 
 - Roadmap de software completo hasta **REL-002** en `codex/integrate-telephony-and-finish`.
-- Checkpoint final: **477 pruebas aprobadas, 1 live omitida**, ambos typechecks y build de producción.
-- Próximo paso: **ACCEPT-001 / DEPLOY-001**, operador del entorno objetivo; no equivalen a aceptación de producción ya realizada.
-- Plan de operaciones iniciado en `codex/yibo-business-operations`: auditoría
-  funcional e implementación agrupada completadas; typecheck, 477 pruebas y build
-  de producción aprobados. La aceptación live permanece separada.
-- Ver alcance, evidencia y límites en [auditoría final](RELEASE_CLOSURE_AUDIT.md). Sin merge a main ni despliegue.
+- Checkpoint final de ese corte: **477 pruebas aprobadas, 1 live omitida**, ambos typechecks y build de producción.
+- En ese momento ACCEPT-001 / DEPLOY-001 seguían abiertos y aún no se había integrado todo a `main`.
 
 ## Historial de checkpoints verificados
 

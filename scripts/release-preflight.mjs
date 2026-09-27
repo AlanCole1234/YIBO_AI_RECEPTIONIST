@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 const env = process.env;
 const errors = [];
 const required = [
+  "YIBO_TENANT_ID",
+  "YIBO_REGION",
   "OPENAI_API_KEY",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
@@ -23,6 +25,11 @@ const required = [
 
 for (const name of required) {
   if (!env[name]?.trim()) errors.push(`${name} is required for a production release`);
+}
+
+const region = env.YIBO_REGION?.trim();
+if (region && !["MX", "US"].includes(region)) {
+  errors.push("YIBO_REGION must be MX or US");
 }
 
 if (env.YIBO_RUNTIME !== "openai-realtime") {
@@ -61,9 +68,23 @@ if (Number.isInteger(start) && Number.isInteger(end) && start > end) {
   errors.push("YIBO_ASTERISK_MEDIA_PORT_START must be <= YIBO_ASTERISK_MEDIA_PORT_END");
 }
 
-for (const name of ["YIBO_DATABASE_MX", "YIBO_DATABASE_US"]) {
-  const value = env[name]?.trim();
-  if (value && !existsSync(value)) errors.push(`${name} does not exist: ${value}`);
+if (region && ["MX", "US"].includes(region)) {
+  const databaseName = `YIBO_DATABASE_${region}`;
+  const databasePath = env[databaseName]?.trim();
+  if (!databasePath) errors.push(`${databaseName} is required for a production release`);
+  else if (!existsSync(databasePath)) errors.push(`${databaseName} does not exist: ${databasePath}`);
+}
+
+try {
+  const ari = new URL(env.ASTERISK_ARI_URL ?? "");
+  if (!["http:", "https:"].includes(ari.protocol)) errors.push("ASTERISK_ARI_URL must use HTTP or HTTPS");
+} catch {
+  errors.push("ASTERISK_ARI_URL must be a valid HTTP(S) URL");
+}
+
+if (env.PORT) {
+  const port = Number(env.PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) errors.push("PORT must be an integer between 1 and 65535");
 }
 
 if (errors.length) {
