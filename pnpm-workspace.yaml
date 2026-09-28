@@ -1,2 +1,9 @@
+# Fail non-interactive installs on unreviewed dependency build scripts.
+strictDepBuilds: true
 allowBuilds:
   esbuild: true
+  # Wrangler's runtime binary installer; package versions stay pinned in the lockfile.
+  workerd: true
+minimumReleaseAgeExclude:
+  - miniflare@5.20260926.0-alpha
+  - wrangler@4.142.0

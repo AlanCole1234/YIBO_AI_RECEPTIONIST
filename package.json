@@ -16,7 +16,11 @@
     "dev:voice:transcript": "tsx --env-file=.env apps/dev-voice/server.ts --transcript",
     "build": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json && vite build --config dashboard/vite.config.ts",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p dashboard/tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "cloudflare:typecheck": "tsc --noEmit -p deploy/cloudflare/tsconfig.json",
+    "cloudflare:build": "pnpm typecheck && pnpm cloudflare:typecheck && vite build --config dashboard/vite.config.ts",
+    "cloudflare:check": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cloudflare:deploy": "wrangler deploy"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
@@ -34,7 +38,8 @@
     "typescript": "^5.7.2",
     "vite": "^7.0.0",
     "vitest": "^2.1.8",
-    "vue-tsc": "^3.0.0"
+    "vue-tsc": "^3.0.0",
+    "wrangler": "4.142.0"
   },
   "packageManager": "pnpm@11.19.0+sha512.7881f3ed590d472c4a955e2b88b2121791116066dcc88cbca3849ec9b60f1bbaa6d2ccb221fa91da4e1c65bef2bcbe379365aea7ac539c7bf86dedc3a1b22dce"
 }

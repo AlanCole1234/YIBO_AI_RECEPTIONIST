@@ -3,6 +3,51 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Cloudflare — publicación Git autorizada — 28 de septiembre de 2026
+
+- Usuario autoriza commit y push de los cambios verificados exclusivamente a
+  `codex/cloudflare-deployment`. Sin ejecutar despliegue ni modificar main.
+- 325 archivos de código/configuración/pruebas coinciden con el snapshot de CI
+  aprobado; revisión de archivos a publicar sin credenciales ni artefactos sensibles.
+  Se conservan el checkout telefónico y las ramas existentes.
+- Usar el SHA real del HEAD publicado para seleccionar la revisión en Cloudflare;
+  los registros siguientes describen la validación local previa a esta publicación.
+
+## Cloudflare — aprobación de builds pnpm en CI — 27 de septiembre de 2026
+
+- `pnpm-workspace.yaml` declara `strictDepBuilds: true`; conserva los permisos
+  específicos `esbuild`/`workerd` ya preparados localmente. Sin permiso global,
+  cambios de versiones/lockfile, lógica de negocio ni servicios/configuración live.
+- Reproducción aislada exacta: `workerd@1.20260925.1` falla sin aprobación y completa
+  postinstall con esta política, sin prompts. Snapshot limpio pasa instalación
+  frozen en CI, build/typechecks backend/Vue/Worker y **deploy con `--dry-run`**.
+- **28 pruebas deployment aprobadas**. Un comando con `--` seleccionó la suite
+  completa por error; 22 fallos por sockets bajo sandbox. Sólo los cinco archivos
+  afectados se repitieron con permisos loopback: **23/23 aprobadas**. Comando focal
+  corregido en la guía; sin cambios de aplicación ni llamadas/proveedores reales.
+- Rama Cloudflare aún local; el SHA informado `abc1234` no resuelve en el remoto
+  consultado. Confirmar origen del build antes de reintentar. Sin commit/push/deploy.
+  [Política y evidencia](CLOUDFLARE_DEPLOYMENT.md#non-interactive-pnpm-builds).
+
+## Preparación Cloudflare — 27 de septiembre de 2026
+
+- Rama aislada **`codex/cloudflare-deployment`**, desde launch candidate `2117c5d`;
+  checkout telefónico y trabajo previo conservados. **Sin push ni despliegue**.
+- Vue en Workers Static Assets y proxy HTTP del mismo origen para `/api`;
+  Fastify/SQLite regional, auth, Calendar y telefonía permanecen en Node. No cambio
+  de lógica, schema, frontend, servicios live, secretos, 7001 ni main.
+- Wrangler/configuración y comandos de build/dry-run preparados. Proxy conserva
+  cookies/Origin/If-Match, rechaza configuración insegura y no cachea/reintenta writes.
+  Versiones existentes del lockfile intactas; herramientas Cloudflare añadidas.
+- **56 pruebas focales aprobadas**, typechecks backend/Vue/Worker y build aprobados;
+  dry-run Wrangler y ocho requests de smoke local workerd aprobados. Sin proveedores
+  reales ni suite completa redundante. Servidor temporal cerrado.
+- **Pendiente**: elegir dominio/origen Node persistente, configurar Tunnel/Access
+  aislados y validar despliegue remoto. OAuth desde dashboard HTTPS mantiene límite
+  existente de retorno localhost; Voice Lab requiere auth/WSS separado de puerto 4317.
+  No se anuncian esas funciones como listas para hosting público.
+- [Arquitectura, settings exactos, límites y validación](CLOUDFLARE_DEPLOYMENT.md).
+
 ## Launch candidate — entorno telefónico aislado preparado — 27 de septiembre de 2026
 
 - API nueva **3114 en standby**, sin conexión ARI ni requests a proveedores.
