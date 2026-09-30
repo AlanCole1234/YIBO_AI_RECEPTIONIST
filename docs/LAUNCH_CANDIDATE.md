@@ -4,6 +4,21 @@ Plan: Alan's six-page `YIBO_Alan_Codex_Instructions.pdf`, read in full before
 integration. This document records evidence for the combined candidate; older
 branch acceptance does not automatically pass a new release gate.
 
+## Latest acceptance update — 30 September 2026
+
+Resumed from a clean `2117c5d` worktree; no unfinished implementation changes or
+merge remained. Supplementary synthetic browser acceptance passed for appointment
+changes, settings persistence, customer history/notification records, roles,
+professional availability, compact layouts and Voice Lab lifecycle/cost. **56
+focused tests, both typechecks and production build passed.** No application fix
+was needed. Native WAV picker automation remains unverified; real microphone and
+phone/provider acceptance are not claimed. See
+[the complete browser evidence and limits](LAUNCH_BROWSER_ACCEPTANCE.md).
+
+Gates 1–4 below remain complete. The next gate is **5 / ACCEPT-001**, requiring
+a real human phone call. Current PBX/routing/process readiness was not inspected
+in this browser checkpoint; the dated phone preflight below is historical evidence.
+
 ## 1. Integration checkpoint — complete, 25 September 2026
 
 | Source | Verified remote commit |
@@ -166,14 +181,15 @@ call remain required. No further PBX mutation or provider write occurred.
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | BLOCKED | Network/dialplan restored; isolated standby ready, 29 focused tests pass; separate route/ARI activation approval and real human call remain |
+| 5 — ACCEPT-001 | MANUAL / LIVE REQUIRED | A real human call remains; revalidate the isolated setup against the reviewed proposal before use. The 27 September preflight is historical, not current routing/readiness evidence. |
 | 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
 
-7001 still targets normal `yibo`. The separately approved file-group repair and
-inactive-module load are complete; they do not authorize further Asterisk, Telnyx,
-ARI, RTP, live server or phone-route changes. Approval is needed before changing a
-working route or merging main. A real Google test must use an explicitly isolated
-test calendar and synthetic labels; never substitute a mocked result for it.
+The 27 September snapshot recorded 7001 targeting normal `yibo` after the approved
+file-group repair and inactive-module load. It does not establish the route today.
+No PBX/7001 changes or inspection were performed during the 30 September browser
+checkpoint. Preserve the scope of existing approvals, and obtain explicit approval
+for any new working-route change or merge to main. Real provider tests must use
+isolated test resources and synthetic labels; never substitute a mocked result.
 
 ## Known limitations carried into later gates
 

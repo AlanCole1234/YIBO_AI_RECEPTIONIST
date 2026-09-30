@@ -3,6 +3,32 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — cierre browser sintético — 30 de septiembre de 2026
+
+- Worktree reanudado **limpio en `2117c5d`**: no había cambios de implementación
+  sin commit. Merge `6b82aa9`, fuentes Product `7078d49` / Operations `785389f`,
+  concurrencia `3046c82` y Google real `a437ea2` conservados; no se reintegró nada.
+- Browser aislado **3113/5381**, SQLite sintético y Calendar en memoria: secretario
+  crea en Office, reprograma en Appointments y cancela en Office; mismo ID de cita
+  y evento, revisiones 2→3→4, slot liberado, historial/timeline y emails SKIPPED.
+- Settings guarda/persiste tras reload y recupera valores originales; catálogo,
+  asignaciones, mappings, dos profesionales y roles owner/manager/secretary/read-only
+  verificados. Layouts compactos **390 px** sin overflow en las pantallas revisadas.
+- Voice Lab real UI/controller con fixture privado **5382/4319**: playback/interrupt,
+  costo **$0.013128**, cierre único, segunda sesión en la misma página con contadores
+  reiniciados y **< US$0.0001**, cierre duplicado/usage tardío ignorados, actividad
+  navegable y sockets cerrados. Sin micrófono ni proveedor live; procesos temporales
+  detenidos. Picker WAV quedó sin verificar por fallo del control de browser; se
+  usaron botones temporales que invocan el mismo método de sesión, fuera del repo.
+- **56/56 pruebas focales**, typechecks backend/frontend y build aprobados; sin
+  cambios de runtime después. No se repitió la suite completa ya verde 679+1.
+- Sólo documentación; sin main, Cloudflare, PBX/7001, Google/OAuth live, datos reales
+  ni cambios a sistemas del compañero. No se encontró nueva regresión/concurrencia.
+- Siguiente gate exacto del PDF: **checkpoint 5 / ACCEPT-001**, llamada humana real
+  en ruta aislada verificada. Estado telefónico actual no inspeccionado; los apartados
+  anteriores son snapshots fechados, no garantía de readiness actual. Se pausa aquí;
+  deployment/restore/piloto no se adelantan. [Evidencia y límites](LAUNCH_BROWSER_ACCEPTANCE.md).
+
 ## Launch candidate — entorno telefónico aislado preparado — 27 de septiembre de 2026
 
 - API nueva **3114 en standby**, sin conexión ARI ni requests a proveedores.
