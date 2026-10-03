@@ -108,6 +108,11 @@ clients without revisions cannot detect stale intent. See
 
 ## Exact next release gate
 
+**Subsequent update, October 3:** the user has reported 7001 success and authorized
+Checkpoint 6 preparation. See [current deployment work](DEPLOYMENT_CHECKPOINT.md)
+and [the limits of the phone evidence](LAUNCH_7001_SPEAKERPHONE_REPAIR.md). The
+paragraphs below preserve the September 30 checkpoint's boundary.
+
 **PDF checkpoint 5 — Live Phone Acceptance (ACCEPT-001).** Use synthetic data and
 a freshly verified, approved isolated phone path with a human caller. Verify the
 correct location, natural turns/interruption, contact capture, availability,

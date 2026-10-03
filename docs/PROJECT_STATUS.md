@@ -3,6 +3,39 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — checkpoint 6 preparado, despliegue pendiente — 3 de octubre de 2026
+
+- El usuario informó que **7001 funcionó** y autorizó avanzar a checkpoint 6.
+  La reparación aprobada del 1 de octubre cambió sólo `yibo-audio-test` a Speex
+  16 kHz; backup/reload/registro/aislamiento verificados. La ventana diagnóstica
+  acabó sin captar la llamada posterior: no se declaran verificadas todas las
+  variantes de ACCEPT-001. [Evidencia y límites](LAUNCH_7001_SPEAKERPHONE_REPAIR.md).
+- VPS Asterisk inspeccionado **read-only** el 2 de octubre: Ubuntu 24.04, 1 vCPU,
+  961.5 MiB RAM, 558.8 MiB disponibles, sin swap, 7.71 GiB libres. En reposo y sin
+  llamadas; no demuestra margen bajo carga. Se recomienda **otro VPS para el backend**
+  para preservar telefonía; sin instalar, redimensionar ni cambiar servicios/red.
+- Reutilizadas las plantillas Node del borrador Cloudflare, dejando intacto su
+  worktree. Worker configurado `yibo-dashboard`; URL pública, dominio y `API_ORIGIN`
+  reales no constan en repo. Sin cambio/despliegue en Cloudflare.
+- CLI operativo de backup/verificación/restore: SQLite online con WAL, rutas
+  regionales explícitas, integridad/FK/región/checksums, restore sólo en directorio
+  nuevo. No migra originales, inicia proveedores, sobrescribe archivos ni libera claims.
+- Plantillas de servicio API y backup/timer, upload restic con errores seguros,
+  timeout y conservación de snapshots/logs. No se instalaron/activaron; destino remoto,
+  credenciales, retención y alertas requieren configuración del operador.
+- **34 pruebas focales aprobadas (19 nuevas)**. Rehearsal real de SQLite sintético
+  MX/US: conserva datos/configuración/identidad Google/historial/notificaciones,
+  claves cifradas y login mediante Fastify; fuente main/WAL intacta. Restic se simula
+  sólo en tests de ejecución/fallos: no se afirma upload/restore off-host real.
+- **Typechecks backend/frontend y build de producción aprobados**; sintaxis shell
+  aprobada. pnpm mantuvo verificación de firmas; el build necesitó acceso de red
+  para esa verificación. No se repitió la suite completa: sin cambios a lógica de negocio.
+- **DEPLOY-001 sigue abierto**: host nuevo, dominios, servicios/Linux, HTTPS/Access,
+  pruebas del dashboard desplegado, monitoreo y backup remoto con restore real.
+  [Plan, variables y procedimiento exacto](DEPLOYMENT_CHECKPOINT.md).
+- `main`, servicio telefónico, 7001, Google/OAuth, datos de producción y subsistemas
+  Customer Profiles/Email Notifications sin cambios. No se inició onboarding/piloto.
+
 ## Launch candidate — cierre browser sintético — 30 de septiembre de 2026
 
 - Worktree reanudado **limpio en `2117c5d`**: no había cambios de implementación
@@ -489,8 +522,8 @@ con `pnpm test` y `pnpm build`.
 |---|---|---|
 | CLOSE-001 | DONE | ADR-008, end_call de sesión, guardas de acciones/interrupción y flush RTP final; 465 pruebas y build |
 | CLOSE-002 | DONE | Política de mapping protegida atómicamente por citas no canceladas; histórico/pending/fallos, override/fallback y E2E Google. Ver BOOKED_CALENDAR_ROUTES.md |
-| ACCEPT-001 | TODO | Operador de despliegue: aceptación live y browser con datos de prueba |
-| DEPLOY-001 | TODO | Operador de despliegue: respaldo durable, claves, admins, red y datos objetivo |
+| ACCEPT-001 | IN_PROGRESS | Browser sintético aprobado; usuario reporta 7001 funcional; faltan variantes live detalladas antes del piloto |
+| DEPLOY-001 | IN_PROGRESS | Preparación y restore sintético verificados; pendientes host separado, dominios, backup/restore off-host y aceptación desplegada |
 | RISK-001 | DONE | Revisiones + guardia SQLite compartida, relectura bajo lock, conflictos UI/voz, dos procesos/fallos/identidad; 679 pruebas, 1 live omitida; APPOINTMENT_EDIT_PROTECTION.md |
 | RISK-002 | TODO | Producto/secretaría: validar flujo por IDs y necesidad de agenda/búsqueda antes de uso diario; BUSINESS_TEST_READINESS.md |
 

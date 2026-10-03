@@ -4,7 +4,23 @@ Plan: Alan's six-page `YIBO_Alan_Codex_Instructions.pdf`, read in full before
 integration. This document records evidence for the combined candidate; older
 branch acceptance does not automatically pass a new release gate.
 
-## Latest acceptance update — 30 September 2026
+## Latest update — 3 October 2026
+
+The user reported that 7001 worked and authorized starting Checkpoint 6. The
+approved Speex16 endpoint repair and its limits are recorded in
+[phone acceptance evidence](LAUNCH_7001_SPEAKERPHONE_REPAIR.md). Detailed later-call
+diagnostics and the remaining ACCEPT-001 variants are not claimed as passed.
+
+Checkpoint 6 repository preparation is complete: Node supervision templates,
+consistent regional backup/verify/new-directory restore, and an off-host backup
+job/timer template. **34 focused tests, both typechecks and production build passed.**
+Real synthetic SQLite restore and restored-owner API login passed; off-host upload
+tests use a stub. The existing one-CPU/1-GiB Asterisk VPS was inspected read-only and
+is not recommended for the additional launch workload. No host or Cloudflare
+changes were made. Host selection, actual domains, remote storage/restore and hosted
+acceptance remain open. See [Checkpoint 6](DEPLOYMENT_CHECKPOINT.md).
+
+## Browser acceptance update — 30 September 2026
 
 Resumed from a clean `2117c5d` worktree; no unfinished implementation changes or
 merge remained. Supplementary synthetic browser acceptance passed for appointment
@@ -15,9 +31,9 @@ was needed. Native WAV picker automation remains unverified; real microphone and
 phone/provider acceptance are not claimed. See
 [the complete browser evidence and limits](LAUNCH_BROWSER_ACCEPTANCE.md).
 
-Gates 1–4 below remain complete. The next gate is **5 / ACCEPT-001**, requiring
-a real human phone call. Current PBX/routing/process readiness was not inspected
-in this browser checkpoint; the dated phone preflight below is historical evidence.
+Gates 1–4 below remain complete. At this browser checkpoint the next gate was
+**5 / ACCEPT-001**. PBX readiness was not inspected by that checkpoint; subsequent
+phone evidence and the user's authorization to prepare deployment are recorded above.
 
 ## 1. Integration checkpoint — complete, 25 September 2026
 
@@ -181,8 +197,8 @@ call remain required. No further PBX mutation or provider write occurred.
 | 2 — Full regression | COMPLETE | 664 passed, 1 optional live-model test skipped; both typechecks and production build passed |
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
-| 5 — ACCEPT-001 | MANUAL / LIVE REQUIRED | A real human call remains; revalidate the isolated setup against the reviewed proposal before use. The 27 September preflight is historical, not current routing/readiness evidence. |
-| 6 — Deployment/restore | TODO | Target configuration, durable backups and a demonstrated restore before pilot onboarding |
+| 5 — ACCEPT-001 | USER-REPORTED CALL SUCCESS; DETAILS OPEN | Approved isolated repair followed by the user's 7001 success report. Detailed booking/transfer/failure/language/cleanup variants still need recorded manual evidence before pilot. |
+| 6 — Deployment/restore | PREPARATION COMPLETE; DEPLOYMENT OPEN | Local templates and synthetic restore verified. Separate host, actual domains, off-host storage/restore, monitoring and deployed acceptance remain required. |
 
 The 27 September snapshot recorded 7001 targeting normal `yibo` after the approved
 file-group repair and inactive-module load. It does not establish the route today.
