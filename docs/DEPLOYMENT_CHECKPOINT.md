@@ -52,12 +52,35 @@ The next step is to obtain the existing dashboard's public URL or sign in with
 the Cloudflare login that owns it, then inspect its settings. Do not recreate the
 Worker, add a domain or set an origin based on a guessed hostname.
 
+### GitHub follow-up — original build account identified
+
+The GitHub check runs for Cloudflare branch HEAD `40f89423b4170d394db0b17d6fecd78b5637afe4`
+identify **`yibo-ai-receptionist` in a different Cloudflare account**. The
+[original project link](https://dash.cloudflare.com/cd9a637a5bc540ca195f7c8323cb81a1/workers/services/view/yibo-ai-receptionist/production)
+comes from [Cloudflare's GitHub check](https://github.com/AlanCole1234/YIBO_AI_RECEPTIONIST/runs/109012888747).
+Opening its linked build with the current login returns **"Page not found"**, with
+Cloudflare explaining that the page may not exist or access may be missing.
+
+The terminal check reports **failure on 28 September at 15:56:05 UTC**. Querying
+all check runs also returns an older in-progress entry for the same build ID;
+neither proves a successful deployment or that a build is still running. No checks
+were returned for the preceding `2117c5d` commit. A later manual deployment may
+exist, so the user's reported success is not disproved by these limited records.
+
+The recorded Cloudflare project name differs from Wrangler's `yibo-dashboard`.
+Do not rename either from this evidence alone: inspect the owning account's actual
+project, build settings and deployed version first. The user must sign in with
+the owning login or obtain access from that account's administrator. No build was
+retried and no deployment, account membership or configuration was changed.
+
 Required operator inputs:
 
 1. A suitable separate backend host, access method and data region; no purchase is assumed.
-2. Locate the account that owns the existing deployment. In **Workers & Pages ->
-   yibo-dashboard -> Settings -> Domains & Routes**, copy the active public
-   dashboard HTTPS URL, not the Cloudflare console URL.
+2. Open the linked original project with the owning account. In **Workers & Pages
+   -> the verified YIBO Worker -> Settings -> Domains & Routes**, copy the active
+   public dashboard HTTPS URL, not the Cloudflare console URL. GitHub identifies
+   `yibo-ai-receptionist`; the local Wrangler name alone is not authoritative for
+   the deployed project.
 3. **Settings -> Variables and Secrets:** copy the non-secret `API_ORIGIN` if set,
    or state that it is absent. Do not paste service-token or provider secrets.
 4. The Cloudflare-managed domain available for a dedicated API hostname.

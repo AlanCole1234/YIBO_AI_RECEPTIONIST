@@ -23,6 +23,12 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   despliegue informado por el usuario ni prueba su ausencia en otra cuenta/login.
   Se requiere URL pública existente o acceso a la cuenta propietaria antes de
   definir `API_ORIGIN`; sin crear recursos, modificar settings ni revelar secretos.
+- Seguimiento GitHub: el check de `40f8942` enlaza **`yibo-ai-receptionist` en otra
+  cuenta Cloudflare**, distinta del nombre local Wrangler `yibo-dashboard`.
+  El login actual recibe Page not found/posible falta de acceso. El check terminal
+  del 28 de septiembre fue failure; no demuestra el estado de un despliegue manual
+  posterior. Cuenta/proyecto originales identificados, pero URL pública y settings
+  siguen sin verificar. Sin retry, rename ni cambios de acceso/configuración.
 - CLI operativo de backup/verificación/restore: SQLite online con WAL, rutas
   regionales explícitas, integridad/FK/región/checksums, restore sólo en directorio
   nuevo. No migra originales, inicia proveedores, sobrescribe archivos ni libera claims.
