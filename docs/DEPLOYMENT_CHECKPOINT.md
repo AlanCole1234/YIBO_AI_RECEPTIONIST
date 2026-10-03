@@ -34,14 +34,30 @@ The Cloudflare repository identifies a **Worker with static assets**, named
 `yibo-dashboard`, on `codex/cloudflare-deployment` at `40f8942`. Its Wrangler config
 has `workers_dev: false` and no custom domain/route or `API_ORIGIN` value. The
 existing Tunnel/backend draft contains only `.invalid` placeholders. A successful
-dashboard deployment does not identify its public hostname. Cloudflare account
-state has not been read or changed during this checkpoint.
+dashboard deployment does not identify its public hostname.
+
+### Read-only Cloudflare account inspection — 3 October 2026, 19:57 UTC
+
+The browser is now signed in. The account switcher offers exactly one account;
+its unfiltered Workers & Pages list says **"No projects found"**, Domains says
+**"No data available"**, and Tunnels shows **"Get started with Cloudflare Tunnel"**.
+The Workers page also prompts to set up Zero Trust. The local Wrangler CLI is
+not authenticated. No account setting, resource, deployment or credential was changed.
+
+This account does not expose the previously reported YIBO deployment. That does
+not establish whether a deployment exists under another login/account. An account's
+`workers.dev` subdomain alone is not a verified application URL. **The public
+dashboard URL, existing `API_ORIGIN` and usable API domain remain unverified.**
+The next step is to obtain the existing dashboard's public URL or sign in with
+the Cloudflare login that owns it, then inspect its settings. Do not recreate the
+Worker, add a domain or set an origin based on a guessed hostname.
 
 Required operator inputs:
 
 1. A suitable separate backend host, access method and data region; no purchase is assumed.
-2. **Workers & Pages -> yibo-dashboard -> Settings -> Domains & Routes:** copy the
-   active public dashboard HTTPS URL, not the Cloudflare console URL.
+2. Locate the account that owns the existing deployment. In **Workers & Pages ->
+   yibo-dashboard -> Settings -> Domains & Routes**, copy the active public
+   dashboard HTTPS URL, not the Cloudflare console URL.
 3. **Settings -> Variables and Secrets:** copy the non-secret `API_ORIGIN` if set,
    or state that it is absent. Do not paste service-token or provider secrets.
 4. The Cloudflare-managed domain available for a dedicated API hostname.
