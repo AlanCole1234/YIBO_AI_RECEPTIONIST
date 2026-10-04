@@ -4,7 +4,19 @@ Plan: Alan's six-page `YIBO_Alan_Codex_Instructions.pdf`, read in full before
 integration. This document records evidence for the combined candidate; older
 branch acceptance does not automatically pass a new release gate.
 
-## Latest update — 3 October 2026
+## Latest update — 4 October 2026
+
+The existing public dashboard at **https://yibo-ai-receptionist.28rc9ktmdp.workers.dev**
+returns HTTPS 200; its HTML/CSS/JS match the launch build. Canonical `/index.html`
+redirects to `/` without looping. The browser renders the login screen but reports
+authentication unavailable: health/auth/business/readiness return **503
+`API_PROXY_NOT_CONFIGURED`**. Browser navigation upgrades HTTP to HTTPS successfully;
+raw non-HSTS clients receive HTTP 200 without a server-side redirect.
+Public frontend delivery passes; hosted authentication/workflows and deployment
+closure remain blocked. No live setting, provider or database was changed.
+[Detailed public checks, exact dashboard origin and remaining work](DEPLOYMENT_CHECKPOINT.md).
+
+## Repository preparation — 3 October 2026
 
 The user reported that 7001 worked and authorized starting Checkpoint 6. The
 approved Speex16 endpoint repair and its limits are recorded in
@@ -198,7 +210,7 @@ call remain required. No further PBX mutation or provider write occurred.
 | 3 — RISK-001 | COMPLETE | Reproduced/fixed races; revisions and shared SQLite claims; stale UI/voice references, two processes, migration and recovery tests |
 | 4 — Real Google | COMPLETE | Real availability/create/two reschedules/cancel/cleanup; same ID, exact local time, stale rejection, 15 existing events unchanged |
 | 5 — ACCEPT-001 | USER-REPORTED CALL SUCCESS; DETAILS OPEN | Approved isolated repair followed by the user's 7001 success report. Detailed booking/transfer/failure/language/cleanup variants still need recorded manual evidence before pilot. |
-| 6 — Deployment/restore | PREPARATION COMPLETE; DEPLOYMENT OPEN | Local templates and synthetic restore verified. Separate host, actual domains, off-host storage/restore, monitoring and deployed acceptance remain required. |
+| 6 — Deployment/restore | PUBLIC DASHBOARD VERIFIED; DEPLOYMENT OPEN | Assets, canonical redirect and browser HTTPS upgrade pass. API returns 503 configuration error; separate backend, off-host restore, monitoring and authenticated hosted acceptance remain required. |
 
 The 27 September snapshot recorded 7001 targeting normal `yibo` after the approved
 file-group repair and inactive-module load. It does not establish the route today.

@@ -3,6 +3,29 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Launch candidate — Worker público verificado, API pendiente — 4 de octubre de 2026
+
+- URL real proporcionada por el usuario: **https://yibo-ai-receptionist.28rc9ktmdp.workers.dev**.
+  HTTPS 200; HTML/CSS/JS coinciden por SHA-256 con el build del launch candidate.
+  `/index.html` redirige 307 a `/` y termina en 200; SPA de appointments disponible.
+- Browser muestra login y **Authentication is unavailable right now**. Health,
+  auth/me, business y readiness devuelven **503 API_PROXY_NOT_CONFIGURED**, sin caché.
+  Falta verificar `API_ORIGIN` y presencia del par Access; no es prueba de password
+  incorrecto. Sin login, escritura, acceso a datos de pacientes ni calls a proveedores.
+- Browser convierte HTTP a HTTPS y carga sin bucle, compatible con HSTS preloaded
+  de `.dev`. curl/HEAD/GET sin HSTS reciben HTTP 200: no hay redirect de servidor;
+  esa observación no se clasifica como fallo del browser. Sin cambiar configuración.
+- Documentado `YIBO_DASHBOARD_ORIGIN` exacto; no aplicado. Host backend, API origin,
+  restart/persistencia, monitoreo y restore off-host siguen pendientes. El error
+  previo en la sesión Codex no demostraba ausencia del Worker o acceso del usuario.
+- Preflight local más reciente **34/34** (28 proxy + 6 auth), typechecks backend,
+  frontend y Worker, build y dry-run aprobados; sin upload. No se repitieron tras
+  los GET públicos porque no cambió código. El worktree Cloudflare conserva sus
+  borradores; no se creó otro Worker ni se cambió main/PBX/7001/Calendar/datos live.
+- Próximo paso: inspeccionar bindings del Worker existente y concretar backend
+  persistente aislado; reconciliar nombre/`workers_dev` antes de desplegar de nuevo.
+  **DEPLOY-001 sigue abierto**. [Resultados y siguientes pasos](DEPLOYMENT_CHECKPOINT.md).
+
 ## Launch candidate — checkpoint 6 preparado, despliegue pendiente — 3 de octubre de 2026
 
 - El usuario informó que **7001 funcionó** y autorizó avanzar a checkpoint 6.

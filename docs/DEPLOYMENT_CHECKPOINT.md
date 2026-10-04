@@ -1,8 +1,74 @@
 # Checkpoint 6: persistent backend, backup and restore
 
-3 October 2026. **Repository preparation complete; deployment gate OPEN.**
+4 October 2026. **Public dashboard verified; API connection and deployment gate OPEN.**
 No server, DNS, Cloudflare, phone, Google/OAuth or production-data change is included.
 Work remains on `codex/yibo-launch-candidate`; this is not approval to merge to main.
+
+## Public Worker verification — 4 October 2026
+
+The user supplied **https://yibo-ai-receptionist.28rc9ktmdp.workers.dev**.
+Anonymous requests and the browser now verify the existing application directly;
+no Cloudflare account access, new Worker, login or provider write was needed.
+
+| Check | Observed result |
+| --- | --- |
+| HTTPS `/` | **PASS**: 200, valid TLS, YIBO HTML |
+| Deployed assets | **PASS**: HTML, `index-B_GcMP9f.css` and `index-DprdAmoq.js` match the local launch build by SHA-256; CSS/JS return 200 with correct content types |
+| `/index.html` redirect | **PASS**: 307 to `/`, then 200 without another redirect |
+| `/appointments` and `/appointments/` | **PASS for SPA delivery**: 200 dashboard HTML; authenticated appointment behavior is not verified |
+| Browser startup | Login screen renders; alert says **"Authentication is unavailable right now."** No credentials entered |
+| `/api/health`, `/api/auth/me`, `/api/business`, `/api/admin/readiness` | **BLOCKED**: all return 503 JSON `API_PROXY_NOT_CONFIGURED`, with private/no-store cache headers |
+| Browser HTTP navigation | **PASS**: entering the HTTP URL upgrades to the HTTPS URL and renders the same login screen without a loop |
+| Raw HTTP `/` | **OBSERVATION**: HEAD/GET and curl return 200 without a server redirect; these clients do not apply the browser's HSTS preload behavior |
+
+The `.dev` top-level domain is on the browser HSTS preload list, as documented by
+[Google Registry](https://www.registry.google/domains/dev/). The observed browser
+upgrade is consistent with that protection. The initial raw-HTTP finding is not
+classified as a broken browser redirect. Non-HSTS clients can still use HTTP;
+an explicit server redirect would be separate hardening, not a fix applied here.
+
+The reviewed proxy emits `API_PROXY_NOT_CONFIGURED` before contacting Fastify when
+`API_ORIGIN` is missing/invalid/self-referencing, or only one Cloudflare Access
+credential binding is present. This response alone cannot identify the incorrect
+binding. Inspect the existing Worker's non-secret `API_ORIGIN` and credential
+**presence only**. The login alert is not evidence of a wrong administrator password.
+
+The backend's now-known dashboard setting is:
+
+```dotenv
+YIBO_DASHBOARD_ORIGIN=https://yibo-ai-receptionist.28rc9ktmdp.workers.dev
+```
+
+This was **documented, not applied**. The backend hostname and Worker `API_ORIGIN`
+remain unresolved; neither this public Worker URL nor localhost is a valid substitute
+for the reviewed HTTPS API origin. Hosted login, persistence and business workflows
+remain blocked while the API is unconnected.
+
+Required next steps before deployment changes:
+
+1. Inspect existing `API_ORIGIN` and Access-binding presence. Approve/select the
+   separate persistent backend host and off-host backup destination.
+2. Preserve the verified HTTPS URL and browser upgrade behavior. If a future review
+   requires server-side redirects for non-HSTS clients, test assets and API paths:
+   current assets bypass the Worker outside `/api`, so script-only redirects would
+   not cover them. See [Cloudflare's static-asset routing contract](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/).
+   No redirect code or live setting was changed during this inspection.
+3. Reconcile future deployment targeting with **existing** `yibo-ai-receptionist`:
+   local Wrangler still names `yibo-dashboard` and sets `workers_dev: false`, while
+   the operator enabled the current URL. Confirm the account and preserve that route
+   before running a deployment command. See [workers.dev configuration](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+4. Use the prepared Node/backup files and a new synthetic store on the approved
+   backend. Configure its dashboard origin and the Worker's HTTPS API origin/Access
+   credentials privately; keep live phone, Calendar and production databases intact.
+5. Repeat public redirects; require health 200 and anonymous auth 401. Then perform
+   approved synthetic hosted login/workflow/restart checks and actual off-host
+   backup/restore. These blocked checks are not marked complete.
+
+Latest local preflight: **28 Worker/proxy plus 6 authentication tests passed**;
+backend/frontend/Worker typechecks, production build and Wrangler dry-run passed.
+No upload occurred. The checked-out API/dashboard implementation matches the
+Cloudflare branch; the launch branch adds standalone backup tools. No redundant suite was repeated
+after these public checks because no runtime code changed.
 
 ## Current evidence and blockers
 
@@ -34,7 +100,8 @@ The Cloudflare repository identifies a **Worker with static assets**, named
 `yibo-dashboard`, on `codex/cloudflare-deployment` at `40f8942`. Its Wrangler config
 has `workers_dev: false` and no custom domain/route or `API_ORIGIN` value. The
 existing Tunnel/backend draft contains only `.invalid` placeholders. A successful
-dashboard deployment does not identify its public hostname.
+dashboard deployment did not identify its public hostname at that inspection;
+the subsequently supplied URL is verified above.
 
 ### Read-only Cloudflare account inspection — 3 October 2026, 19:57 UTC
 
@@ -46,11 +113,10 @@ not authenticated. No account setting, resource, deployment or credential was ch
 
 This account does not expose the previously reported YIBO deployment. That does
 not establish whether a deployment exists under another login/account. An account's
-`workers.dev` subdomain alone is not a verified application URL. **The public
-dashboard URL, existing `API_ORIGIN` and usable API domain remain unverified.**
-The next step is to obtain the existing dashboard's public URL or sign in with
-the Cloudflare login that owns it, then inspect its settings. Do not recreate the
-Worker, add a domain or set an origin based on a guessed hostname.
+`workers.dev` subdomain alone is not a verified application URL. The public URL,
+`API_ORIGIN` and API domain were unverified at this historical inspection. The URL
+is now verified above; backend settings still need the owning account's session.
+Do not recreate the Worker or set an origin based on a guessed hostname.
 
 ### GitHub follow-up — original build account identified
 
@@ -69,18 +135,17 @@ exist, so the user's reported success is not disproved by these limited records.
 
 The recorded Cloudflare project name differs from Wrangler's `yibo-dashboard`.
 Do not rename either from this evidence alone: inspect the owning account's actual
-project, build settings and deployed version first. The user must sign in with
-the owning login or obtain access from that account's administrator. No build was
+project, build settings and deployed version first. Account settings need a session
+connected to the owning account; the earlier Codex session is not evidence that
+the user's own session lacks access. No build was
 retried and no deployment, account membership or configuration was changed.
 
 Required operator inputs:
 
 1. A suitable separate backend host, access method and data region; no purchase is assumed.
-2. Open the linked original project with the owning account. In **Workers & Pages
-   -> the verified YIBO Worker -> Settings -> Domains & Routes**, copy the active
-   public dashboard HTTPS URL, not the Cloudflare console URL. GitHub identifies
-   `yibo-ai-receptionist`; the local Wrangler name alone is not authoritative for
-   the deployed project.
+2. Dashboard URL **supplied and verified** above. Access to the existing Worker's
+   settings is still needed before changing deployment bindings; do not infer the
+   deployed Worker name from the local Wrangler configuration.
 3. **Settings -> Variables and Secrets:** copy the non-secret `API_ORIGIN` if set,
    or state that it is absent. Do not paste service-token or provider secrets.
 4. The Cloudflare-managed domain available for a dedicated API hostname.
