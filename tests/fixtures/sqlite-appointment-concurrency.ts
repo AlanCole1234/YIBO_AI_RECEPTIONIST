@@ -37,13 +37,13 @@ try {
   const neighbor = await voice.appointments.createAppointment({ ...command, startAt: "2026-08-10T18:00:00Z", idempotencyKey: "neighbor" }); assert(neighbor.ok);
   const enteredMove = deferred(), releaseMove = deferred();
   calendar.rescheduleEvent = async input => { moves++; const result = await originalMove(input); if (moves === 1) { enteredMove.resolve(); await releaseMove.promise; } return result; };
-  const moving = api.appointments.rescheduleAppointment({ ...scope, expectedVersion: booked.value.version, startAt: "2026-08-11T16:00:00Z" }); await enteredMove.promise;
-  assert.deepEqual(await voice.appointments.cancelAppointment(scope), { ok: false, error: { code: "APPOINTMENT_OPERATION_IN_PROGRESS" } });
+  const moving = api.appointments.rescheduleAppointment({ ...scope, expectedVersion: booked.value.version, startAt: "2026-08-11T16:00:00Z", idempotencyKey: "move-held" }); await enteredMove.promise;
+  assert.deepEqual(await voice.appointments.cancelAppointment({ ...scope, idempotencyKey: "cancel-while-moving" }), { ok: false, error: { code: "APPOINTMENT_OPERATION_IN_PROGRESS" } });
   assert.equal(cancels, 0); releaseMove.resolve(); const moved = await moving; assert(moved.ok); assert.equal(moved.value.version, 3);
-  assert.deepEqual(await voice.appointments.cancelAppointment({ ...scope, expectedVersion: booked.value.version }), { ok: false, error: { code: "APPOINTMENT_VERSION_CONFLICT" } });
-  const movedAgain = await voice.appointments.rescheduleAppointment({ ...scope, expectedVersion: moved.value.version, startAt: "2026-08-12T16:00:00Z" }); assert(movedAgain.ok);
+  assert.deepEqual(await voice.appointments.cancelAppointment({ ...scope, expectedVersion: booked.value.version, idempotencyKey: "cancel-stale-version" }), { ok: false, error: { code: "APPOINTMENT_VERSION_CONFLICT" } });
+  const movedAgain = await voice.appointments.rescheduleAppointment({ ...scope, expectedVersion: moved.value.version, startAt: "2026-08-12T16:00:00Z", idempotencyKey: "move-again" }); assert(movedAgain.ok);
   assert.equal(movedAgain.value.externalCalendarEventId, booked.value.externalCalendarEventId); assert.equal(movedAgain.value.version, 4);
-  const cancelled = await api.appointments.cancelAppointment({ ...scope, expectedVersion: movedAgain.value.version }); assert(cancelled.ok);
+  const cancelled = await api.appointments.cancelAppointment({ ...scope, expectedVersion: movedAgain.value.version, idempotencyKey: "cancel-final" }); assert(cancelled.ok);
   assert.equal(cancelled.value.version, 5); assert.equal(cancelled.value.externalCalendarEventId, booked.value.externalCalendarEventId);
   assert.equal(creates, 2); assert.equal(moves, 2); assert.equal(cancels, 1);
   assert.deepEqual(await voice.appointments.getAppointment(scope), cancelled);
@@ -58,7 +58,7 @@ try {
     worker = fork("tests/fixtures/appointment-lock-worker.ts", [path, profile.tenantId, "default"], { execArgv: ["--import", "tsx"], stdio: ["ignore", "ignore", "pipe", "ipc"] });
     const ready = await once(worker, "message"); assert.deepEqual(ready[0], { held: true });
     const neighborScope = { ...scope, appointmentId: neighbor.value.id };
-    assert.deepEqual(await api.appointments.cancelAppointment(neighborScope), { ok: false, error: { code: "APPOINTMENT_OPERATION_IN_PROGRESS" } });
+    assert.deepEqual(await api.appointments.cancelAppointment({ ...neighborScope, idempotencyKey: "cancel-neighbor" }), { ok: false, error: { code: "APPOINTMENT_OPERATION_IN_PROGRESS" } });
     assert.equal(await guard.execute(profile.tenantId, "other-location", "test", async () => 42), 42);
     assert.equal(await guard.execute("other-tenant", "default", "test", async () => 42), 42);
     assert.equal(await new SqliteAppointmentConcurrencyGuard(database, "MX").execute(profile.tenantId, "default", "test", async () => 42), 42);

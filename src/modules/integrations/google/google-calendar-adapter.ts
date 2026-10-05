@@ -186,6 +186,27 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
     }
   }
 
+  async inspectEvent(command: Parameters<AppointmentCalendarPort["inspectEvent"]>[0]): ReturnType<AppointmentCalendarPort["inspectEvent"]> {
+    const assignment = await this.calendars.resolve(command);
+    if (!assignment.ok) return failure({ code: "CALENDAR_NOT_CONNECTED" as const });
+    const token = await this.tokenFor(command.tenantId);
+    if (!token.ok) return token;
+    const externalEventId = command.externalEventId ?? googleEventId(command.tenantId, command.appointmentId);
+    try {
+      const existing = await this.readOwnedEvent(
+        { tenantId: command.tenantId, appointmentId: command.appointmentId, externalEventId },
+        token.value,
+        assignment.value.calendarId,
+      );
+      if (!existing.ok) {
+        return existing.error.code === "EVENT_NOT_FOUND" ? success({ present: false }) : existing;
+      }
+      return success({ present: true, externalEventId });
+    } catch {
+      return failure<AppointmentCalendarError>({ code: "PROVIDER_UNAVAILABLE", retryable: true });
+    }
+  }
+
   private eventUrl(externalEventId: string, calendarId: string): string {
     return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(externalEventId)}`;
   }

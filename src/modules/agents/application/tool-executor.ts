@@ -459,7 +459,10 @@ export class ToolExecutorImpl implements ToolExecutor {
     const appointmentService = this.developerTest?.appointments ?? this.appointments;
     let deleted = 0;
     for (const appointmentId of appointments) {
-      const result = await appointmentService.cancelAppointment({ tenantId: context.tenantId, locationId: context.locationId, appointmentId });
+      const result = await appointmentService.cancelAppointment({
+        tenantId: context.tenantId, locationId: context.locationId, appointmentId,
+        idempotencyKey: `${context.callId}:${call.toolCallId}:${appointmentId}`,
+      });
       if (result.ok) deleted += 1;
     }
     this.testAppointmentsByCall.delete(trustedToolScope(context));
@@ -491,6 +494,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       locationId: context.locationId,
       appointmentId,
       expectedVersion: reference!.version,
+      idempotencyKey: `${context.callId}:${call.toolCallId}`,
     });
     if (!result.ok) {
       const retryable = result.error.code === "CALENDAR_SYNC_FAILED" && result.error.retryable;
@@ -534,6 +538,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       appointmentId,
       startAt: normalizedStartAt.instant,
       expectedVersion: reference!.version,
+      idempotencyKey: `${context.callId}:${call.toolCallId}`,
     });
     if (!result.ok) {
       const retryable = result.error.code === "CALENDAR_SYNC_FAILED" && result.error.retryable;

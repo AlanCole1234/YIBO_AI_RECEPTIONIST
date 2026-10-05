@@ -124,7 +124,7 @@ describe("Checkpoint C availability through the authenticated API", () => {
     expect((await server!.inject({ method: "POST", url: "/api/appointments", headers: session.readHeaders, payload: body })).statusCode).toBe(403);
     const outside = await server!.inject({ method: "POST", url: "/api/appointments", headers: session.mutationHeaders, payload: { ...body, locationId: "other-tenant-location" } });
     expect(outside.statusCode).toBeGreaterThanOrEqual(400);
-    expect(await api.createAppointment(body)).toMatchObject({ status: "CONFIRMED", locationId: "default", startAt: slot.startAt });
+    expect(await api.createAppointment({ ...body, idempotencyKey: "legacy-default" })).toMatchObject({ status: "CONFIRMED", locationId: "default", startAt: slot.startAt });
   });
 
   it("reports Calendar failures without fabricating availability, confirming or retrying a booking", async () => {

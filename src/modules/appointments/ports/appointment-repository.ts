@@ -8,6 +8,14 @@ import type {
 } from "../../../shared/types/identifiers.js";
 import type { Appointment, AppointmentEvent } from "../domain/appointment.js";
 
+export interface AppointmentMutationReceipt {
+  idempotencyKey: IdempotencyKey;
+  action: "cancel" | "reschedule";
+  appointmentId: AppointmentId;
+  fingerprint: string;
+  appointment: Appointment;
+}
+
 export interface AppointmentRepository {
   findById(tenantId: TenantId, appointmentId: AppointmentId): Promise<Appointment | null>;
   findByIdempotencyKey(tenantId: TenantId, key: IdempotencyKey): Promise<Appointment | null>;
@@ -35,4 +43,6 @@ export interface AppointmentRepository {
   /** Local atomic read used inside configuration persistence; includes uncertain failed bookings. */
   calendarRouteReferences(tenantId: TenantId): Array<{ locationId: string; employeeId: string }>;
   save(appointment: Appointment): Promise<void>;
+  findMutation(tenantId: TenantId, key: IdempotencyKey): Promise<AppointmentMutationReceipt | null>;
+  saveMutation(tenantId: TenantId, receipt: AppointmentMutationReceipt): Promise<void>;
 }

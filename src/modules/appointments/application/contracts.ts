@@ -29,6 +29,8 @@ export interface CancelAppointmentCommand {
   tenantId: TenantId;
   locationId: LocationId;
   appointmentId: AppointmentId;
+  /** Stable across retries of this cancel. A missing key is rejected. */
+  idempotencyKey: IdempotencyKey;
 }
 
 export interface RescheduleAppointmentCommand {
@@ -37,6 +39,8 @@ export interface RescheduleAppointmentCommand {
   locationId: LocationId;
   appointmentId: AppointmentId;
   startAt: ISODateTime;
+  /** Stable across retries of this move. A missing key is rejected. */
+  idempotencyKey: IdempotencyKey;
 }
 
 export interface GetAppointmentQuery {
@@ -89,7 +93,9 @@ export type CancelAppointmentError =
   | { code: "APPOINTMENT_NOT_FOUND" }
   | { code: "APPOINTMENT_ALREADY_CANCELLED" }
   | { code: "CANCELLATION_NOTICE_NOT_MET" }
-  | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean };
+  | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
+  | { code: "IDEMPOTENCY_CONFLICT" }
+  | { code: "VALIDATION_ERROR"; message: string };
 
 export type RescheduleAppointmentError =
   | AppointmentEditConflict
@@ -98,6 +104,7 @@ export type RescheduleAppointmentError =
   | { code: "RESCHEDULE_NOTICE_NOT_MET" }
   | { code: "SLOT_NO_LONGER_AVAILABLE" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
+  | { code: "IDEMPOTENCY_CONFLICT" }
   | { code: "VALIDATION_ERROR"; message: string };
 
 export type AppointmentLookupError = { code: "APPOINTMENT_NOT_FOUND" };
@@ -124,6 +131,11 @@ export interface AppointmentService {
   markAppointmentOutcome(command: MarkAppointmentOutcomeCommand): Promise<Result<Appointment, AppointmentLookupError | AppointmentEditConflict>>;
   listCustomerHistory(tenantId: TenantId, customerId: CustomerId, limit?: number): Promise<Appointment[]>;
   listTenantHistory(tenantId: TenantId, limit?: number): Promise<Appointment[]>;
-  /** Releases pending rows that never reached a calendar, and reports rows that still have an external event. */
-  reconcileUnconfirmedBookings(tenantId: TenantId): Promise<{ released: string[]; held: string[] }>;
+  /**
+   * Checks the calendar for pending rows. Confirms a row whose event exists,
+   * releases a row whose event is gone, and holds a row when the calendar cannot be checked.
+   * Also drops location locks older than the stale threshold.
+   */
+  reconcileUnconfirmedBookings(tenantId: TenantId): Promise<{ released: string[]; confirmed: string[]; held: string[] }>;
+  recoverStuckBookings(tenantId: TenantId): Promise<{ released: string[]; confirmed: string[]; held: string[]; releasedLocks: string[] }>;
 }

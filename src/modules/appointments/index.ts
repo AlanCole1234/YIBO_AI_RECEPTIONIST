@@ -17,11 +17,12 @@ export type {
   RescheduleAppointmentError,
 } from "./application/contracts.js";
 export type { Appointment, AppointmentStatus, AppointmentEvent } from "./domain/appointment.js";
-export type { AppointmentRepository } from "./ports/appointment-repository.js";
+export type { AppointmentMutationReceipt, AppointmentRepository } from "./ports/appointment-repository.js";
 export type {
   AppointmentCalendarError,
   AppointmentCalendarPort,
   AppointmentConcurrencyGuard,
+  AppointmentLockClaim,
   CustomerReader,
 } from "./ports/appointment-dependencies.js";
 export { InMemoryAppointmentRepository } from "./infrastructure/in-memory-appointment-repository.js";

@@ -313,6 +313,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const agentDefinitions = new AgentDefinitionService(configurationRepository, tools, business);
   const conversations = new ConversationService({
     runtime,
+    spendLimit: { maxDurationMs: config.callMaxDurationMs, maxTokens: config.callMaxTokens },
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),
   });
   const registeredVoice = new ScriptedVoiceMediaGateway();

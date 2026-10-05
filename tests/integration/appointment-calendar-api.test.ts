@@ -162,8 +162,8 @@ describe("front-desk workflow through real authenticated application APIs", () =
     const search = createAvailabilitySearch(); disposers.push(search.dispose);
     await search.load({ locationId: "south", day: "2026-08-10" }); await search.search();
     const slot = search.state.slots[0]!;
-    const input = { locationId: "south", customerId: customer.id, serviceId: "consultation", employeeId: slot.employeeId, startAt: slot.startAt };
-    const outcomes = await Promise.allSettled([api.createAppointment(input), api.createAppointment({ ...input, employeeId: "employee-2", customerId: second.id })]);
+    const input = { locationId: "south", customerId: customer.id, serviceId: "consultation", employeeId: slot.employeeId, startAt: slot.startAt, idempotencyKey: "ui-a" };
+    const outcomes = await Promise.allSettled([api.createAppointment(input), api.createAppointment({ ...input, employeeId: "employee-2", customerId: second.id, idempotencyKey: "ui-b" })]);
     expect(outcomes.filter(item => item.status === "fulfilled")).toHaveLength(1);
     expect(outcomes.find(item => item.status === "rejected")).toMatchObject({ reason: { code: "SLOT_NO_LONGER_AVAILABLE" } });
     expect((await api.appointmentCalendar("south", range)).appointments).toHaveLength(1);

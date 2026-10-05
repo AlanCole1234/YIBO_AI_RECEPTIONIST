@@ -19,8 +19,18 @@ export class AppointmentOperationInProgressError extends Error {
   constructor() { super("An appointment operation is already in progress at this location."); }
 }
 
+export interface AppointmentLockClaim {
+  tenantId: TenantId;
+  locationId: LocationId;
+  ownerId: string;
+  acquiredAt: string;
+}
+
 export interface AppointmentConcurrencyGuard {
   execute<T>(tenantId: TenantId, locationId: LocationId, employeeId: EmployeeId, operation: () => Promise<T>): Promise<T>;
+  listClaims(tenantId: TenantId): AppointmentLockClaim[];
+  /** Removes one claim only when owner and acquisition time still match. */
+  releaseClaim(tenantId: TenantId, locationId: LocationId, ownerId: string, acquiredAt: string): boolean;
 }
 
 export interface AppointmentCalendarPort {
@@ -52,6 +62,17 @@ export interface AppointmentCalendarPort {
     employeeId: EmployeeId;
     externalEventId: string;
   }): Promise<Result<void, AppointmentCalendarError>>;
+  /**
+   * Reads whether this appointment still has a live calendar event.
+   * `present: false` means the event is gone. A failure means the calendar could not be checked.
+   */
+  inspectEvent(command: {
+    tenantId: TenantId;
+    locationId: LocationId;
+    employeeId: EmployeeId;
+    appointmentId: AppointmentId;
+    externalEventId?: string;
+  }): Promise<Result<{ present: boolean; externalEventId?: string }, AppointmentCalendarError>>;
 }
 
 export type AppointmentCalendarError =

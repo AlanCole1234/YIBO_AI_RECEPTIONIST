@@ -165,4 +165,36 @@ describe("GoogleCalendarAdapter", () => {
     expect(serializedLogs).not.toContain("12345678");
     logs.mockRestore();
   });
+
+  it("reports a live Google event, a missing event, and an unreachable calendar separately", async () => {
+    const scripted = new Map<string, number>();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      const eventId = decodeURIComponent(url.split("/events/").at(-1) ?? "");
+      const status = scripted.get(eventId) ?? 200;
+      if (status !== 200) return new Response(JSON.stringify({ error: { message: "calendar status" } }), { status });
+      return new Response(JSON.stringify({
+        id: eventId,
+        status: "confirmed",
+        extendedProperties: { private: { yiboAppointmentId: "appointment-inspect", yiboTenantId: "tenant-1" } },
+      }), { status: 200 });
+    });
+    const oauth = { status: async () => ({ configured: true, connected: true }), accessToken: async () => "test-access-token" } as unknown as GoogleOAuthService;
+    const adapter = new GoogleCalendarAdapter(calendarResolver("yibo-test@example.com", "America/Denver"), oauth, fetcher);
+    const command = { tenantId: "tenant-1", locationId: "default", employeeId: "employee-1", appointmentId: "appointment-inspect" };
+
+    const present = await adapter.inspectEvent(command);
+    expect(present.ok).toBe(true);
+    if (!present.ok || !present.value.externalEventId) throw new Error("Expected the calendar event to be present");
+    expect(present.value.present).toBe(true);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("/events/");
+
+    scripted.set(present.value.externalEventId, 404);
+    await expect(adapter.inspectEvent({ ...command, externalEventId: present.value.externalEventId }))
+      .resolves.toEqual({ ok: true, value: { present: false } });
+
+    scripted.set(present.value.externalEventId, 500);
+    await expect(adapter.inspectEvent({ ...command, externalEventId: present.value.externalEventId }))
+      .resolves.toEqual({ ok: false, error: { code: "PROVIDER_UNAVAILABLE", retryable: true } });
+  });
 });

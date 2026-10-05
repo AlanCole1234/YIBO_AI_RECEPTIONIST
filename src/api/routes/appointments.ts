@@ -108,7 +108,9 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
         if (request.headers["if-match"] !== undefined && expectedVersion === null) {
           return reply.code(400).send({ error: { code: "INVALID_IF_MATCH" } });
         }
-        const context = { tenantId: app.tenantId, ...request.params,
+        const idempotencyKey = readIdempotencyKey(request.headers["idempotency-key"]);
+        if (!idempotencyKey) return reply.code(400).send({ error: { code: "VALIDATION_ERROR", message: "An idempotency key is required" } });
+        const context = { tenantId: app.tenantId, ...request.params, idempotencyKey,
           ...(expectedVersion === null ? {} : { expectedVersion }) };
         const before = await app.appointments.getAppointment(context);
         const result = action === "cancel" ? await app.appointments.cancelAppointment(context)
@@ -130,10 +132,8 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
       || (locationId !== undefined && (typeof locationId !== "string" || !locationId.trim()))) {
       return reply.code(400).send({ error: { code: "VALIDATION_ERROR" } });
     }
-    const idempotencyHeader = request.headers["idempotency-key"];
-    const idempotencyKey = typeof idempotencyHeader === "string" && idempotencyHeader.trim()
-      ? idempotencyHeader.trim()
-      : `dashboard:${app.ids.generate("idempotency")}`;
+    const idempotencyKey = readIdempotencyKey(request.headers["idempotency-key"]);
+    if (!idempotencyKey) return reply.code(400).send({ error: { code: "VALIDATION_ERROR", message: "An idempotency key is required" } });
     const result = await app.appointments.createAppointment({
       tenantId: app.tenantId,
       locationId: (locationId as string | undefined) ?? "default",
@@ -212,3 +212,6 @@ export async function registerAppointmentRoutes(server: FastifyInstance, app: Yi
     },
   );
 }
+
+const readIdempotencyKey = (header: string | string[] | undefined): string | undefined =>
+  typeof header === "string" && header.trim() ? header.trim() : undefined;

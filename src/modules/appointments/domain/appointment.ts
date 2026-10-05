@@ -36,6 +36,10 @@ export interface Appointment {
   sourceCallId?: CallId;
   externalCalendarEventId?: string;
   outcomeStatus?: "COMPLETED" | "NO_SHOW";
+  /** Last local write. Missing values are treated as already stale by recovery. */
+  updatedAt?: ISODateTime;
+  /** A calendar cancel was required and did not succeed. Recovery must finish it. */
+  compensationRequired?: boolean;
 }
 
 export interface AppointmentEvent {

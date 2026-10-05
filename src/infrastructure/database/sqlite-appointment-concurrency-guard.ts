@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { AppointmentOperationInProgressError, type AppointmentConcurrencyGuard } from "../../modules/appointments/index.js";
+import { AppointmentOperationInProgressError, type AppointmentConcurrencyGuard, type AppointmentLockClaim } from "../../modules/appointments/index.js";
 import type { RegionId } from "../../shared/types/identifiers.js";
 
 /** No transaction spans a provider call. The committed claim prevents another
@@ -21,5 +21,22 @@ export class SqliteAppointmentConcurrencyGuard implements AppointmentConcurrency
         WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND owner_id = ?`)
         .run(this.region, tenantId, locationId, owner);
     }
+  }
+
+  listClaims(tenantId: string): AppointmentLockClaim[] {
+    return this.database.prepare(`SELECT tenant_id, location_id, owner_id, acquired_at
+      FROM appointment_operation_locks WHERE region_id = ? AND tenant_id = ?`)
+      .all(this.region, tenantId)
+      .map((row) => {
+        const value = row as { tenant_id: string; location_id: string; owner_id: string; acquired_at: string };
+        return { tenantId: value.tenant_id, locationId: value.location_id, ownerId: value.owner_id, acquiredAt: value.acquired_at };
+      });
+  }
+
+  releaseClaim(tenantId: string, locationId: string, ownerId: string, acquiredAt: string): boolean {
+    const result = this.database.prepare(`DELETE FROM appointment_operation_locks
+      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND owner_id = ? AND acquired_at = ?`)
+      .run(this.region, tenantId, locationId, ownerId, acquiredAt);
+    return result.changes === 1;
   }
 }

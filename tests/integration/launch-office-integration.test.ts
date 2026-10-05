@@ -32,8 +32,11 @@ async function fixture(role: AdminRole = "secretary") {
     clock: { now: () => new Date("2026-08-01T00:00:00Z") } });
   server = await createApiServer(app);
   const session = await createAdminTestSession(app, server, [role]);
+  let mutations = 0;
   async function request(url: string, method: "GET" | "POST" | "PUT" = "GET", payload?: object) {
-    return server!.inject({ url, method, headers: method === "GET" ? session.readHeaders : session.mutationHeaders, ...(payload ? { payload } : {}) });
+    const headers: Record<string, string> = { ...(method === "GET" ? session.readHeaders : session.mutationHeaders) };
+    if (method !== "GET") headers["idempotency-key"] = `launch-${++mutations}`;
+    return server!.inject({ url, method, headers, ...(payload ? { payload } : {}) });
   }
   async function book() {
     const customer = await request("/api/customers", "POST", { name: "Launch Test", phone: "+1 (555) 000-0201", email: "launch@example.test", preferredLanguage: "es-MX", emailOptIn: true });

@@ -50,6 +50,10 @@ export class ConversationService implements ConversationServiceContract {
       runtimeSession,
       command,
       ...(this.dependencies.usageRecorder ? { usageRecorder: this.dependencies.usageRecorder } : {}),
+      spendLimit: this.dependencies.spendLimit ?? {
+        maxDurationMs: DEFAULT_CALL_MAX_DURATION_MS,
+        maxTokens: DEFAULT_CALL_MAX_TOKENS,
+      },
     }, metrics);
   }
 }
@@ -77,6 +81,10 @@ class ActiveConversationSession implements ConversationSession {
   private endTail?: ReturnType<typeof setTimeout>;
   private mutationPending = false;
   private mutationUncertain = false;
+  private spentTokens = 0;
+  private spendWrapUpStarted = false;
+  private spendCloseOnResponse = false;
+  private spendTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private readonly dependencies: ConversationSessionControllerDependencies, metrics: ConversationMetrics) {
     this.metrics = metrics;
@@ -86,6 +94,10 @@ class ActiveConversationSession implements ConversationSession {
       this.checkCallEnd();
     });
     this.completed = new Promise((resolve) => { this.resolveCompleted = resolve; });
+    const limit = dependencies.spendLimit ?? { maxDurationMs: DEFAULT_CALL_MAX_DURATION_MS, maxTokens: DEFAULT_CALL_MAX_TOKENS };
+    this.dependencies.spendLimit = limit;
+    this.spendTimer = setTimeout(() => { void this.beginSpendWrapUp(); }, limit.maxDurationMs);
+    this.spendTimer.unref?.();
     void this.forwardInboundAudio();
     void this.consumeRuntimeEvents();
   }
@@ -115,6 +127,7 @@ class ActiveConversationSession implements ConversationSession {
   private async forwardInboundAudio(): Promise<void> {
     try {
       for await (const frame of this.dependencies.command.transport.inboundAudio) {
+        if (this.spendWrapUpStarted || this.closePromise) continue;
         await this.bounded(this.dependencies.runtimeSession.sendAudio(frame), 5_000);
       }
     } catch (error) {
@@ -197,6 +210,11 @@ class ActiveConversationSession implements ConversationSession {
         }
         if (event.status !== "completed") { this.cancelCallEnd(); this.lastAudioTurn = undefined; this.responseComplete = false; return; }
         this.responseComplete = true;
+        if (this.spendCloseOnResponse) {
+          this.settle({ status: "closed", reason: "spend_limit" });
+          await this.close();
+          return;
+        }
         this.checkCallEnd();
         return;
       case "assistant.audio_completed":
@@ -215,6 +233,10 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async recordUsage(event: Extract<ConversationRuntimeEvent, { type: "usage" }>): Promise<void> {
+    const increment = event.totalTokens ?? (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
+    this.spentTokens += increment;
+    const limit = this.dependencies.spendLimit?.maxTokens ?? DEFAULT_CALL_MAX_TOKENS;
+    if (this.spentTokens >= limit) await this.beginSpendWrapUp();
     if (!this.dependencies.usageRecorder) return;
     await this.dependencies.usageRecorder.record({
       tenantId: this.dependencies.command.agent.trustedContext.tenantId,
@@ -237,6 +259,18 @@ class ActiveConversationSession implements ConversationSession {
 
   private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }> & { name: import("../../agents/index.js").AgentToolName }): Promise<void> {
     if (this.toolCalls.has(event.toolCallId) || this.closePromise || isCallEnded(this.dependencies.command.agent.trustedContext.callId)) return;
+    if (this.spendWrapUpStarted) {
+      this.toolCalls.add(event.toolCallId);
+      const limited = { toolCallId: event.toolCallId, ok: false as const, error: {
+        code: "CALL_SPEND_LIMIT",
+        message: "This call has reached its limit. Speak a brief goodbye only. Do not continue the request.",
+        retryable: false,
+      } };
+      try {
+        await this.bounded(this.dependencies.runtimeSession.sendToolResult(limited, { requestResponse: false }), 5_000);
+      } catch { /* The farewell turn is already requested. */ }
+      return;
+    }
     this.cancelCallEnd();
     this.lastAudioTurn = undefined;
     this.activeTools += 1;
@@ -310,7 +344,7 @@ class ActiveConversationSession implements ConversationSession {
     this.endTail = setTimeout(() => {
       this.endTail = undefined;
       if (this.ending !== end || !this.isPlaybackIdle() || !this.audioComplete || !this.responseComplete) return;
-      this.settle({ status: "closed", reason: "conversation_completed" });
+      this.settle({ status: "closed", reason: this.spendWrapUpStarted ? "spend_limit" : "conversation_completed" });
       void this.close();
     }, 20);
   }
@@ -346,8 +380,31 @@ class ActiveConversationSession implements ConversationSession {
     await this.close();
   }
 
+  private async beginSpendWrapUp(): Promise<void> {
+    if (this.spendWrapUpStarted || this.closePromise || this.completionSettled) return;
+    this.spendWrapUpStarted = true;
+    const canDrain = supportsCallEnd(this.dependencies.command);
+    if (canDrain && !this.ending) {
+      this.ending = {
+        flushed: false,
+        acknowledged: true,
+        response: this.responseSequence + 1,
+        deadline: setTimeout(() => { void this.fail({ code: "AUDIO_TRANSPORT_ERROR", message: "Final response playback did not complete" }); }, 45_000),
+      };
+    } else if (!canDrain) this.spendCloseOnResponse = true;
+    try {
+      const runtime = this.dependencies.runtimeSession;
+      if (runtime.requestResponse) await runtime.requestResponse(SPEND_LIMIT_FAREWELL);
+      else await runtime.sendText(SPEND_LIMIT_FAREWELL);
+    } catch {
+      await this.close();
+    }
+  }
+
   private async closeResources(): Promise<void> {
     const cleanupStarted = performance.now();
+    if (this.spendTimer) clearTimeout(this.spendTimer);
+    this.spendTimer = undefined;
     this.cancelCallEnd();
     this.removePlaybackObserver?.();
     try { this.removeMediaObserver?.(); } catch { /* Observation only. */ }
@@ -378,6 +435,10 @@ class ActiveConversationSession implements ConversationSession {
   }
 
 }
+
+const DEFAULT_CALL_MAX_DURATION_MS = 15 * 60_000;
+const DEFAULT_CALL_MAX_TOKENS = 150_000;
+const SPEND_LIMIT_FAREWELL = "The call has reached its time or usage limit. Speak one short, polite farewell now. Do not ask a question, book, cancel, reschedule, or call a tool.";
 
 const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok
   ? { toolCallId: result.toolCallId, ok: true, data: result.data }

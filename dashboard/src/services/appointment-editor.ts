@@ -51,9 +51,10 @@ export function createAppointmentEditor(client = api) {
     if (!appointment || !pending || appointment.status !== "CONFIRMED") throw new Error("Missing action");
     // Consume the confirmation before sending; failures never trigger an automatic mutation retry.
     state.pending = undefined; state.slots = [];
+    const idempotencyKey = crypto.randomUUID();
     const updated = pending.kind === "cancel"
-      ? await client.cancelAppointment(appointment.locationId, appointment.id, appointment.version ?? 1)
-      : await client.rescheduleAppointment(appointment.locationId, appointment.id, pending.startAt!, appointment.version ?? 1);
+      ? await client.cancelAppointment(appointment.locationId, appointment.id, appointment.version ?? 1, idempotencyKey)
+      : await client.rescheduleAppointment(appointment.locationId, appointment.id, pending.startAt!, appointment.version ?? 1, idempotencyKey);
     state.selected = updated;
     state.appointments = state.appointments.map(item => item.id === updated.id ? updated : item);
     state.message = pending.kind === "cancel" ? "Appointment cancelled." : "Appointment rescheduled.";

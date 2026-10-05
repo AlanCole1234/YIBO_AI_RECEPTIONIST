@@ -47,6 +47,7 @@ export class AppointmentServiceImpl implements AppointmentService {
   async createAppointment(command: CreateAppointmentCommand) {
     const invalid = validateCreate(command);
     if (invalid) return failure<CreateAppointmentError>({ code: "VALIDATION_ERROR", message: invalid });
+    await this.recoverStuckBookings(command.tenantId);
 
     const previous = await this.repository.findByIdempotencyKey(command.tenantId, command.idempotencyKey);
     if (previous) {
@@ -106,6 +107,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
         status: "PENDING_CONFIRMATION",
+        updatedAt: this.clock.now().toISOString(),
       };
       await this.repository.save(pending);
 
@@ -157,7 +159,15 @@ export class AppointmentServiceImpl implements AppointmentService {
   }
 
   async cancelAppointment(command: CancelAppointmentCommand) {
+    const invalidKey = requiredKey(command.idempotencyKey);
+    if (invalidKey) return failure<CancelAppointmentError>({ code: "VALIDATION_ERROR", message: invalidKey });
+    const fingerprint = mutationFingerprint("cancel", command.appointmentId);
+    const replay = await this.replay(command.tenantId, command.idempotencyKey, fingerprint);
+    if (replay) return replay;
+    await this.recoverStuckBookings(command.tenantId);
     return this.mutate(command, async appointment => {
+      const raced = await this.replay(command.tenantId, command.idempotencyKey, fingerprint);
+      if (raced) return raced;
       if (appointment.status === "CANCELLED") {
         return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
       }
@@ -177,8 +187,11 @@ export class AppointmentServiceImpl implements AppointmentService {
         });
         if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
       }
-      const result: Appointment = { ...appointment, version: (appointment.version ?? 1) + 1, status: "CANCELLED" };
+      const result: Appointment = {
+        ...appointment, version: (appointment.version ?? 1) + 1, status: "CANCELLED", updatedAt: this.clock.now().toISOString(),
+      };
       await this.repository.save(result);
+      await this.remember("cancel", command.idempotencyKey, fingerprint, result);
       await this.record(result, "CANCELLED", "OFFICE");
       await this.notify("CANCELLATION", result);
       return success(result);
@@ -189,7 +202,15 @@ export class AppointmentServiceImpl implements AppointmentService {
     if (!validDate(command.startAt)) {
       return failure<RescheduleAppointmentError>({ code: "VALIDATION_ERROR", message: "startAt must be a valid ISO datetime" });
     }
+    const invalidKey = requiredKey(command.idempotencyKey);
+    if (invalidKey) return failure<RescheduleAppointmentError>({ code: "VALIDATION_ERROR", message: invalidKey });
+    const fingerprint = mutationFingerprint("reschedule", command.appointmentId, new Date(command.startAt).toISOString());
+    const replay = await this.replay(command.tenantId, command.idempotencyKey, fingerprint);
+    if (replay) return replay;
+    await this.recoverStuckBookings(command.tenantId);
     return this.mutate(command, async appointment => {
+      const raced = await this.replay(command.tenantId, command.idempotencyKey, fingerprint);
+      if (raced) return raced;
       if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
         return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
       }
@@ -231,8 +252,10 @@ export class AppointmentServiceImpl implements AppointmentService {
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
         externalCalendarEventId: appointment.externalCalendarEventId,
+        updatedAt: this.clock.now().toISOString(),
       };
       await this.repository.save(updated);
+      await this.remember("reschedule", command.idempotencyKey, fingerprint, updated);
       await this.record(updated, "RESCHEDULED", "OFFICE", { previousStartAt: appointment.startAt });
       await this.notify("RESCHEDULE", updated);
       return success(updated);
@@ -308,8 +331,10 @@ export class AppointmentServiceImpl implements AppointmentService {
     });
   }
 
-  private async mutate<E>(command: CancelAppointmentCommand, operation: (appointment: Appointment) => Promise<Result<Appointment, E>>)
-    : Promise<Result<Appointment, E | AppointmentLookupError | AppointmentEditConflict>> {
+  private async mutate<E>(
+    command: { tenantId: string; locationId: string; appointmentId: string; expectedVersion?: number },
+    operation: (appointment: Appointment) => Promise<Result<Appointment, E>>,
+  ): Promise<Result<Appointment, E | AppointmentLookupError | AppointmentEditConflict>> {
     // The first read supplies only the lock scope. Never mutate this snapshot.
     const scope = await this.repository.findById(command.tenantId, command.appointmentId);
     if (!scope || scope.locationId !== command.locationId) return failure({ code: "APPOINTMENT_NOT_FOUND" });
@@ -341,19 +366,90 @@ export class AppointmentServiceImpl implements AppointmentService {
     return this.repository.findByTenant(tenantId, Math.min(10_000, Math.max(1, limit)));
   }
 
+  async recoverStuckBookings(tenantId: string) {
+    const reconciled = await this.reconcileUnconfirmedBookings(tenantId);
+    return { ...reconciled, releasedLocks: this.releaseStaleLocks(tenantId) };
+  }
+
   async reconcileUnconfirmedBookings(tenantId: string) {
     const released: string[] = [];
+    const confirmed: string[] = [];
     const held: string[] = [];
+    const staleBefore = this.clock.now().getTime() - STALE_APPOINTMENT_LOCK_MS;
     for (const appointment of await this.repository.findByTenant(tenantId, 10_000)) {
       if (appointment.status !== "PENDING_CONFIRMATION") continue;
-      if (appointment.externalCalendarEventId) {
+      const updatedAt = appointment.updatedAt ? Date.parse(appointment.updatedAt) : 0;
+      if (!appointment.compensationRequired && updatedAt >= staleBefore) continue;
+      const inspection = await this.calendar.inspectEvent({
+        tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
+        employeeId: appointment.employeeId,
+        appointmentId: appointment.id,
+        ...(appointment.externalCalendarEventId ? { externalEventId: appointment.externalCalendarEventId } : {}),
+      });
+      if (!inspection.ok) {
         held.push(appointment.id);
         continue;
       }
-      await this.repository.save({ ...appointment, version: (appointment.version ?? 1) + 1, status: "FAILED" });
-      released.push(appointment.id);
+      if (!inspection.value.present) {
+        await this.repository.save({
+          ...appointment,
+          version: (appointment.version ?? 1) + 1,
+          status: "FAILED",
+          externalCalendarEventId: undefined,
+          compensationRequired: undefined,
+          updatedAt: this.clock.now().toISOString(),
+        });
+        released.push(appointment.id);
+        continue;
+      }
+      const externalCalendarEventId = inspection.value.externalEventId ?? appointment.externalCalendarEventId;
+      if (appointment.compensationRequired && externalCalendarEventId) {
+        const cancelled = await this.calendar.cancelEvent({
+          appointmentId: appointment.id,
+          tenantId: appointment.tenantId,
+          locationId: appointment.locationId,
+          employeeId: appointment.employeeId,
+          externalEventId: externalCalendarEventId,
+        });
+        if (cancelled.ok || (!cancelled.ok && cancelled.error.code === "EVENT_NOT_FOUND")) {
+          await this.repository.save({
+            ...appointment,
+            version: (appointment.version ?? 1) + 1,
+            status: "FAILED",
+            externalCalendarEventId: undefined,
+            compensationRequired: undefined,
+            updatedAt: this.clock.now().toISOString(),
+          });
+          released.push(appointment.id);
+          continue;
+        }
+      }
+      const confirmedAppointment: Appointment = {
+        ...appointment,
+        version: (appointment.version ?? 1) + 1,
+        status: "CONFIRMED",
+        compensationRequired: undefined,
+        updatedAt: this.clock.now().toISOString(),
+        ...(externalCalendarEventId ? { externalCalendarEventId } : {}),
+      };
+      await this.repository.save(confirmedAppointment);
+      await this.record(confirmedAppointment, "CREATED", "SYSTEM", { reconciled: "calendar" });
+      confirmed.push(appointment.id);
     }
-    return { released, held };
+    return { released, confirmed, held };
+  }
+
+  private releaseStaleLocks(tenantId: string): string[] {
+    const cutoff = new Date(this.clock.now().getTime() - STALE_APPOINTMENT_LOCK_MS).toISOString();
+    const released: string[] = [];
+    for (const claim of this.guard.listClaims(tenantId)) {
+      if (claim.acquiredAt >= cutoff) continue;
+      if (this.guard.releaseClaim(claim.tenantId, claim.locationId, claim.ownerId, claim.acquiredAt)) {
+        released.push(claim.locationId);
+      }
+    }
+    return released;
   }
 
   /** Drop a calendar event created in this request when the booking cannot be confirmed. */
@@ -367,7 +463,14 @@ export class AppointmentServiceImpl implements AppointmentService {
         employeeId: appointment.employeeId,
         externalEventId: appointment.externalCalendarEventId,
       });
-      if (!cancelled.ok) return failure({ code: "CALENDAR_SYNC_FAILED", retryable: true });
+      if (!cancelled.ok) {
+        await this.repository.save({
+          ...appointment,
+          compensationRequired: true,
+          updatedAt: this.clock.now().toISOString(),
+        });
+        return failure({ code: "CALENDAR_SYNC_FAILED", retryable: true });
+      }
     }
     await this.repository.save({
       ...appointment,
@@ -376,6 +479,24 @@ export class AppointmentServiceImpl implements AppointmentService {
       externalCalendarEventId: undefined,
     });
     return failure(code === "CALL_ENDED" ? { code: "CALL_ENDED" } : { code: "CALENDAR_SYNC_FAILED", retryable: false });
+  }
+
+  private async replay(tenantId: string, key: string, fingerprint: string) {
+    const existing = await this.repository.findMutation(tenantId, key);
+    if (!existing) return null;
+    return existing.fingerprint === fingerprint
+      ? success(existing.appointment)
+      : failure({ code: "IDEMPOTENCY_CONFLICT" as const });
+  }
+
+  private remember(action: "cancel" | "reschedule", key: string, fingerprint: string, appointment: Appointment) {
+    return this.repository.saveMutation(appointment.tenantId, {
+      idempotencyKey: key,
+      action,
+      appointmentId: appointment.id,
+      fingerprint,
+      appointment,
+    });
   }
 
   private record(appointment: Appointment, type: "CREATED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED" | "NO_SHOW",
@@ -389,6 +510,15 @@ export class AppointmentServiceImpl implements AppointmentService {
     catch { /* Appointment/calendar success remains authoritative; delivery status is secondary. */ }
   }
 }
+
+/** A crashed writer or a hung provider must not block the location forever. */
+export const STALE_APPOINTMENT_LOCK_MS = 3 * 60 * 1000;
+
+const requiredKey = (key: string | undefined): string | null =>
+  key && key.trim() ? null : "An idempotency key is required";
+
+const mutationFingerprint = (action: "cancel" | "reschedule", appointmentId: string, startAt = ""): string =>
+  `${action}:${appointmentId}:${startAt}`;
 
 const voiceCallEnded = (command: { source: string; sourceCallId?: string }): boolean =>
   command.source === "AI_CALL" && Boolean(command.sourceCallId) && isCallEnded(command.sourceCallId!);

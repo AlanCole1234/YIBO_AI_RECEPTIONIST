@@ -120,7 +120,7 @@ describe("UI-008 appointment administration", () => {
     expect((await server!.inject({ method: "GET", url: "/api/locations/south/appointments?customerId=a&customerId=b", headers: session.readHeaders })).statusCode).toBe(400);
     expect((await server!.inject({ method: "GET", url: "/api/availability?locationId=a&locationId=b&serviceId=consultation&rangeStart=2026-08-10&rangeEnd=2026-08-11", headers: session.readHeaders })).statusCode).toBe(400);
     await expect(api.locationAppointment("default", booked.id)).rejects.toMatchObject({ status: 404 });
-    expect((await server!.inject({ method: "POST", url: `/api/locations/default/appointments/${booked.id}/cancel`, headers: session.mutationHeaders, payload: {} })).statusCode).toBe(404);
+    expect((await server!.inject({ method: "POST", url: `/api/locations/default/appointments/${booked.id}/cancel`, headers: { ...session.mutationHeaders, "idempotency-key": "wrong-location" }, payload: {} })).statusCode).toBe(404);
   });
 
   it("clears details and pending actions when changing location", async () => {
@@ -141,7 +141,7 @@ describe("RISK-001 office edit conflicts", () => {
     const { app, editor, booked, requests } = await fixture();
     await editor.lookup(booked.id);
     const moved = await app.appointments.rescheduleAppointment({ tenantId: app.tenantId, locationId: "south", appointmentId: booked.id,
-      expectedVersion: booked.version, startAt: "2026-08-11T16:00:00Z" }); expect(moved.ok).toBe(true);
+      expectedVersion: booked.version, startAt: "2026-08-11T16:00:00Z", idempotencyKey: "editor-move" }); expect(moved.ok).toBe(true);
     const cancel = vi.spyOn(app.calendar, "cancelEvent");
     editor.state.pending = { kind: "cancel" };
     expect(await editor.confirm()).toBe(false); expect(editor.state.error).toContain("changed by someone else");
@@ -162,7 +162,7 @@ describe("RISK-001 office edit conflicts", () => {
       expect(response.statusCode).toBe(400); expect(response.json().error.code).toBe("INVALID_IF_MATCH");
     }
     const wrongLocation = await server!.inject({ method: "POST", url: `/api/locations/default/appointments/${booked.id}/cancel`,
-      headers: { ...session.mutationHeaders, "if-match": `"${booked.version}"` }, payload: {} });
+      headers: { ...session.mutationHeaders, "if-match": `"${booked.version}"`, "idempotency-key": "wrong-location-match" }, payload: {} });
     expect(wrongLocation.statusCode).toBe(404);
   });
 });

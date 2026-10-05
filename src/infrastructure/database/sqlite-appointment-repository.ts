@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { Appointment, AppointmentEvent, AppointmentRepository } from "../../modules/appointments/index.js";
+import type { Appointment, AppointmentEvent, AppointmentMutationReceipt, AppointmentRepository } from "../../modules/appointments/index.js";
 import type { ConfirmedAppointmentReader, ConfirmedAppointmentQuery, OccupiedInterval } from "../../modules/scheduling/index.js";
 import type { AppointmentId, IdempotencyKey, RegionId, TenantId } from "../../shared/types/identifiers.js";
 
@@ -10,6 +10,8 @@ type AppointmentRow = {
   source: Appointment["source"]; source_call_id: string | null; external_calendar_event_id: string | null;
   outcome_status: "COMPLETED" | "NO_SHOW" | null;
   version: number;
+  updated_at: string | null;
+  compensation_required: number;
 };
 
 export class SqliteAppointmentRepository implements AppointmentRepository, ConfirmedAppointmentReader {
@@ -101,8 +103,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       INSERT INTO appointments(
         region_id, tenant_id, location_id, id, customer_id, service_id, service_name_snapshot,
         price_amount_minor, price_currency, employee_id, start_at, end_at, status, idempotency_key,
-        source, source_call_id, external_calendar_event_id, outcome_status, version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source, source_call_id, external_calendar_event_id, outcome_status, version, updated_at, compensation_required
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(region_id, tenant_id, id) DO UPDATE SET
         location_id = excluded.location_id, customer_id = excluded.customer_id, service_id = excluded.service_id,
         service_name_snapshot = excluded.service_name_snapshot, price_amount_minor = excluded.price_amount_minor,
@@ -110,13 +112,39 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
         start_at = excluded.start_at, end_at = excluded.end_at,
         status = excluded.status, idempotency_key = excluded.idempotency_key, source = excluded.source,
         source_call_id = excluded.source_call_id, external_calendar_event_id = excluded.external_calendar_event_id,
-        outcome_status = excluded.outcome_status, version = excluded.version
+        outcome_status = excluded.outcome_status, version = excluded.version,
+        updated_at = excluded.updated_at, compensation_required = excluded.compensation_required
     `).run(
       this.region, value.tenantId, value.locationId, value.id, value.customerId, value.serviceId,
       value.serviceNameSnapshot, value.priceAmountMinor, value.priceCurrency, value.employeeId,
       value.startAt, value.endAt, value.status, value.idempotencyKey, value.source,
       value.sourceCallId ?? null, value.externalCalendarEventId ?? null, value.outcomeStatus ?? null, value.version ?? 1,
+      value.updatedAt ?? null, value.compensationRequired ? 1 : 0,
     );
+  }
+
+  async findMutation(tenantId: TenantId, key: IdempotencyKey): Promise<AppointmentMutationReceipt | null> {
+    const row = this.database.prepare(`SELECT action, appointment_id, fingerprint, appointment_json
+      FROM appointment_mutations WHERE region_id = ? AND tenant_id = ? AND idempotency_key = ?`)
+      .get(this.region, tenantId, key) as {
+        action: "cancel" | "reschedule"; appointment_id: string; fingerprint: string; appointment_json: string;
+      } | undefined;
+    if (!row) return null;
+    return {
+      idempotencyKey: key,
+      action: row.action,
+      appointmentId: row.appointment_id,
+      fingerprint: row.fingerprint,
+      appointment: JSON.parse(row.appointment_json) as Appointment,
+    };
+  }
+
+  async saveMutation(tenantId: TenantId, receipt: AppointmentMutationReceipt): Promise<void> {
+    this.database.prepare(`INSERT INTO appointment_mutations(
+      region_id, tenant_id, idempotency_key, action, appointment_id, fingerprint, appointment_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(this.region, tenantId, receipt.idempotencyKey, receipt.action, receipt.appointmentId,
+        receipt.fingerprint, JSON.stringify(receipt.appointment), new Date().toISOString());
   }
 
   async findConfirmedIntervals(query: ConfirmedAppointmentQuery): Promise<OccupiedInterval[]> {
@@ -155,6 +183,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       ...(value.source_call_id ? { sourceCallId: value.source_call_id } : {}),
       ...(value.external_calendar_event_id ? { externalCalendarEventId: value.external_calendar_event_id } : {}),
       ...(value.outcome_status ? { outcomeStatus: value.outcome_status } : {}),
+      ...(value.updated_at ? { updatedAt: value.updated_at } : {}),
+      ...(value.compensation_required ? { compensationRequired: true } : {}),
     };
   }
 }
@@ -162,6 +192,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
 const SELECT_APPOINTMENT = `
   SELECT id, tenant_id, location_id, customer_id, service_id, service_name_snapshot,
     price_amount_minor, price_currency, employee_id, start_at, end_at, status,
-    idempotency_key, source, source_call_id, external_calendar_event_id, outcome_status, version
+    idempotency_key, source, source_call_id, external_calendar_event_id, outcome_status, version,
+    updated_at, compensation_required
   FROM appointments WHERE region_id = ? AND tenant_id = ?
 `;

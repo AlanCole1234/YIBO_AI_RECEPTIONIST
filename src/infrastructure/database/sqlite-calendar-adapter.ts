@@ -70,6 +70,15 @@ export class SqliteCalendarAdapter implements CalendarPort, AppointmentCalendarP
     `).run(this.region, command.tenantId, command.employeeId, command.externalEventId);
     return result.changes > 0 ? success(undefined) : failure({ code: "EVENT_NOT_FOUND" as const });
   }
+
+  async inspectEvent(command: Parameters<AppointmentCalendarPort["inspectEvent"]>[0]): ReturnType<AppointmentCalendarPort["inspectEvent"]> {
+    const row = this.database.prepare(`SELECT external_event_id FROM calendar_events
+      WHERE region_id = ? AND tenant_id = ? AND appointment_id = ? AND employee_id = ? AND cancelled = 0
+        AND (? IS NULL OR external_event_id = ?)`)
+      .get(this.region, command.tenantId, command.appointmentId, command.employeeId,
+        command.externalEventId ?? null, command.externalEventId ?? null) as { external_event_id: string } | undefined;
+    return success(row ? { present: true, externalEventId: row.external_event_id } : { present: false });
+  }
 }
 
 const validRange = (start: string, end: string): boolean => {

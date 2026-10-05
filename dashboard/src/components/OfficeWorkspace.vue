@@ -90,7 +90,7 @@ async function book(slot: Slot) {
 async function cancel() {
   const appointment = selected.value; if (!appointment) return;
   return mutate(async () => {
-    await api.cancelAppointment(appointment.locationId, appointment.id, appointment.version ?? 1);
+    await api.cancelAppointment(appointment.locationId, appointment.id, appointment.version ?? 1, crypto.randomUUID());
     selected.value = undefined; await load();
   });
 }
@@ -104,7 +104,7 @@ async function mark(outcome: "COMPLETED" | "NO_SHOW") {
 async function reschedule(slot: Slot) {
   const appointment = selected.value; if (!appointment) return;
   return mutate(async () => {
-    selected.value = await api.rescheduleAppointment(appointment.locationId, appointment.id, slot.startAt, appointment.version ?? 1);
+    selected.value = await api.rescheduleAppointment(appointment.locationId, appointment.id, slot.startAt, appointment.version ?? 1, crypto.randomUUID());
     rescheduling.value = false; await load();
   });
 }
