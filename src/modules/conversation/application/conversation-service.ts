@@ -1,3 +1,4 @@
+import { markCallEnded, isCallEnded } from "../../calls/application/call-liveness.js";
 import { ConversationMetrics } from "../../../shared/observability/conversation-metrics.js";
 import { withOperationalContext } from "../../../shared/observability/operational-log.js";
 import type { AgentToolResult } from "../../agents/index.js";
@@ -104,6 +105,7 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   close(): Promise<void> {
+    markCallEnded(this.dependencies.command.agent.trustedContext.callId);
     if (!this.closePromise) {
       this.closePromise = this.closeResources();
     }
@@ -234,7 +236,7 @@ class ActiveConversationSession implements ConversationSession {
   }
 
   private async executeTool(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }> & { name: import("../../agents/index.js").AgentToolName }): Promise<void> {
-    if (this.toolCalls.has(event.toolCallId) || this.closePromise) return;
+    if (this.toolCalls.has(event.toolCallId) || this.closePromise || isCallEnded(this.dependencies.command.agent.trustedContext.callId)) return;
     this.cancelCallEnd();
     this.lastAudioTurn = undefined;
     this.activeTools += 1;

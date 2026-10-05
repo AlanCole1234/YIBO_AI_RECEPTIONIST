@@ -1,3 +1,4 @@
+import { isCallEnded } from "../../calls/application/call-liveness.js";
 import { AppointmentOperationInProgressError } from "../ports/appointment-dependencies.js";
 import { operationalLog } from "../../../shared/observability/operational-log.js";
 import { failure, success, type Result } from "../../../shared/domain/result.js";
@@ -93,6 +94,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       });
       calendarLog("calendar.slot.recheck", { tenantId: command.tenantId, employeeId: command.employeeId, startAt: command.startAt, available: slot.ok });
       if (!slot.ok) return failure<CreateAppointmentError>(mapSchedulingError(slot.error));
+      if (voiceCallEnded(command)) return failure<CreateAppointmentError>({ code: "CALL_ENDED" });
 
       const pending: Appointment = {
         id: this.createId(),
@@ -116,6 +118,10 @@ export class AppointmentServiceImpl implements AppointmentService {
       });
       calendarLog("calendar.user.confirmed", { tenantId: pending.tenantId, appointmentId: pending.id });
       calendarLog("calendar.booking.started", { tenantId: pending.tenantId, appointmentId: pending.id, startAt: pending.startAt });
+      if (voiceCallEnded(pending)) {
+        await this.repository.save({ ...pending, version: 2, status: "FAILED" });
+        return failure<CreateAppointmentError>({ code: "CALL_ENDED" });
+      }
       const external = await this.calendar.createEvent({
         tenantId: pending.tenantId,
         locationId: pending.locationId,
@@ -136,6 +142,7 @@ export class AppointmentServiceImpl implements AppointmentService {
 
       const linked: Appointment = { ...pending, externalCalendarEventId: external.value.externalEventId };
       await this.repository.save(linked);
+      if (voiceCallEnded(linked)) return this.abandonUnconfirmed(linked, "CALL_ENDED");
       const confirmed: Appointment = { ...linked, version: 2, status: "CONFIRMED" };
       try {
         await this.repository.save(confirmed);
@@ -382,6 +389,9 @@ export class AppointmentServiceImpl implements AppointmentService {
     catch { /* Appointment/calendar success remains authoritative; delivery status is secondary. */ }
   }
 }
+
+const voiceCallEnded = (command: { source: string; sourceCallId?: string }): boolean =>
+  command.source === "AI_CALL" && Boolean(command.sourceCallId) && isCallEnded(command.sourceCallId!);
 
 const validateCreate = (command: CreateAppointmentCommand): string | null => {
   if (!command.tenantId || !command.locationId || !command.customerId || !command.serviceId || !command.employeeId || !command.idempotencyKey) {

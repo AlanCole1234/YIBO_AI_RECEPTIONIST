@@ -1,4 +1,5 @@
 import { operationalLog } from "../../src/shared/observability/operational-log.js";
+import { isCallEnded, resetCallLiveness } from "../../src/modules/calls/index.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
@@ -81,6 +82,8 @@ const start = (value: ReturnType<typeof fixture>) => value.service.start({
 });
 
 describe("ConversationService", () => {
+  afterEach(() => resetCallLiveness());
+
   it("correlates tool diagnostics and emits one summary on cleanup without caller content", async () => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     const value = fixture();
@@ -399,6 +402,7 @@ describe("intentional phone completion", () => {
   let session: Awaited<ReturnType<typeof start>>;
   let idle: () => void;
   beforeEach(async () => {
+    resetCallLiveness();
     vi.useFakeTimers();
     value = fixture();
     value.transport.outboundAudio.onPlaybackIdle = callback => { idle = callback; return vi.fn(); };
@@ -592,4 +596,14 @@ describe("intentional phone completion", () => {
     expect(value.closeTransport).toHaveBeenCalledTimes(1);
     expect(value.runtime.latestSession.closeCount).toBe(1);
   });
+});
+
+it("records the call as ended as soon as the conversation closes", async () => {
+  resetCallLiveness();
+  const value = fixture();
+  const session = await start(value);
+  expect(isCallEnded("call-1")).toBe(false);
+  await session.close();
+  expect(isCallEnded("call-1")).toBe(true);
+  resetCallLiveness();
 });

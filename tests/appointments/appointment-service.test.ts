@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { markCallEnded, resetCallLiveness } from "../../src/modules/calls/index.js";
 import { failure, success } from "../../src/shared/domain/result.js";
 import {
   BusinessDirectoryService,
@@ -84,6 +85,7 @@ function fixture(options: { scheduling?: SchedulingService; business?: Versioned
 }
 
 describe("AppointmentServiceImpl", () => {
+  afterEach(() => resetCallLiveness());
   it("revalidates the slot and confirms only after the external event succeeds", async () => {
     const { service } = fixture();
 
@@ -326,6 +328,35 @@ describe("AppointmentServiceImpl", () => {
       status: "PENDING_CONFIRMATION",
       externalCalendarEventId: "event-1",
     });
+  });
+
+  it("does not book when the caller hangs up during calendar creation", async () => {
+    const { calendar, repository, service } = fixture();
+    const original = calendar.createEvent.bind(calendar);
+    calendar.createEvent = async (input) => {
+      markCallEnded("call-1");
+      return original(input);
+    };
+
+    const result = await service.createAppointment(command);
+
+    expect(result).toEqual({ ok: false, error: { code: "CALL_ENDED" } });
+    expect(calendar.eventCount()).toBe(0);
+    expect(await repository.findById("tenant-a", "appointment-1")).toMatchObject({
+      status: "FAILED",
+      externalCalendarEventId: undefined,
+    });
+  });
+
+  it("does not book a voice appointment after the call has already ended", async () => {
+    const { calendar, repository, service } = fixture();
+    markCallEnded("call-1");
+
+    const result = await service.createAppointment(command);
+
+    expect(result).toEqual({ ok: false, error: { code: "CALL_ENDED" } });
+    expect(calendar.eventCount()).toBe(0);
+    expect(await repository.findById("tenant-a", "appointment-1")).toBeNull();
   });
 
   it("treats a pending confirmation as occupying the staff slot", async () => {
