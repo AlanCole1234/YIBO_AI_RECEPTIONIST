@@ -22,6 +22,27 @@ describe("GoogleOAuthService", () => {
 
     await expect(service.completeAuthorization("code", state)).resolves.toEqual({ tenantId: "tenant-1", returnTo: "http://127.0.0.1:5174" });
     await expect(service.status("tenant-1")).resolves.toMatchObject({ configured: true, connected: true });
+    expect(JSON.stringify({ url, status: await service.status("tenant-1") })).not.toContain(config.clientSecret);
+  });
+
+  it("returns connection state without the stored OAuth tokens", async () => {
+    const tokens = new MemoryTokenStore();
+    const accessMarker = "ya29.not-a-live-token";
+    const refreshMarker = "refresh-marker-not-live";
+    const fetcher: typeof fetch = async () => new Response(JSON.stringify({
+      access_token: accessMarker, refresh_token: refreshMarker, expires_in: 3600,
+    }), { status: 200 });
+    const service = new GoogleOAuthService(config, tokens, fetcher);
+    const url = service.authorizationUrl("tenant-1", "http://127.0.0.1:5174");
+    const state = url ? new URL(url).searchParams.get("state") : null;
+    if (!url || !state) throw new Error("Expected configured OAuth URL");
+    const completed = await service.completeAuthorization("code", state);
+    const status = await service.status("tenant-1");
+    const serialized = JSON.stringify({ completed, status, url });
+    expect(serialized).not.toContain(accessMarker);
+    expect(serialized).not.toContain(refreshMarker);
+    expect(serialized).not.toContain(config.clientSecret);
+    expect(status).toEqual({ configured: true, connected: true });
   });
 
   it("rejects a callback whose state was never issued", async () => {
