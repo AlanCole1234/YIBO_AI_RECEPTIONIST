@@ -84,6 +84,16 @@ const start = (value: ReturnType<typeof fixture>) => value.service.start({
 describe("ConversationService", () => {
   afterEach(() => resetCallLiveness());
 
+  it("runs one side effect when the same voice tool call is delivered twice", async () => {
+    const value = fixture();
+    const session = await start(value);
+    const event = { type: "tool.call" as const, toolCallId: "same-tool", name: "check_availability" as const, arguments: {} };
+    value.runtime.latestSession.emit(event);
+    value.runtime.latestSession.emit(event);
+    await eventually(() => expect(value.execute).toHaveBeenCalledTimes(1));
+    await session.close();
+  });
+
   it("correlates tool diagnostics and emits one summary on cleanup without caller content", async () => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
     const value = fixture();

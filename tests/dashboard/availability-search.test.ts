@@ -30,10 +30,13 @@ async function fixture() {
   if (!customer.ok) throw new Error("Missing customer");
   server = await createApiServer(app);
   const session = await createAdminTestSession(app, server, ["operator"]);
-  const requests: Array<{ method: string; url: string; body?: any }> = [];
+  const requests: Array<{ method: string; url: string; body?: any; headers: Record<string, string> }> = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    requests.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    requests.push({
+      method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
+    });
     const response = await server!.inject({ method: method as "GET" | "POST", url,
       headers: { ...(method === "GET" ? session.readHeaders : session.mutationHeaders), ...Object.fromEntries(new Headers(init?.headers).entries()) },
       ...(init?.body ? { payload: String(init.body) } : {}),
@@ -101,7 +104,10 @@ describe("Checkpoint C availability through the authenticated API", () => {
     const appointment = await search.book(customer.id);
     expect(appointment).toMatchObject({ status: "CONFIRMED", locationId: "north", employeeId: "north-provider", startAt: slot.startAt, endAt: slot.endAt });
     expect(await search.book(customer.id)).toBeUndefined();
-    expect(requests.filter(item => item.method === "POST")).toHaveLength(1);
+    const posts = requests.filter(item => item.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(posts[0]?.body).not.toHaveProperty("idempotencyKey");
     expect(await app.appointments.listUpcomingAppointments({ tenantId: app.tenantId, locationId: "north", customerId: customer.id })).toHaveLength(1);
     expect(await app.appointments.listUpcomingAppointments({ tenantId: app.tenantId, locationId: "default", customerId: customer.id })).toEqual([]);
     expect(await app.adminAudit.listByTenant(app.tenantId)).toHaveLength(1);

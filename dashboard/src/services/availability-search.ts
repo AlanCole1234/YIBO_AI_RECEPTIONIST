@@ -160,7 +160,7 @@ export function createAvailabilitySearch(client: AvailabilityClient = api, now =
     if (disposed || state.booking || !customerId.trim() || !location.value || !service.value || !selected
       || !state.slots.some(slot => slotKey(slot) === slotKey(selected))) return;
     const input = { locationId: location.value.id, customerId, serviceId: service.value.id,
-      employeeId: selected.employeeId, startAt: selected.startAt };
+      employeeId: selected.employeeId, startAt: selected.startAt, idempotencyKey: crypto.randomUUID() };
     // Consume the selection before awaiting: duplicate clicks and failed requests never retry a booking.
     state.booking = true; clear();
     try {

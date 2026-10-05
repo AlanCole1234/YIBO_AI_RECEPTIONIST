@@ -80,9 +80,10 @@ async function mutate(operation: () => Promise<void>) {
 }
 async function book(slot: Slot) {
   if (!customer.value || !serviceId.value || props.readOnly) { selectedSlot.value = slot; return; }
+  const idempotencyKey = crypto.randomUUID();
   return mutate(async () => {
     await api.createAppointment({ locationId: locationId.value, customerId: customer.value!.id,
-      serviceId: serviceId.value, employeeId: slot.employeeId, startAt: slot.startAt });
+      serviceId: serviceId.value, employeeId: slot.employeeId, startAt: slot.startAt, idempotencyKey });
     selectedSlot.value = undefined; await load();
   });
 }

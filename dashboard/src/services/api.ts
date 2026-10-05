@@ -269,8 +269,18 @@ export const api = {
   customerHistory: (id: string) => request<{ appointments: Appointment[] }>(`/api/customers/${encodeURIComponent(id)}/appointments`),
   updateCustomer: (id: string, input: Partial<Pick<Customer, "name" | "phone" | "email" | "preferredLanguage" | "emailOptIn">>) =>
     request<Customer>(`/api/customers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) }),
-  createAppointment: (input: { locationId?: string; customerId: string; serviceId: string; employeeId: string; startAt: string }) =>
-    request<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(input) }),
+  createAppointment: (input: { locationId?: string; customerId: string; serviceId: string; employeeId: string; startAt: string; idempotencyKey?: string }) =>
+    request<Appointment>("/api/appointments", {
+      method: "POST",
+      body: JSON.stringify({
+        locationId: input.locationId,
+        customerId: input.customerId,
+        serviceId: input.serviceId,
+        employeeId: input.employeeId,
+        startAt: input.startAt,
+      }),
+      ...(input.idempotencyKey ? { headers: { "idempotency-key": input.idempotencyKey } } : {}),
+    }),
   appointmentLocations: () => request<{ locations: AvailabilityLocation[] }>("/api/appointment-locations"),
   appointmentCalendar: (locationId: string, range: { rangeStart: string; rangeEnd: string }) =>
     request<{ appointments: AppointmentCalendarEntry[] }>(`/api/locations/${encodeURIComponent(locationId)}/appointment-calendar?${new URLSearchParams(range)}`),
