@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync, closeSync, constants, copyFileSync, createReadStream, existsSync,
-  fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync,
+  fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { backup, DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import type { RegionId } from "../shared/types/identifiers.js";
 
 export class BackupError extends Error {}
@@ -115,8 +115,7 @@ export async function createRegionalBackup(options: {
     const target = join(directory, file);
     // backup() can overwrite its destination; reserve only a new file in our private directory.
     closeSync(openSync(target, "wx", 0o600));
-    const db = new DatabaseSync(source.path, { readOnly: true, timeout: 5_000 });
-    try { await backup(db, target); } finally { db.close(); }
+    await copyConsistentSnapshot(source.path, target);
     // Make the owned snapshot standalone. Never change the source's journal mode.
     const snapshot = new DatabaseSync(target);
     try { snapshot.exec("PRAGMA journal_mode = DELETE"); } finally { snapshot.close(); }
@@ -164,6 +163,27 @@ export async function verifyRegionalBackup(directory: string): Promise<BackupMan
       && JSON.stringify(actual.tableCounts) === JSON.stringify(entry.tableCounts), "BACKUP_METADATA_MISMATCH");
   }
   return manifest;
+}
+
+/** Online snapshot that does not change the source journal mode. */
+async function copyConsistentSnapshot(sourcePath: string, target: string): Promise<void> {
+  const sqlite = await import("node:sqlite") as typeof import("node:sqlite") & {
+    backup?: (sourceDb: DatabaseSync, path: string) => Promise<void>;
+  };
+  const db = new DatabaseSync(sourcePath, { readOnly: true, timeout: 5_000 });
+  try {
+    if (typeof sqlite.backup === "function") {
+      await sqlite.backup(db, target);
+      return;
+    }
+    // node:sqlite's backup() is not exported on the Node 22.13/22.14 runtime this
+    // project supports. VACUUM INTO writes a new consistent file and refuses to
+    // replace an existing one, so drop only the placeholder we just reserved.
+    unlinkSync(target);
+    db.exec(`VACUUM INTO '${target.replaceAll("'", "''")}'`);
+  } finally {
+    db.close();
+  }
 }
 
 export async function restoreRegionalBackup(snapshot: string, destination: string): Promise<BackupManifest> {
