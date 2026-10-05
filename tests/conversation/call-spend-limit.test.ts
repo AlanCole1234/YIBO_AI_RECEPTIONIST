@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
   ConversationService,
+  SPEND_FORCED_SHUTDOWN_MS,
   ScriptedConversationRuntime,
   type AudioFrame,
   type ConversationTransport,
@@ -107,5 +108,29 @@ describe("per-call OpenAI spend cap", () => {
     value.idle();
     await eventually(() => expect(value.closeTransport).toHaveBeenCalledTimes(1));
     await expect(session.completed).resolves.toEqual({ status: "closed", reason: "spend_limit" });
+  });
+
+  it.each(["speech", "cancelled-response"])("still ends the call when the usage-limit farewell is interrupted by %s", async (cause) => {
+    vi.useFakeTimers();
+    const value = sessionFixture({ spend: { maxDurationMs: 15 * 60_000, maxTokens: 10 }, playback: true });
+    const session = await value.service.start({ conversationId: "spend-interrupt", agent: value.agent, transport: value.transport });
+    try {
+      value.runtime.latestSession.emit({ type: "usage", totalTokens: 10 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(value.runtime.latestSession.requestedResponses).toHaveLength(1);
+      if (cause === "speech") value.runtime.latestSession.emit({ type: "user.speech_started" });
+      if (cause === "cancelled-response") value.runtime.latestSession.emit({ type: "assistant.response_done", status: "cancelled" });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(SPEND_FORCED_SHUTDOWN_MS - 1);
+      expect(value.closeTransport).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await session.close();
+      await expect(session.completed).resolves.toEqual({ status: "closed", reason: "spend_limit" });
+      expect(value.closeTransport).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 });

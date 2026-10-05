@@ -132,9 +132,10 @@ export interface AppointmentService {
   listCustomerHistory(tenantId: TenantId, customerId: CustomerId, limit?: number): Promise<Appointment[]>;
   listTenantHistory(tenantId: TenantId, limit?: number): Promise<Appointment[]>;
   /**
-   * Checks the calendar for pending rows. Confirms a row whose event exists,
-   * releases a row whose event is gone, and holds a row when the calendar cannot be checked.
-   * Also drops location locks older than the stale threshold.
+   * Checks the calendar for pending rows. Confirms a row whose event exists and has no
+   * compensation flag. Releases a compensation row only after the event is proven gone.
+   * A timeout or unknown calendar result stays pending. Location locks are not deleted
+   * by age; the next writer steals a lease only after missed heartbeats.
    */
   reconcileUnconfirmedBookings(tenantId: TenantId): Promise<{ released: string[]; confirmed: string[]; held: string[] }>;
   recoverStuckBookings(tenantId: TenantId): Promise<{ released: string[]; confirmed: string[]; held: string[]; releasedLocks: string[] }>;

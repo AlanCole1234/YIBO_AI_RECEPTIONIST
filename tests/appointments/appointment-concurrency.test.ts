@@ -116,7 +116,14 @@ describe("RISK-001 appointment edit preconditions", () => {
     const run = () => operation === "cancel" ? f.app.appointments.cancelAppointment(command)
       : f.app.appointments.rescheduleAppointment({ ...command, startAt: nextStart });
     expect(await run()).toEqual({ ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true } });
-    expect(await f.repository.findById(f.scope.tenantId, f.scope.appointmentId)).toEqual(f.booked);
+    const held = await f.repository.findById(f.scope.tenantId, f.scope.appointmentId);
+    expect(held).toMatchObject({
+      status: "CONFIRMED",
+      startAt: f.booked.startAt,
+      version: (f.booked.version ?? 1) + 2,
+      operationIntent: "OUTCOME_UNKNOWN",
+      intentKey: `retry-${operation}`,
+    });
     expect(await f.repository.listEvents(f.scope.tenantId, f.scope.appointmentId)).toHaveLength(1);
     expect((await run()).ok).toBe(true);
   });

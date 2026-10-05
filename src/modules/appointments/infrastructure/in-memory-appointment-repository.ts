@@ -1,6 +1,6 @@
 import type { AppointmentId, IdempotencyKey, TenantId } from "../../../shared/types/identifiers.js";
 import type { Appointment, AppointmentEvent } from "../domain/appointment.js";
-import type { AppointmentMutationReceipt, AppointmentRepository } from "../ports/appointment-repository.js";
+import { StaleAppointmentWriteError, type AppointmentCommit, type AppointmentMutationReceipt, type AppointmentRepository } from "../ports/appointment-repository.js";
 import type { ConfirmedAppointmentQuery, ConfirmedAppointmentReader } from "../../scheduling/index.js";
 
 export class InMemoryAppointmentRepository implements AppointmentRepository, ConfirmedAppointmentReader {
@@ -102,6 +102,27 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
 
   async save(appointment: Appointment): Promise<void> {
     this.appointments.set(`${appointment.tenantId}:${appointment.id}`, { ...appointment });
+  }
+
+  async saveIfVersion(appointment: Appointment, expectedVersion: number, expectedStatus?: Appointment["status"]): Promise<boolean> {
+    const key = `${appointment.tenantId}:${appointment.id}`;
+    const current = this.appointments.get(key);
+    if (!current || (current.version ?? 1) !== expectedVersion) return false;
+    if (expectedStatus && current.status !== expectedStatus) return false;
+    this.appointments.set(key, { ...appointment });
+    return true;
+  }
+
+  async commitChange(change: AppointmentCommit): Promise<void> {
+    const key = `${change.appointment.tenantId}:${change.appointment.id}`;
+    const current = this.appointments.get(key);
+    if (!current || (current.version ?? 1) !== change.expectedVersion) throw new StaleAppointmentWriteError();
+    if (change.expectedStatus && current.status !== change.expectedStatus) throw new StaleAppointmentWriteError();
+    const mutationKey = `${change.appointment.tenantId}:${change.receipt.idempotencyKey}`;
+    if (this.mutations.has(mutationKey)) throw new Error("Idempotency receipt already exists");
+    this.appointments.set(key, { ...change.appointment });
+    this.mutations.set(mutationKey, structuredClone(change.receipt));
+    this.events.push(structuredClone(change.event));
   }
 
   async findMutation(tenantId: TenantId, key: IdempotencyKey): Promise<AppointmentMutationReceipt | null> {

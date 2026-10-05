@@ -104,7 +104,9 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
       && event.appointmentId === command.appointmentId
       && event.employeeId === command.employeeId
       && (command.externalEventId === undefined || event.externalEventId === command.externalEventId));
-    return success(found ? { present: true, externalEventId: found.externalEventId } : { present: false });
+    return success(found
+      ? { present: true, externalEventId: found.externalEventId, startAt: found.startAt, endAt: found.endAt }
+      : { present: false });
   }
 }
 

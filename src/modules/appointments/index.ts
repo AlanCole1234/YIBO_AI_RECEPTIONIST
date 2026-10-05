@@ -17,7 +17,8 @@ export type {
   RescheduleAppointmentError,
 } from "./application/contracts.js";
 export type { Appointment, AppointmentStatus, AppointmentEvent } from "./domain/appointment.js";
-export type { AppointmentMutationReceipt, AppointmentRepository } from "./ports/appointment-repository.js";
+export type { AppointmentCommit, AppointmentMutationReceipt, AppointmentRepository } from "./ports/appointment-repository.js";
+export { StaleAppointmentWriteError } from "./ports/appointment-repository.js";
 export type {
   AppointmentCalendarError,
   AppointmentCalendarPort,

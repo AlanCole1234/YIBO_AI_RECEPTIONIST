@@ -39,12 +39,12 @@ try {
   calendar.rescheduleEvent = async input => { moves++; const result = await originalMove(input); if (moves === 1) { enteredMove.resolve(); await releaseMove.promise; } return result; };
   const moving = api.appointments.rescheduleAppointment({ ...scope, expectedVersion: booked.value.version, startAt: "2026-08-11T16:00:00Z", idempotencyKey: "move-held" }); await enteredMove.promise;
   assert.deepEqual(await voice.appointments.cancelAppointment({ ...scope, idempotencyKey: "cancel-while-moving" }), { ok: false, error: { code: "APPOINTMENT_OPERATION_IN_PROGRESS" } });
-  assert.equal(cancels, 0); releaseMove.resolve(); const moved = await moving; assert(moved.ok); assert.equal(moved.value.version, 3);
+  assert.equal(cancels, 0); releaseMove.resolve(); const moved = await moving; assert(moved.ok); assert.equal(moved.value.version, 4);
   assert.deepEqual(await voice.appointments.cancelAppointment({ ...scope, expectedVersion: booked.value.version, idempotencyKey: "cancel-stale-version" }), { ok: false, error: { code: "APPOINTMENT_VERSION_CONFLICT" } });
   const movedAgain = await voice.appointments.rescheduleAppointment({ ...scope, expectedVersion: moved.value.version, startAt: "2026-08-12T16:00:00Z", idempotencyKey: "move-again" }); assert(movedAgain.ok);
-  assert.equal(movedAgain.value.externalCalendarEventId, booked.value.externalCalendarEventId); assert.equal(movedAgain.value.version, 4);
+  assert.equal(movedAgain.value.externalCalendarEventId, booked.value.externalCalendarEventId); assert.equal(movedAgain.value.version, 6);
   const cancelled = await api.appointments.cancelAppointment({ ...scope, expectedVersion: movedAgain.value.version, idempotencyKey: "cancel-final" }); assert(cancelled.ok);
-  assert.equal(cancelled.value.version, 5); assert.equal(cancelled.value.externalCalendarEventId, booked.value.externalCalendarEventId);
+  assert.equal(cancelled.value.version, 8); assert.equal(cancelled.value.externalCalendarEventId, booked.value.externalCalendarEventId);
   assert.equal(creates, 2); assert.equal(moves, 2); assert.equal(cancels, 1);
   assert.deepEqual(await voice.appointments.getAppointment(scope), cancelled);
   assert.deepEqual(await voice.appointments.getAppointment({ ...scope, appointmentId: neighbor.value.id }), neighbor);

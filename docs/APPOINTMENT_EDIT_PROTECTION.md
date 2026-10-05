@@ -34,12 +34,16 @@ production incident. Google's per-request etag checks do not order local saves.
 - Migration 11 adds `appointments.version` (existing rows default to `1`) and the
   claim table. New bookings start at version `1`; confirmation/failure advances to
   `2`. Successful reschedules, cancellations and office outcomes increment once.
-  Failed provider reschedules/cancellations leave the saved revision unchanged.
+  A cancel or reschedule also writes a local intent before the provider call, so a
+  failed or unknown provider attempt advances the revision and stores
+  `OUTCOME_UNKNOWN` without a success receipt. The same idempotency key continues
+  that attempt. A different key still needs the current `If-Match` revision.
 - Cancel/reschedule/outcome HTTP endpoints accept the existing quoted `If-Match`
   format, for example `If-Match: "2"`. All shipped appointment/office controls send
   the revision they displayed. Malformed headers return `400 INVALID_IF_MATCH`.
 - Under the guard, a stale revision returns `409 APPOINTMENT_VERSION_CONFLICT`
-  before any provider mutation. An occupied claim returns
+  before any provider mutation. The same idempotency key may continue an in-flight
+  intent after that revision has moved. An occupied claim returns
   `409 APPOINTMENT_OPERATION_IN_PROGRESS`. This is a version check under the shared
   lock, not a separate conditional SQL repository API.
 - Office and Product appointment screens explain the conflict, keep details visible
@@ -57,14 +61,17 @@ replacement event. Existing Google ownership, etag and route guards remain in pl
 
 ## Recovery and rollout boundaries
 
-Claims release in `finally` when the operation returns or throws. They deliberately
-have **no automatic expiry**: stealing a claim while a slow provider request is
-still active would reintroduce the race. A killed process therefore fails closed.
+Claims release in `finally` only when `owner_id` and `fence` still match. A holder
+refreshes `heartbeat_ms` on one numeric clock about every 30 seconds. The lease
+lasts 90 seconds. Another writer may steal the claim only after heartbeats stop,
+and the steal increments `fence`. The old writer's save then matches no row.
+A lock that is still receiving heartbeats is not stealable, including when it has
+been held longer than three minutes. Process id is not part of that decision.
 
 For a persistent busy error after a crash:
 
-1. Inspect the exact database/region, tenant and location claim (`owner_id`,
-   `owner_pid`, `acquired_at`). Age or PID reuse alone does not prove it is stale.
+1. Inspect the claim's `owner_id`, `fence`, and `heartbeat_ms`. A recent heartbeat
+   means the writer is still active. Process id is not proof either way.
 2. Under an approved maintenance window, stop or quiesce all appointment writers
    for that location and verify the owning operation cannot resume. Do not restart
    or interrupt the working phone service without approval.
@@ -72,11 +79,11 @@ For a persistent busy error after a crash:
    the original mapped Google event and neighboring events. A timeout/crash may
    occur after Google accepts the write. Reconcile any uncertain outcome first;
    do not blindly retry, recreate or delete an event.
-4. Only after reconciliation, remove that single verified claim using all four
-   identifiers: `region_id`, `tenant_id`, `location_id`, `owner_id`. For a prepared
-   statement: `DELETE FROM appointment_operation_locks WHERE region_id = ? AND
-   tenant_id = ? AND location_id = ? AND owner_id = ?`. Require exactly one deleted
-   row; never clear the table or remove an active owner's claim.
+4. Prefer to wait for the lease and let the next writer steal it. If a row must be
+   removed by hand, delete only that owner and fence: `DELETE FROM
+   appointment_operation_locks WHERE region_id = ? AND tenant_id = ? AND
+   location_id = ? AND owner_id = ? AND fence = ?`. Require exactly one deleted
+   row. Never clear the table, and never delete a fence that is still heartbeating.
 5. Resume the approved writers, reload current appointment details and verify a
    controlled operation. Retain the incident/backup evidence without credentials
    or customer data in Git.
@@ -95,8 +102,10 @@ Compatibility and remaining limits:
   protection requires the configured application and one shared SQLite database;
   separate database copies or independent writers to the same Google calendar are
   not coordinated by this claim.
-- Google and SQLite are not one transaction. Ambiguous network/local-write failures
-  still require reconciliation; there is no new automatic recovery worker.
+- Google and SQLite are not one transaction. An unknown provider result is stored
+  as `OUTCOME_UNKNOWN` without a success receipt. The same key inspects Google
+  before it cancels or moves the event again. Reconciliation may delete only a
+  compensation-required event, and only after that delete is proven.
 - Same-location mutations serialize even for different professionals, preserving
   the existing capacity boundary. A slow provider/notification can temporarily
   block another operation at that location.

@@ -79,7 +79,9 @@ try {
       await new SqliteNotificationRepository(db, region).save({ id: "notification-1", tenantId: profile.tenantId,
         appointmentId: "same-appointment", kind: "CONFIRMATION", channel: "EMAIL", destinationMasked: "r***@example.test",
         status: "SKIPPED", createdAt: "2026-10-05T16:00:00Z", updatedAt: "2026-10-05T16:00:00Z" });
-      db.prepare("INSERT INTO appointment_operation_locks VALUES (?, ?, 'default', 'crashed-writer-test', 1, '2026-10-05T16:00:00Z')")
+      db.prepare(`INSERT INTO appointment_operation_locks
+        (region_id, tenant_id, location_id, owner_id, owner_pid, acquired_at)
+        VALUES (?, ?, 'default', 'crashed-writer-test', 1, '2026-10-05T16:00:00Z')`)
         .run(region, profile.tenantId);
     }
     const before = sources.map(capture);

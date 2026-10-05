@@ -38,4 +38,13 @@ describe("shared hangup tracking", () => {
     expect(isCallEnded("private")).toBe(true);
     expect(memory.isEnded("private", Date.now())).toBe(false);
   });
+
+  it("keeps a hangup mark past the ttl while a tool is still in flight", () => {
+    const memory = new MemoryCallLivenessStore();
+    memory.pin("call");
+    memory.markEnded("call", 0, 1_000);
+    expect(memory.isEnded("call", 5_000)).toBe(true);
+    memory.unpin("call");
+    expect(memory.isEnded("call", 5_000)).toBe(false);
+  });
 });

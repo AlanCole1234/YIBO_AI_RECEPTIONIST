@@ -201,7 +201,12 @@ export class GoogleCalendarAdapter implements CalendarPort, AppointmentCalendarP
       if (!existing.ok) {
         return existing.error.code === "EVENT_NOT_FOUND" ? success({ present: false }) : existing;
       }
-      return success({ present: true, externalEventId });
+      return success({
+        present: true,
+        externalEventId,
+        ...(existing.value.start?.dateTime ? { startAt: existing.value.start.dateTime } : {}),
+        ...(existing.value.end?.dateTime ? { endAt: existing.value.end.dateTime } : {}),
+      });
     } catch {
       return failure<AppointmentCalendarError>({ code: "PROVIDER_UNAVAILABLE", retryable: true });
     }

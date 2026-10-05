@@ -1,4 +1,4 @@
-import { markCallEnded, isCallEnded } from "../../calls/application/call-liveness.js";
+import { markCallEnded, isCallEnded, pinCall, unpinCall } from "../../calls/application/call-liveness.js";
 import { ConversationMetrics } from "../../../shared/observability/conversation-metrics.js";
 import { withOperationalContext } from "../../../shared/observability/operational-log.js";
 import type { AgentToolResult } from "../../agents/index.js";
@@ -85,6 +85,7 @@ class ActiveConversationSession implements ConversationSession {
   private spendWrapUpStarted = false;
   private spendCloseOnResponse = false;
   private spendTimer?: ReturnType<typeof setTimeout>;
+  private spendShutdownTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private readonly dependencies: ConversationSessionControllerDependencies, metrics: ConversationMetrics) {
     this.metrics = metrics;
@@ -178,6 +179,7 @@ class ActiveConversationSession implements ConversationSession {
         return;
       case "user.speech_started":
         this.cancelCallEnd();
+        if (this.spendWrapUpStarted) void this.reRequestSpendFarewell();
         this.lastAudioTurn = undefined;
         this.turnSequence += 1;
         await this.handleBargeIn();
@@ -208,7 +210,13 @@ class ActiveConversationSession implements ConversationSession {
           await this.fail(error);
           return;
         }
-        if (event.status !== "completed") { this.cancelCallEnd(); this.lastAudioTurn = undefined; this.responseComplete = false; return; }
+        if (event.status !== "completed") {
+          this.cancelCallEnd();
+          this.lastAudioTurn = undefined;
+          this.responseComplete = false;
+          if (this.spendWrapUpStarted) void this.reRequestSpendFarewell();
+          return;
+        }
         this.responseComplete = true;
         if (this.spendCloseOnResponse) {
           this.settle({ status: "closed", reason: "spend_limit" });
@@ -275,6 +283,9 @@ class ActiveConversationSession implements ConversationSession {
     this.lastAudioTurn = undefined;
     this.activeTools += 1;
     this.toolCalls.add(event.toolCallId);
+    const callId = this.dependencies.command.agent.trustedContext.callId;
+    pinCall(callId);
+    try {
     this.observe({type:"tool.execution",phase:"started",toolCallId:event.toolCallId,name:event.name});
     const mutable = ["create_appointment", "cancel_appointment", "reschedule_appointment", "transfer_to_human", "update_customer"].includes(event.name);
     let result: ToolResultEnvelope;
@@ -302,6 +313,7 @@ class ActiveConversationSession implements ConversationSession {
       this.observe({type:"tool.execution",phase:result.ok?"completed":"failed",...(!result.ok ? { outcomeCode: result.error.code } : {}),toolCallId:event.toolCallId,name:event.name});
     } catch { if (!this.closePromise) await this.fail({code:"TOOL_EXECUTION_ERROR",message:"Tool result delivery failed"}); }
     finally { this.activeTools -= 1; }
+    } finally { unpinCall(callId); }
   }
 
   private async requestCallEnd(event: Extract<ConversationRuntimeEvent, { type: "tool.call" }>): Promise<void> {
@@ -383,6 +395,7 @@ class ActiveConversationSession implements ConversationSession {
   private async beginSpendWrapUp(): Promise<void> {
     if (this.spendWrapUpStarted || this.closePromise || this.completionSettled) return;
     this.spendWrapUpStarted = true;
+    this.armSpendShutdown();
     const canDrain = supportsCallEnd(this.dependencies.command);
     if (canDrain && !this.ending) {
       this.ending = {
@@ -401,10 +414,35 @@ class ActiveConversationSession implements ConversationSession {
     }
   }
 
+  private async reRequestSpendFarewell(): Promise<void> {
+    if (!this.spendWrapUpStarted || this.closePromise || this.completionSettled) return;
+    try {
+      const runtime = this.dependencies.runtimeSession;
+      if (runtime.requestResponse) await runtime.requestResponse(SPEND_LIMIT_FAREWELL);
+      else await runtime.sendText(SPEND_LIMIT_FAREWELL);
+    } catch {
+      await this.close();
+    }
+  }
+
+  private armSpendShutdown(): void {
+    if (this.spendShutdownTimer || this.closePromise || this.completionSettled) return;
+    // Independent of the farewell timer. Caller speech and a cancelled response clear that one.
+    this.spendShutdownTimer = setTimeout(() => {
+      this.spendShutdownTimer = undefined;
+      if (this.closePromise || this.completionSettled) return;
+      this.settle({ status: "closed", reason: "spend_limit" });
+      void this.close();
+    }, SPEND_FORCED_SHUTDOWN_MS);
+    this.spendShutdownTimer.unref?.();
+  }
+
   private async closeResources(): Promise<void> {
     const cleanupStarted = performance.now();
     if (this.spendTimer) clearTimeout(this.spendTimer);
     this.spendTimer = undefined;
+    if (this.spendShutdownTimer) clearTimeout(this.spendShutdownTimer);
+    this.spendShutdownTimer = undefined;
     this.cancelCallEnd();
     this.removePlaybackObserver?.();
     try { this.removeMediaObserver?.(); } catch { /* Observation only. */ }
@@ -438,6 +476,8 @@ class ActiveConversationSession implements ConversationSession {
 
 const DEFAULT_CALL_MAX_DURATION_MS = 15 * 60_000;
 const DEFAULT_CALL_MAX_TOKENS = 150_000;
+/** Once a hard spend cap is reached, the session ends even if the farewell is interrupted. */
+export const SPEND_FORCED_SHUTDOWN_MS = 45_000;
 const SPEND_LIMIT_FAREWELL = "The call has reached its time or usage limit. Speak one short, polite farewell now. Do not ask a question, book, cancel, reschedule, or call a tool.";
 
 const toEnvelope = (result: AgentToolResult): ToolResultEnvelope => result.ok

@@ -1,5 +1,5 @@
 import { operationalLog } from "../../src/shared/observability/operational-log.js";
-import { isCallEnded, resetCallLiveness } from "../../src/modules/calls/index.js";
+import { isCallEnded, markCallEnded, resetCallLiveness, configureCallLiveness, MemoryCallLivenessStore, restoreDefaultCallLiveness } from "../../src/modules/calls/index.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AGENT_BEHAVIOR, type AgentDefinition, type AgentToolResult, type ToolExecutor } from "../../src/modules/agents/index.js";
 import {
@@ -92,6 +92,35 @@ describe("ConversationService", () => {
     value.runtime.latestSession.emit(event);
     await eventually(() => expect(value.execute).toHaveBeenCalledTimes(1));
     await session.close();
+  });
+
+  it("keeps the hangup mark until an in-flight tool finishes past the old ttl", async () => {
+    let now = 1_000;
+    const memory = new MemoryCallLivenessStore();
+    configureCallLiveness({ store: memory, now: () => now, ttlMs: 50 });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let endedDuringTool = false;
+    const value = fixture();
+    value.execute.mockImplementation(async (context, call) => {
+      markCallEnded(context.callId);
+      now += 1_000;
+      endedDuringTool = isCallEnded(context.callId);
+      await gate;
+      return { toolCallId: call.toolCallId, ok: true as const, data: {} };
+    });
+    const session = await start(value);
+    try {
+      value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "slow", name: "check_availability", arguments: {} });
+      await eventually(() => expect(endedDuringTool).toBe(true));
+      expect(isCallEnded("call-1")).toBe(true);
+      release();
+      await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toHaveLength(1));
+      expect(isCallEnded("call-1")).toBe(false);
+      await session.close();
+    } finally {
+      restoreDefaultCallLiveness();
+    }
   });
 
   it("correlates tool diagnostics and emits one summary on cleanup without caller content", async () => {

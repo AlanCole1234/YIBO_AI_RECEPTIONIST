@@ -452,7 +452,146 @@ describe("AppointmentServiceImpl", () => {
     expect(calendar.eventCount()).toBe(0);
   });
 
-  it("confirms the pending row when a compensation cancel still cannot delete the calendar event", async () => {
+  it("does not let a slow recovery overwrite a cancellation that finished first", async () => {
+    const { calendar, repository, service } = fixture();
+    const created = await calendar.createEvent({
+      tenantId: "tenant-a", locationId: "default", appointmentId: "racy", employeeId: "employee-1",
+      title: "Consultation", serviceName: "Consultation",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", idempotencyKey: "racy",
+    });
+    if (!created.ok) throw new Error("event");
+    await repository.save({
+      id: "racy", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", status: "PENDING_CONFIRMATION",
+      idempotencyKey: "racy", source: "AI_CALL", version: 2, externalCalendarEventId: created.value.externalEventId,
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    let releaseInspect: () => void = () => undefined;
+    const inspecting = new Promise<void>((resolve) => { releaseInspect = resolve; });
+    let sawInspect = false;
+    const originalInspect = calendar.inspectEvent.bind(calendar);
+    calendar.inspectEvent = async (command) => {
+      const seen = await originalInspect(command);
+      sawInspect = true;
+      await inspecting;
+      return seen;
+    };
+    const recovery = service.reconcileUnconfirmedBookings("tenant-a");
+    for (let attempt = 0; attempt < 20 && !sawInspect; attempt += 1) await Promise.resolve();
+    expect(sawInspect).toBe(true);
+    await calendar.cancelEvent({
+      tenantId: "tenant-a", locationId: "default", appointmentId: "racy", employeeId: "employee-1",
+      externalEventId: created.value.externalEventId,
+    });
+    await repository.save({
+      id: "racy", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", status: "CANCELLED",
+      idempotencyKey: "racy", source: "AI_CALL", version: 3, externalCalendarEventId: created.value.externalEventId,
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    releaseInspect();
+    await recovery;
+    expect(await repository.findById("tenant-a", "racy")).toMatchObject({ status: "CANCELLED", version: 3 });
+    expect(calendar.eventCount()).toBe(0);
+  });
+
+  it("does not let a slow recovery overwrite a reschedule that finished first", async () => {
+    const { calendar, repository, service } = fixture();
+    const created = await calendar.createEvent({
+      tenantId: "tenant-a", locationId: "default", appointmentId: "moved", employeeId: "employee-1",
+      title: "Consultation", serviceName: "Consultation",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", idempotencyKey: "moved",
+    });
+    if (!created.ok) throw new Error("event");
+    await repository.save({
+      id: "moved", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", status: "PENDING_CONFIRMATION",
+      idempotencyKey: "moved", source: "AI_CALL", version: 2, externalCalendarEventId: created.value.externalEventId,
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    let releaseInspect: () => void = () => undefined;
+    const inspecting = new Promise<void>((resolve) => { releaseInspect = resolve; });
+    let sawInspect = false;
+    const originalInspect = calendar.inspectEvent.bind(calendar);
+    calendar.inspectEvent = async (command) => {
+      const seen = await originalInspect(command);
+      sawInspect = true;
+      await inspecting;
+      return seen;
+    };
+    const recovery = service.reconcileUnconfirmedBookings("tenant-a");
+    for (let attempt = 0; attempt < 20 && !sawInspect; attempt += 1) await Promise.resolve();
+    expect(sawInspect).toBe(true);
+    await repository.save({
+      id: "moved", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T18:00:00.000Z", endAt: "2026-08-10T18:30:00.000Z", status: "CONFIRMED",
+      idempotencyKey: "moved", source: "AI_CALL", version: 5, externalCalendarEventId: created.value.externalEventId,
+      outcomeStatus: "COMPLETED", updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    releaseInspect();
+    await recovery;
+    expect(await repository.findById("tenant-a", "moved")).toMatchObject({
+      status: "CONFIRMED", version: 5, startAt: "2026-08-10T18:00:00.000Z", outcomeStatus: "COMPLETED",
+    });
+    expect(calendar.eventCount()).toBe(1);
+  });
+
+  it("does not confirm or fail a booking when calendar delete times out", async () => {
+    const { calendar, repository, service } = fixture();
+    const created = await calendar.createEvent({
+      tenantId: "tenant-a", locationId: "default", appointmentId: "timeout", employeeId: "employee-1",
+      title: "Consultation", serviceName: "Consultation",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", idempotencyKey: "timeout",
+    });
+    if (!created.ok) throw new Error("event");
+    calendar.cancelEvent = async () => { throw new Error("timeout"); };
+    await repository.save({
+      id: "timeout", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", status: "PENDING_CONFIRMATION",
+      idempotencyKey: "timeout", source: "DASHBOARD", version: 2, externalCalendarEventId: created.value.externalEventId,
+      compensationRequired: true, updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    await expect(service.reconcileUnconfirmedBookings("tenant-a")).resolves.toMatchObject({ confirmed: [], released: [], held: ["timeout"] });
+    expect(await repository.findById("tenant-a", "timeout")).toMatchObject({
+      status: "PENDING_CONFIRMATION", compensationRequired: true,
+    });
+    expect(calendar.eventCount()).toBe(1);
+  });
+
+  it("runs one stuck-booking scan at a time", async () => {
+    const { calendar, repository, service } = fixture();
+    await repository.save({
+      id: "scan", tenantId: "tenant-a", locationId: "default", customerId: "customer-1", serviceId: "service-1",
+      employeeId: "employee-1", serviceNameSnapshot: "Consultation", priceAmountMinor: 0, priceCurrency: "MXN",
+      startAt: "2026-08-10T15:00:00.000Z", endAt: "2026-08-10T15:30:00.000Z", status: "PENDING_CONFIRMATION",
+      idempotencyKey: "scan", source: "DASHBOARD", version: 1, updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    let active = 0;
+    let maximum = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    calendar.inspectEvent = async () => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await gate;
+      active -= 1;
+      return success({ present: false });
+    };
+    const first = service.recoverStuckBookings("tenant-a");
+    const second = service.recoverStuckBookings("tenant-a");
+    for (let attempt = 0; attempt < 20 && maximum < 1; attempt += 1) await Promise.resolve();
+    expect(maximum).toBe(1);
+    release();
+    await Promise.all([first, second]);
+    expect(maximum).toBe(1);
+  });
+
+  it("keeps a failed hangup cleanup pending instead of confirming the booking", async () => {
     const { calendar, repository, service } = fixture();
     const created = await calendar.createEvent({
       tenantId: "tenant-a", locationId: "default", appointmentId: "kept", employeeId: "employee-1",
@@ -469,8 +608,11 @@ describe("AppointmentServiceImpl", () => {
       compensationRequired: true,
     });
 
-    await expect(service.reconcileUnconfirmedBookings("tenant-a")).resolves.toMatchObject({ confirmed: ["kept"], released: [], held: [] });
-    expect(await repository.findById("tenant-a", "kept")).toMatchObject({ status: "CONFIRMED", externalCalendarEventId: created.value.externalEventId });
+    await expect(service.reconcileUnconfirmedBookings("tenant-a")).resolves.toMatchObject({ confirmed: [], released: [], held: ["kept"] });
+    expect(await repository.findById("tenant-a", "kept")).toMatchObject({
+      status: "PENDING_CONFIRMATION", compensationRequired: true, externalCalendarEventId: created.value.externalEventId,
+    });
+    await expect(service.reconcileUnconfirmedBookings("tenant-a")).resolves.toMatchObject({ confirmed: [], released: [], held: ["kept"] });
     expect(calendar.eventCount()).toBe(1);
   });
 
@@ -488,12 +630,14 @@ describe("AppointmentServiceImpl", () => {
     expect(await repository.findById("tenant-a", "unknown")).toMatchObject({ status: "PENDING_CONFIRMATION" });
   });
 
-  it("leaves a fresh in-flight pending row alone and releases a stale location lock", async () => {
+  it("leaves a fresh in-flight pending row alone and does not delete a lock by age", async () => {
     const claims = [{ tenantId: "tenant-a", locationId: "default", ownerId: "crashed", acquiredAt: "2020-01-01T00:00:00.000Z" }];
     const guard = {
       execute: async <T>(_tenantId: string, _locationId: string, _employeeId: string, operation: () => Promise<T>) => operation(),
       listClaims: () => claims.map((claim) => ({ ...claim })),
-      releaseClaim: () => { claims.pop(); return true; },
+      heartbeat: () => false,
+      ownsFence: () => true,
+      releaseClaim: () => false,
     };
     const { repository, service } = fixture({ guard });
     await repository.save({
@@ -504,10 +648,10 @@ describe("AppointmentServiceImpl", () => {
     });
 
     await expect(service.recoverStuckBookings("tenant-a")).resolves.toMatchObject({
-      released: [], confirmed: [], held: [], releasedLocks: ["default"],
+      released: [], confirmed: [], held: [], releasedLocks: [],
     });
     expect(await repository.findById("tenant-a", "fresh")).toMatchObject({ status: "PENDING_CONFIRMATION" });
-    expect(claims).toEqual([]);
+    expect(claims).toHaveLength(1);
   });
 
   it("replays a cancel or reschedule with the same key and rejects a different change", async () => {
@@ -543,6 +687,64 @@ describe("AppointmentServiceImpl", () => {
     await expect(service.cancelAppointment({
       tenantId: "tenant-a", locationId: "default", appointmentId: "appointment-1", idempotencyKey: " ",
     })).resolves.toEqual({ ok: false, error: { code: "VALIDATION_ERROR", message: "An idempotency key is required" } });
+  });
+
+  it("retries cancel and reschedule after the receipt write fails without a second provider call", async () => {
+    const { calendar, repository, service } = fixture();
+    const created = await service.createAppointment(command);
+    if (!created.ok) throw new Error("create");
+    const cancel = vi.spyOn(calendar, "cancelEvent");
+    const originalCommit = repository.commitChange.bind(repository);
+    let failures = 0;
+    repository.commitChange = async (change) => {
+      failures += 1;
+      if (failures === 1) throw new Error("receipt io");
+      return originalCommit(change);
+    };
+    const cancelCommand = {
+      tenantId: "tenant-a", locationId: "default", appointmentId: created.value.id,
+      idempotencyKey: "cancel-gap", expectedVersion: created.value.version,
+    };
+    await expect(service.cancelAppointment(cancelCommand)).resolves.toEqual({
+      ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true },
+    });
+    expect(await repository.findById("tenant-a", created.value.id)).toMatchObject({
+      status: "CONFIRMED", operationIntent: "OUTCOME_UNKNOWN",
+    });
+    expect(await repository.findMutation("tenant-a", "cancel-gap")).toBeNull();
+    const cancelled = await service.cancelAppointment(cancelCommand);
+    expect(cancelled).toMatchObject({ ok: true, value: { status: "CANCELLED", id: created.value.id } });
+    expect(cancel).toHaveBeenCalledOnce();
+    await expect(service.cancelAppointment(cancelCommand)).resolves.toEqual(cancelled);
+    expect(cancel).toHaveBeenCalledOnce();
+
+    const { calendar: moveCalendar, repository: moveRepository, service: moveService } = fixture();
+    const booked = await moveService.createAppointment(command);
+    if (!booked.ok) throw new Error("create");
+    const move = vi.spyOn(moveCalendar, "rescheduleEvent");
+    const originalMove = moveRepository.commitChange.bind(moveRepository);
+    let moveFailures = 0;
+    moveRepository.commitChange = async (change) => {
+      moveFailures += 1;
+      if (moveFailures === 1) throw new Error("receipt io");
+      return originalMove(change);
+    };
+    const moveCommand = {
+      tenantId: "tenant-a", locationId: "default", appointmentId: booked.value.id,
+      startAt: "2026-08-10T16:00:00.000Z", idempotencyKey: "move-gap", expectedVersion: booked.value.version,
+    };
+    await expect(moveService.rescheduleAppointment(moveCommand)).resolves.toEqual({
+      ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true },
+    });
+    expect(await moveRepository.findById("tenant-a", booked.value.id)).toMatchObject({
+      status: "CONFIRMED", startAt: booked.value.startAt, operationIntent: "OUTCOME_UNKNOWN",
+    });
+    expect(await moveRepository.findMutation("tenant-a", "move-gap")).toBeNull();
+    const moved = await moveService.rescheduleAppointment(moveCommand);
+    expect(moved).toMatchObject({ ok: true, value: { startAt: "2026-08-10T16:00:00.000Z" } });
+    expect(move).toHaveBeenCalledOnce();
+    await expect(moveService.rescheduleAppointment(moveCommand)).resolves.toEqual(moved);
+    expect(move).toHaveBeenCalledOnce();
   });
 
   it("serializes different professionals competing for the same location capacity", async () => {

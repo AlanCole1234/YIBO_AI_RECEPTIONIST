@@ -24,12 +24,24 @@ export interface AppointmentLockClaim {
   locationId: LocationId;
   ownerId: string;
   acquiredAt: string;
+  /** Process that inserted the claim. Not used to decide whether the lease is live. */
+  ownerPid?: number;
+  fence?: number;
+  /** Unix milliseconds of the last heartbeat. Lease checks use this, not `acquiredAt`. */
+  heartbeatMs?: number;
 }
 
 export interface AppointmentConcurrencyGuard {
   execute<T>(tenantId: TenantId, locationId: LocationId, employeeId: EmployeeId, operation: () => Promise<T>): Promise<T>;
   listClaims(tenantId: TenantId): AppointmentLockClaim[];
-  /** Removes one claim only when owner and acquisition time still match. */
+  /** Refreshes the lease only for the owner that still holds this fence. */
+  heartbeat(tenantId: TenantId, locationId: LocationId, ownerId: string, fence: number): boolean;
+  /** True only while this owner still holds this fence. */
+  ownsFence(tenantId: TenantId, locationId: LocationId, ownerId: string, fence: number): boolean;
+  /**
+   * Kept for older callers. A live lease is not deleted here.
+   * The next writer steals an expired lease and increments the fence.
+   */
   releaseClaim(tenantId: TenantId, locationId: LocationId, ownerId: string, acquiredAt: string): boolean;
 }
 
@@ -72,7 +84,7 @@ export interface AppointmentCalendarPort {
     employeeId: EmployeeId;
     appointmentId: AppointmentId;
     externalEventId?: string;
-  }): Promise<Result<{ present: boolean; externalEventId?: string }, AppointmentCalendarError>>;
+  }): Promise<Result<{ present: boolean; externalEventId?: string; startAt?: string; endAt?: string }, AppointmentCalendarError>>;
 }
 
 export type AppointmentCalendarError =

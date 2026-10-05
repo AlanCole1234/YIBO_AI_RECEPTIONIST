@@ -5,7 +5,7 @@ import type {
 } from "../ports/appointment-dependencies.js";
 
 export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
-  private readonly events = new Map<string, { idempotencyKey: string; appointmentId: string; cancelled?: boolean }>();
+  private readonly events = new Map<string, { idempotencyKey: string; appointmentId: string; startAt: string; endAt: string; cancelled?: boolean }>();
   private nextFailure?: AppointmentCalendarError;
 
   failNext(error: AppointmentCalendarError): void {
@@ -21,7 +21,10 @@ export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
     if (error) return failure<AppointmentCalendarError>(error);
     const existing = [...this.events.entries()].find(([, event]) => event.idempotencyKey === command.idempotencyKey);
     const externalEventId = existing?.[0] ?? `event-${this.events.size + 1}`;
-    this.events.set(externalEventId, { idempotencyKey: command.idempotencyKey, appointmentId: command.appointmentId });
+    this.events.set(externalEventId, {
+      idempotencyKey: command.idempotencyKey, appointmentId: command.appointmentId,
+      startAt: command.startAt, endAt: command.endAt,
+    });
     return success({ provider: "memory", externalEventId });
   }
 
@@ -29,6 +32,8 @@ export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
     const error = this.consumeFailure();
     if (error) return failure<AppointmentCalendarError>(error);
     if (!this.events.has(command.externalEventId)) return failure<AppointmentCalendarError>({ code: "EVENT_NOT_FOUND" });
+    const event = this.events.get(command.externalEventId)!;
+    this.events.set(command.externalEventId, { ...event, startAt: command.startAt, endAt: command.endAt });
     return success(undefined);
   }
 
@@ -48,7 +53,7 @@ export class InMemoryAppointmentCalendar implements AppointmentCalendarPort {
       && event.appointmentId === command.appointmentId
       && (command.externalEventId === undefined || command.externalEventId === id));
     return success(match
-      ? { present: true, externalEventId: match[0] }
+      ? { present: true, externalEventId: match[0], startAt: match[1].startAt, endAt: match[1].endAt }
       : { present: false });
   }
 

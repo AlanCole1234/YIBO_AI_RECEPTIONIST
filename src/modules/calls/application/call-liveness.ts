@@ -8,31 +8,53 @@ export const CALL_ENDED_TTL_MS = 6 * 60 * 60 * 1000;
 export interface CallLivenessStore {
   markEnded(callId: string, endedAtMs: number, ttlMs: number): void;
   isEnded(callId: string, nowMs: number): boolean;
+  /** Holds the hangup decision while a tool that already started is still running. */
+  pin(callId: string): void;
+  unpin(callId: string): void;
   reset(): void;
 }
 
 export class MemoryCallLivenessStore implements CallLivenessStore {
-  private readonly expiresAt = new Map<string, number>();
+  private readonly calls = new Map<string, { endedAt: number; expires: number; inFlight: number }>();
 
   markEnded(callId: string, endedAtMs: number, ttlMs: number): void {
     if (!callId) return;
     const expires = endedAtMs + ttlMs;
-    const current = this.expiresAt.get(callId);
-    if (current === undefined || expires > current) this.expiresAt.set(callId, expires);
+    const current = this.calls.get(callId);
+    if (!current) {
+      this.calls.set(callId, { endedAt: endedAtMs, expires, inFlight: 0 });
+      return;
+    }
+    if (current.endedAt === 0 || expires > current.expires) {
+      current.endedAt = endedAtMs;
+      current.expires = expires;
+    }
   }
 
   isEnded(callId: string, nowMs: number): boolean {
-    const expires = this.expiresAt.get(callId);
-    if (expires === undefined) return false;
-    if (expires <= nowMs) {
-      this.expiresAt.delete(callId);
-      return false;
-    }
-    return true;
+    const current = this.calls.get(callId);
+    if (!current || (current.endedAt === 0 && current.expires === 0)) return false;
+    if (current.expires > nowMs || current.inFlight > 0) return true;
+    this.calls.delete(callId);
+    return false;
+  }
+
+  pin(callId: string): void {
+    if (!callId) return;
+    const current = this.calls.get(callId) ?? { endedAt: 0, expires: 0, inFlight: 0 };
+    current.inFlight += 1;
+    this.calls.set(callId, current);
+  }
+
+  unpin(callId: string): void {
+    const current = this.calls.get(callId);
+    if (!current) return;
+    current.inFlight = Math.max(0, current.inFlight - 1);
+    if (current.inFlight === 0 && current.endedAt === 0) this.calls.delete(callId);
   }
 
   reset(): void {
-    this.expiresAt.clear();
+    this.calls.clear();
   }
 }
 
@@ -64,6 +86,15 @@ export const markCallEnded = (callId: string): void => {
 };
 
 export const isCallEnded = (callId: string): boolean => (callId ? store.isEnded(callId, nowFn()) : false);
+
+/** Keep an in-flight tool from outliving the hangup mark. */
+export const pinCall = (callId: string): void => {
+  if (callId) store.pin(callId);
+};
+
+export const unpinCall = (callId: string): void => {
+  if (callId) store.unpin(callId);
+};
 
 /** Test isolation. Clears the active store without forgetting which store is installed. */
 export const resetCallLiveness = (): void => {
