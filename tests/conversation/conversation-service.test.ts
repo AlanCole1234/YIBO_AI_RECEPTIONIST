@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentDefinition, AgentToolResult, ToolExecutor } from "../../src/modules/agents/index.js";
 import {
   ConversationService,
@@ -68,6 +68,112 @@ const start = (value: ReturnType<typeof fixture>) => value.service.start({
 });
 
 describe("ConversationService", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("does not let slow usage recording block audio or interruption events", async () => {
+    const value = fixture();
+    const record = vi.fn(() => new Promise<void>(() => {}));
+    const service = new ConversationService({ runtime: value.runtime, usageRecorder: { record } });
+    const session = await service.start({ conversationId: "usage-delay", agent: value.agent, transport: value.transport });
+    value.runtime.latestSession.emit({ type: "usage", inputTokens: 1 });
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "answer", frame: audio(1) });
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "answer" });
+    value.runtime.latestSession.emit({ type: "user.speech_started" });
+    await eventually(() => expect(value.writtenAudio).toHaveLength(1));
+    await eventually(() => expect(value.runtime.latestSession.interruptCount).toBe(1));
+    expect(record).toHaveBeenCalledTimes(1);
+    await session.close();
+  });
+
+  it("keeps diagnostic observer exceptions out of the conversational path", async () => {
+    const value = fixture();
+    const session = await value.service.start({ conversationId: "observer", agent: value.agent, transport: value.transport,
+      observeEvent: () => { throw new Error("diagnostic sink unavailable"); } });
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "answer", frame: audio(1) });
+    await eventually(() => expect(value.writtenAudio).toHaveLength(1));
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    await session.close();
+  });
+
+  it.each(["check_availability", "create_appointment", "reschedule_appointment", "cancel_appointment"] as const)(
+    "bounds a stalled %s tool and ignores late/replayed results", async name => {
+      vi.useFakeTimers();
+      const value = fixture();
+      let resolve!: (result: AgentToolResult) => void;
+      value.execute.mockImplementationOnce(() => new Promise(result => { resolve = result; }));
+      const session = await start(value);
+      const call = { type: "tool.call" as const, toolCallId: "slow", name, arguments: {} };
+      value.runtime.latestSession.emit(call);
+      value.runtime.latestSession.emit(call);
+      await vi.advanceTimersByTimeAsync(11_999);
+      expect(value.runtime.latestSession.receivedToolResults).toHaveLength(0);
+      expect(value.execute).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(value.runtime.latestSession.receivedToolResults).toEqual([expect.objectContaining({ ok: false,
+        error: expect.objectContaining({ code: name === "check_availability" ? "TOOL_TIMEOUT" : "APPOINTMENT_OUTCOME_UNKNOWN" }),
+      })]);
+      resolve({ toolCallId: "slow", ok: true, data: { appointment: { status: "CONFIRMED" } } });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(value.runtime.latestSession.receivedToolResults).toHaveLength(1);
+      value.runtime.latestSession.emit({ ...call, toolCallId: "retry" });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(value.execute).toHaveBeenCalledTimes(name === "check_availability" ? 2 : 1);
+      expect(value.closeTransport).not.toHaveBeenCalled();
+      await session.close();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("bounds a stalled audio write and settles completion", async () => {
+    vi.useFakeTimers();
+    const value = fixture();
+    value.transport.outboundAudio.write = () => new Promise(() => {});
+    const session = await start(value);
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "answer", frame: audio(1) });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(session.completed).resolves.toMatchObject({ status: "failed", error: { code: "AUDIO_TRANSPORT_ERROR" } });
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cleans up pending tool deadlines on hangup without waiting for the backend", async () => {
+    vi.useFakeTimers();
+    const value = fixture();
+    value.execute.mockImplementationOnce(() => new Promise(() => {}));
+    const session = await start(value);
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: "pending", name: "create_appointment", arguments: {} });
+    await vi.advanceTimersByTimeAsync(1);
+    await session.close();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(value.runtime.latestSession.receivedToolResults).toHaveLength(0);
+  });
+
+  it("settles a runtime stream that ends without a final closed event", async () => {
+    const value = fixture();
+    const original = value.runtime.openSession.bind(value.runtime);
+    vi.spyOn(value.runtime, "openSession").mockImplementation(async input => {
+      const runtime = await original(input);
+      runtime.events = async function* () {};
+      return runtime;
+    });
+    const session = await start(value);
+    await expect(session.completed).resolves.toEqual({ status: "closed", reason: "runtime_stream_ended" });
+    await session.close();
+    expect(value.closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds a transport that never finishes closing", async () => {
+    vi.useFakeTimers();
+    const value = fixture();
+    value.closeTransport.mockImplementation(() => new Promise(() => {}));
+    const session = await start(value);
+    const closing = session.close();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await closing;
+    await expect(session.completed).resolves.toMatchObject({ status: "failed", error: { message: "Conversation cleanup timed out." } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("opens one runtime session and moves audio in both directions without assuming a codec", async () => {
     const inbound = [audio(1, "audio/custom-a"), audio(2, "audio/custom-b")];
     const value = fixture(stream(...inbound));
@@ -119,6 +225,20 @@ describe("ConversationService", () => {
     await session.close();
   });
 
+  it.each(Array.from({ length: 25 }, (_, i) => i))("returns thrown booking failure and remains usable #%i", async i => {
+    const value = fixture();
+    value.execute.mockRejectedValueOnce(new Error("private provider error"));
+    const session = await start(value);
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: `failure-${i}`, name: "create_appointment", arguments: {} });
+    await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toEqual([expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "TOOL_EXECUTION_ERROR", retryable: false }) })]));
+    expect(value.closeTransport).not.toHaveBeenCalled();
+    value.runtime.latestSession.emit({ type: "audio.delta", assistantTurnId: "failure-explanation", frame: audio(9) });
+    await eventually(() => expect(value.writtenAudio).toEqual([audio(9)]));
+    value.runtime.latestSession.emit({ type: "tool.call", toolCallId: `next-${i}`, name: "check_availability", arguments: {} });
+    await eventually(() => expect(value.runtime.latestSession.receivedToolResults).toHaveLength(2));
+    await session.close();
+  });
+
   it("reports a runtime error and closes all resources", async () => {
     const value = fixture();
     const session = await start(value);
@@ -149,6 +269,30 @@ describe("ConversationService", () => {
     await session.interrupt();
 
     expect(value.runtime.latestSession.interruptCount).toBe(1);
+    await session.close();
+  });
+
+  it("notifies the runtime when the telephone transport has drained assistant playback", async () => {
+    const value = fixture();
+    let playbackIdle!: () => void;
+    value.transport.outboundAudio.onPlaybackIdle = (listener) => {
+      playbackIdle = listener;
+      return () => undefined;
+    };
+    const session = await start(value);
+
+    playbackIdle();
+
+    expect(value.runtime.latestSession.assistantPlaybackEndedCount).toBe(1);
+    await session.close();
+  });
+
+  it("cancels a generating response before local playback has a position", async () => {
+    const value = fixture();
+    const session = await start(value);
+    value.runtime.latestSession.emit({ type: "assistant.response_created", responseId: "thinking" });
+    value.runtime.latestSession.emit({ type: "user.speech_started" });
+    await eventually(() => expect(value.runtime.latestSession.interruptions).toEqual([undefined]));
     await session.close();
   });
 

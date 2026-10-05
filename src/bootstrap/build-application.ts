@@ -71,6 +71,7 @@ import {
 } from "../app/development-fixtures.js";
 import { loadConfiguration, type ApplicationConfiguration } from "./configuration.js";
 import { InMemoryCallTelephonyGateway } from "./in-memory-telephony.js";
+import type { CallTelephonyGateway } from "../modules/calls/index.js";
 import type { OrganizationCostReader } from "../modules/billing/index.js";
 import { OpenAIOrganizationCostsAdapter } from "../infrastructure/billing/openai-organization-costs-adapter.js";
 type ApplicationCalendar = CalendarPort & AppointmentCalendarPort & {
@@ -93,7 +94,7 @@ export interface YiboApplication {
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
   calendar: ApplicationCalendar;
-  telephony: InMemoryCallTelephonyGateway;
+  telephony: CallTelephonyGateway & { answeredCallIds?: string[]; hungUpCallIds?: string[] };
   ids: IdGenerator;
   billing?: OrganizationCostReader;
   googleOAuth?: GoogleOAuthService;
@@ -116,6 +117,10 @@ export interface BuildApplicationOptions {
   billing?: OrganizationCostReader;
   calendar?: ApplicationCalendar;
   googleOAuth?: GoogleOAuthService;
+  voice?: VoiceMediaGateway;
+  telephony?: CallTelephonyGateway & { onEvent?(handler: (event: import("../modules/telephony/index.js").TelephonyEvent) => Promise<void>): void };
+  /** Only the API process owns the real ARI subscription; browser Voice Test stays isolated. */
+  enableAsteriskTelephony?: boolean;
 }
 
 export function buildApplication(options: BuildApplicationOptions = {}): YiboApplication {
@@ -209,8 +214,8 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     runtime,
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),
   });
-  const voice = new ScriptedVoiceMediaGateway();
-  const telephony = new InMemoryCallTelephonyGateway();
+  const voice = options.voice ?? new ScriptedVoiceMediaGateway();
+  const telephony = options.telephony ?? new InMemoryCallTelephonyGateway();
   const callRepository = options.callRepository ?? new InMemoryCallRepository();
   const calls = new CallOrchestratorService(
     business,
@@ -221,6 +226,10 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     conversations,
     callRepository,
   );
+  const eventSource = telephony as CallTelephonyGateway & {
+    onEvent?(handler: (event: import("../modules/telephony/index.js").TelephonyEvent) => Promise<void>): void;
+  };
+  eventSource.onEvent?.((event) => calls.handleTelephonyEvent(event));
 
   return {
     tenantId,
@@ -242,7 +251,12 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     ids,
     ...(billing ? { billing } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
-    registerCallMedia: (callId, transport) => voice.register(callId, transport),
+    registerCallMedia: (callId, transport) => {
+      if (!(voice instanceof ScriptedVoiceMediaGateway)) {
+        throw new Error("Call media is supplied by the live telephony transport in this runtime");
+      }
+      voice.register(callId, transport);
+    },
   };
 }
 

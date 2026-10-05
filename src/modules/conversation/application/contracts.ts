@@ -12,12 +12,25 @@ import type { ConversationUsageRecorder } from "../ports/conversation-usage.js";
 
 export interface AudioSink {
   write(frame: AudioFrame, assistantTurnId: string): Promise<void>;
+  /** Optional per-turn timing handoff for transports that can report audible playback. */
+  observeResponseTiming?(timing: Extract<ConversationRuntimeEvent, { type: "assistant.response_timing" }>): void;
+  /** Fires when the telephone/browser transport has actually finished queued assistant audio. */
+  onPlaybackIdle?(listener: () => void): () => void;
   interrupt?(): Promise<AssistantPlaybackPosition | undefined>;
+  getBargeInDiagnostics?(): {
+    outboundRtpPlaying: boolean;
+    outboundQueueDepth: number;
+    assistantPlaybackMs?: number;
+    echoCorrelation?: number;
+    echoSuspected?: boolean;
+  };
 }
 
 export interface ConversationTransport {
   inboundAudio: AsyncIterable<AudioFrame>;
   outboundAudio: AudioSink;
+  /** Only set by the private Asterisk test route; browser Voice Test remains unaffected. */
+  bargeInEnabled?: boolean;
   close(): Promise<void>;
   /**
    * Optional, non-persistent runtime diagnostics for a call transport.  This
@@ -50,6 +63,7 @@ export type ConversationError =
 
 export interface ConversationSession {
   completed: Promise<ConversationCompletion>;
+  startGreeting(): Promise<void>;
   sendText(text: string): Promise<void>;
   interrupt(position?: AssistantPlaybackPosition): Promise<void>;
   close(): Promise<void>;

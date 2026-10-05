@@ -53,6 +53,51 @@ const createOrchestrator = (overrides: { agentOk?: boolean; customerOk?: boolean
 };
 
 describe("CallOrchestratorService", () => {
+  it.each(["error", "closed"] as const)("hangs up and cleans up when the runtime emits %s", async type => {
+    const system = createOrchestrator();
+    await system.orchestrator.handleTelephonyEvent(incoming);
+    system.runtime.latestSession.emit(type === "error"
+      ? { type: "error", code: "REALTIME_RESPONSE_TIMEOUT", message: "Provider stalled", retryable: true }
+      : { type: "closed", reason: "provider_disconnected" });
+    await vi.waitFor(() => expect(system.telephony.hangup).toHaveBeenCalledTimes(1));
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
+    expect(system.repository.stateHistory.at(-1)?.state).toBe(type === "error" ? "FAILED" : "COMPLETED");
+    await system.orchestrator.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: incoming.occurredAt });
+    expect(system.telephony.hangup).toHaveBeenCalledTimes(1);
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up a call that hangs up while startup is in flight", async () => {
+    const system = createOrchestrator();
+    await Promise.all([
+      system.orchestrator.handleTelephonyEvent(incoming),
+      system.orchestrator.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:00:01.000Z" }),
+    ]);
+    expect(system.runtime.latestSession.closeCount).toBe(1);
+    expect(system.transportClose).toHaveBeenCalledTimes(1);
+    expect(system.repository.stateHistory.at(-1)?.state).toBe("COMPLETED");
+  });
+
+  it("still completes hangup cleanup when pending startup throws", async () => {
+    const system = createOrchestrator();
+    vi.mocked(system.telephony.answer).mockRejectedValueOnce(new Error("answer failed"));
+    const results = await Promise.allSettled([
+      system.orchestrator.handleTelephonyEvent(incoming),
+      system.orchestrator.handleTelephonyEvent({ type: "CALL_HUNG_UP", callId: incoming.callId, occurredAt: "2026-08-09T18:00:01.000Z" }),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    expect(system.repository.stateHistory.at(-1)?.state).toBe("COMPLETED");
+    expect(system.runtime.openedInputs).toHaveLength(0);
+  });
+
+  it("coalesces concurrent incoming notifications into one session and greeting", async () => {
+    const system = createOrchestrator();
+    await Promise.all(Array.from({ length: 10 }, () => system.orchestrator.handleTelephonyEvent(incoming)));
+    expect(system.telephony.answer).toHaveBeenCalledTimes(1);
+    expect(system.runtime.openedInputs).toHaveLength(1);
+    expect(system.runtime.latestSession.greetingStartCount).toBe(1);
+  });
+
   it("starts a conversation through the public agent, voice and conversation APIs", async () => {
     const system = createOrchestrator();
 

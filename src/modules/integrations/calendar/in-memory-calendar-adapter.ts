@@ -71,9 +71,21 @@ export class InMemoryCalendarAdapter implements CalendarPort, AppointmentCalenda
     return success({ provider: "in-memory", externalEventId });
   }
 
-  async cancelEvent(command: { tenantId: string; externalEventId: string }) {
+  async rescheduleEvent(command: Parameters<AppointmentCalendarPort["rescheduleEvent"]>[0]) {
+    if (!isValidRange(new Date(command.startAt), new Date(command.endAt))) {
+      return failure({ code: "VALIDATION_ERROR" as const, message: "A valid calendar range is required." });
+    }
     const event = this.events.get(command.externalEventId);
-    if (!event || event.tenantId !== command.tenantId) return failure({ code: "EVENT_NOT_FOUND" as const });
+    if (!event || event.cancelled || event.tenantId !== command.tenantId || event.appointmentId !== command.appointmentId) {
+      return failure({ code: "EVENT_NOT_FOUND" as const });
+    }
+    this.events.set(event.externalEventId, { ...event, startAt: command.startAt, endAt: command.endAt });
+    return success(undefined);
+  }
+
+  async cancelEvent(command: Parameters<AppointmentCalendarPort["cancelEvent"]>[0]) {
+    const event = this.events.get(command.externalEventId);
+    if (!event || event.tenantId !== command.tenantId || event.appointmentId !== command.appointmentId) return failure({ code: "EVENT_NOT_FOUND" as const });
     this.events.set(event.externalEventId, { ...event, cancelled: true });
     return success(undefined);
   }

@@ -14,10 +14,27 @@ import { resolveNaturalDateRange } from "../domain/natural-date-range.js";
 import { dateTimeInTimezone, displayTimeInTimezone, normalizeDateTimeForTimezone } from "../../scheduling/domain/time.js";
 
 type Input = Record<string, unknown>;
-type ConfirmableAvailability = { requestedStartAt?: string; availableStartAts: string[] };
+type ConfirmableAvailability = {
+  proposalId: string;
+  availableSlots: Array<{ employeeId: string; startAt: string }>;
+  requestedEmployeeId?: string;
+  requestedStartAt?: string;
+  availableStartAts: string[];
+  serviceId: string;
+  confirmation?: ConfirmedAppointment;
+  claimed?: boolean;
+};
+
+type ConfirmedAppointment = { startAt: string; employeeId: string; serviceId: string };
 
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly confirmableAvailabilityByCall = new Map<string, ConfirmableAvailability>();
+  private readonly availabilityRequests = new Map<string, object>();
+
+  releaseCall(context: ToolExecutionContext): void {
+    this.confirmableAvailabilityByCall.delete(context.callId);
+    this.availabilityRequests.delete(context.callId);
+  }
 
   constructor(
     private readonly scheduling: SchedulingService,
@@ -35,6 +52,7 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     switch (call.name) {
       case "check_availability": return this.checkAvailability(context, call);
+      case "confirm_appointment": return this.confirmAppointment(context, call);
       case "create_appointment": return this.createAppointment(context, call);
       case "update_customer": return this.updateCustomer(context, call);
       case "cancel_appointment": return this.cancelAppointment(context, call);
@@ -55,6 +73,8 @@ export class ToolExecutorImpl implements ToolExecutor {
   }
 
   private async checkAvailability(context: ToolExecutionContext, call: AgentToolCall) {
+    const request = {};
+    this.availabilityRequests.set(context.callId, request);
     const input = call.arguments as Input;
     if (!exactKeys(input, ["service", "employeeId", "dateExpression", "rangeStart", "rangeEnd", "requestedStartAt"], []) ||
         (input.service !== undefined && !text(input.service)) ||
@@ -64,6 +84,39 @@ export class ToolExecutorImpl implements ToolExecutor {
     }
     const serviceId = await this.resolveServiceId(context.tenantId, input.service);
     if (!serviceId) return toolError(call, "SERVICE_NOT_FOUND", "Ask the caller whether this is for a cleaning or a consultation.", false);
+    if (this.availabilityRequests.get(context.callId) !== request) {
+      return toolError(call, "AVAILABILITY_SUPERSEDED", "A newer scheduling request replaced this result. Use the latest request.", false);
+    }
+    const previousProposal = this.confirmableAvailabilityByCall.get(context.callId);
+    const previousStartAt = previousProposal?.confirmation?.startAt
+      ?? previousProposal?.requestedStartAt
+      ?? previousProposal?.availableStartAts[0];
+    const isScheduleChange = previousProposal !== undefined;
+    if (isScheduleChange) {
+      calendarLog("telephony.schedule_change.detected", {
+        callId: context.callId,
+        currentConversationState: "tool_running",
+        oldStartAt: previousStartAt,
+        oldConfirmationRecorded: previousProposal?.confirmation !== undefined,
+        newDateExpression: text(input.dateExpression) ? input.dateExpression : undefined,
+        newRequestedStartAt: text(input.requestedStartAt) ? input.requestedStartAt : undefined,
+        newServiceId: serviceId,
+      });
+      // Invalidate before the new calendar request. If that request fails, a
+      // caller's changed mind must still never allow the previous slot to be
+      // booked using an old confirmation.
+      this.confirmableAvailabilityByCall.delete(context.callId);
+      calendarLog("telephony.schedule_change.old_proposal_invalidated", {
+        callId: context.callId,
+        oldStartAt: previousStartAt,
+        oldConfirmationRecorded: previousProposal?.confirmation !== undefined,
+      });
+      calendarLog("telephony.schedule_change.tool_started", {
+        callId: context.callId,
+        toolCallId: call.toolCallId,
+        toolState: "running",
+      });
+    }
     const employeeId = input.employeeId as string | undefined;
     const absoluteRange = dateTime(input.rangeStart) && dateTime(input.rangeEnd)
       ? await this.normalizeRange(context.tenantId, input.rangeStart, input.rangeEnd)
@@ -90,6 +143,14 @@ export class ToolExecutorImpl implements ToolExecutor {
     });
     if (!result.ok) {
       calendarLog("calendar.availability.failed", { tenantId: context.tenantId, code: result.error.code });
+      if (isScheduleChange) {
+        calendarLog("telephony.schedule_change.tool_completed", {
+          callId: context.callId,
+          toolCallId: call.toolCallId,
+          ok: false,
+          errorCode: result.error.code,
+        });
+      }
       return toolError(call, result.error.code, availabilityMessage(result.error.code), result.error.code === "EXTERNAL_CALENDAR_UNAVAILABLE" && result.error.retryable);
     }
     calendarLog("calendar.availability.completed", { tenantId: context.tenantId, slotCount: result.value.length });
@@ -127,10 +188,42 @@ export class ToolExecutorImpl implements ToolExecutor {
         parsedUtcDateTime: requestedStartAt.instant,
       });
     }
+    // A new availability result replaces any earlier proposed time. This makes
+    // a confirmation specific to one exact, current appointment candidate.
+    // In particular, “Actually, Monday” cannot reuse a Friday confirmation.
+    if (this.availabilityRequests.get(context.callId) !== request) {
+      return toolError(call, "AVAILABILITY_SUPERSEDED", "A newer scheduling request replaced this result. Use the latest request.", false);
+    }
     this.confirmableAvailabilityByCall.set(context.callId, {
+      proposalId: call.toolCallId,
+      availableSlots: result.value.map(slot => ({ employeeId: slot.employeeId, startAt: slot.startAt })),
+      ...(requested?.ok ? { requestedEmployeeId: requested.value.employeeId } : {}),
       ...(requested?.ok ? { requestedStartAt: requestedStartAt?.instant } : {}),
       availableStartAts: result.value.map((slot) => slot.startAt),
+      serviceId,
     });
+    if (isScheduleChange) {
+      calendarLog("telephony.schedule_change.new_request", {
+        callId: context.callId,
+        newDateExpression: text(input.dateExpression) ? input.dateExpression : undefined,
+        newRequestedStartAt: text(input.requestedStartAt) ? input.requestedStartAt : undefined,
+        serviceId,
+      });
+      calendarLog("telephony.schedule_change.tool_completed", {
+        callId: context.callId,
+        toolCallId: call.toolCallId,
+        ok: true,
+        slotCount: result.value.length,
+      });
+    }
+    if (naturalRange) {
+      calendarLog("calendar.date_expression.resolved", {
+        tenantId: context.tenantId,
+        originalExpression: input.dateExpression,
+        clinicTimezone: business?.ok ? business.value.timezone : undefined,
+        ...naturalRange.resolution,
+      });
+    }
     const clinicTimezone = business?.ok ? business.value.timezone : undefined;
     const clinicLocale = business?.ok ? business.value.locale : "en-US";
     const callerSlots = clinicTimezone
@@ -173,6 +266,45 @@ export class ToolExecutorImpl implements ToolExecutor {
     const business = await this.businesses?.getBusinessProfile(tenantId);
     if (!business?.ok) return undefined;
     return resolveNaturalDateRange(expression, this.clock.now(), business.value.timezone) ?? undefined;
+  }
+
+  private async confirmAppointment(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult> {
+    const input = call.arguments as Input;
+    if (!exactKeys(input, ["service", "employeeId", "startAt"], ["employeeId", "startAt"])
+      || (input.service !== undefined && !text(input.service)) || !text(input.employeeId) || !dateTime(input.startAt)) {
+      return invalid(call, "employeeId and an exact verified startAt are required for appointment confirmation");
+    }
+    const availability = this.confirmableAvailabilityByCall.get(context.callId);
+    const serviceId = await this.resolveServiceId(context.tenantId, input.service);
+    const normalizedStartAt = await this.normalizeDateTime(context.tenantId, input.startAt);
+    if (!availability || availability.claimed || this.confirmableAvailabilityByCall.get(context.callId) !== availability || !serviceId || !normalizedStartAt
+      || availability.serviceId !== serviceId
+      || (!availability.availableSlots.some(slot => slot.employeeId === input.employeeId && slot.startAt === normalizedStartAt.instant)
+        && !(availability.requestedStartAt === normalizedStartAt.instant && availability.requestedEmployeeId === input.employeeId))) {
+      return toolError(call, "CONFIRMATION_SLOT_NOT_CURRENT", "That appointment must be checked and offered again before it can be confirmed.", false);
+    }
+    availability.confirmation = {
+      startAt: normalizedStartAt.instant,
+      employeeId: input.employeeId,
+      serviceId,
+    };
+    calendarLog("telephony.booking_confirmation.trace", {
+      callId: context.callId, toolCallId: call.toolCallId, phase: "confirmation_recorded", pendingProposalId: availability.proposalId,
+      selectedProvider: input.employeeId, selectedService: serviceId, selectedDateTime: normalizedStartAt.instant,
+      confirmationValid: true, confirmationRecorded: true, confirmationConsumed: false,
+    });
+    calendarLog("appointment.confirmation.recorded", {
+      tenantId: context.tenantId,
+      callId: context.callId,
+      employeeId: input.employeeId,
+      startAt: normalizedStartAt.instant,
+      clinicTimezone: normalizedStartAt.timeZone,
+    });
+    return {
+      toolCallId: call.toolCallId,
+      ok: true,
+      data: { confirmationRecorded: true, startAt: normalizedStartAt.instant },
+    };
   }
 
   private async normalizeRange(tenantId: string, rangeStart: string, rangeEnd: string) {
@@ -235,6 +367,27 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (!availability?.requestedStartAt && availability?.availableStartAts.length && !availability.availableStartAts.includes(confirmedStartAt)) {
       return toolError(call, "SLOT_NOT_REVALIDATED", "The selected time must be checked again before booking. Call check_availability for that exact time.", false);
     }
+    const explicitConfirmation = availability?.confirmation;
+    if (!explicitConfirmation
+      || explicitConfirmation.startAt !== confirmedStartAt
+      || explicitConfirmation.employeeId !== input.employeeId
+      || explicitConfirmation.serviceId !== serviceId) {
+      calendarLog("appointment.booking.blocked_missing_confirmation", {
+        tenantId: context.tenantId,
+        callId: context.callId,
+        employeeId: input.employeeId,
+        startAt: confirmedStartAt,
+      });
+      return toolError(call, "EXPLICIT_CONFIRMATION_REQUIRED", "Ask the caller to explicitly confirm this exact appointment, then call confirm_appointment before booking. Silence is not confirmation.", false);
+    }
+    // Claim before the first await: concurrent tool IDs must not share consent.
+    availability.confirmation = undefined;
+    availability.claimed = true;
+    calendarLog("telephony.booking_confirmation.trace", {
+      callId: context.callId, toolCallId: call.toolCallId, phase: "booking_eligibility_checked", pendingProposalId: availability.proposalId,
+      selectedProvider: input.employeeId, selectedService: serviceId, selectedDateTime: confirmedStartAt,
+      confirmationValid: true, confirmationRecorded: true, confirmationConsumed: true, bookingAllowed: true, toolStarted: true,
+    });
     calendarLog("calendar.trace.user_confirmation", {
       tenantId: context.tenantId,
       appointmentToolArguments: { employeeId: input.employeeId, startAt: input.startAt },
@@ -247,6 +400,9 @@ export class ToolExecutorImpl implements ToolExecutor {
       normalizedLocalDateTime: normalizedStartAt.dateTime,
       bookingStartAtUsed: confirmedStartAt,
     });
+    if (this.confirmableAvailabilityByCall.get(context.callId) !== availability) {
+      return toolError(call, "CONFIRMATION_SUPERSEDED", "The selected appointment changed before booking started. Confirm the new selection first.", false);
+    }
     const result = await this.appointments.createAppointment({
       tenantId: context.tenantId,
       customerId: context.customerId,
@@ -267,7 +423,21 @@ export class ToolExecutorImpl implements ToolExecutor {
     if (result.value.status !== "CONFIRMED") {
       return toolError(call, "APPOINTMENT_NOT_CONFIRMED", "The appointment is not confirmed. Do not present it as booked.", false);
     }
-    return { toolCallId: call.toolCallId, ok: true as const, data: { appointment: result.value } };
+    // Consume the confirmation. A duplicate tool call cannot create another
+    // event without a new availability check and a new caller confirmation.
+    if (this.confirmableAvailabilityByCall.get(context.callId) === availability) {
+      this.confirmableAvailabilityByCall.delete(context.callId);
+    }
+    // Speak from the persisted appointment, not the requested or offered slot.
+    const appointmentDisplay = new Intl.DateTimeFormat("en-US", {
+      timeZone: normalizedStartAt.timeZone,
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true,
+    }).format(new Date(result.value.startAt));
+    return {
+      toolCallId: call.toolCallId, ok: true as const,
+      data: { appointment: result.value, appointmentDisplay },
+    };
   }
 
   private async cancelAppointment(context: ToolExecutionContext, call: AgentToolCall) {

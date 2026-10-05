@@ -18,7 +18,7 @@ describe("agent configuration API", () => {
       recommended: { locale: "es-MX" },
       secrets: { apiKeyConfigured: false },
     });
-    expect(response.json<{ availableTools: unknown[] }>().availableTools).toHaveLength(6);
+    expect(response.json<{ availableTools: unknown[] }>().availableTools).toHaveLength(7);
 
     const current = response.json<{ current: Record<string, unknown> }>().current;
     const update = await server.inject({

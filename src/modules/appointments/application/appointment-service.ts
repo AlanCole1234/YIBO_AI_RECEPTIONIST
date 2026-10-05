@@ -122,19 +122,20 @@ export class AppointmentServiceImpl implements AppointmentService {
   async cancelAppointment(command: CancelAppointmentCommand) {
     const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
     if (!appointment) return failure<CancelAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
-    if (appointment.status === "CANCELLED") {
-      return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
-    }
-    if (appointment.externalCalendarEventId) {
-      const cancelled = await this.calendar.cancelEvent({
-        tenantId: appointment.tenantId,
-        externalEventId: appointment.externalCalendarEventId,
-      });
-      if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
-    }
-    const result: Appointment = { ...appointment, status: "CANCELLED" };
-    await this.repository.save(result);
-    return success(result);
+    return this.guard.execute(appointment.tenantId, appointment.employeeId, async () => {
+      const current = await this.repository.findById(command.tenantId, command.appointmentId);
+      if (!current) return failure<CancelAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
+      if (current.status === "CANCELLED") return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
+      if (current.externalCalendarEventId) {
+        const cancelled = await this.calendar.cancelEvent({
+          tenantId: current.tenantId, appointmentId: current.id, externalEventId: current.externalCalendarEventId,
+        });
+        if (!cancelled.ok) return failure<CancelAppointmentError>(calendarFailure(cancelled.error));
+      }
+      const result: Appointment = { ...current, status: "CANCELLED" };
+      await this.repository.save(result);
+      return success(result);
+    });
   }
 
   async rescheduleAppointment(command: RescheduleAppointmentCommand) {
@@ -148,6 +149,14 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
 
     return this.guard.execute(appointment.tenantId, appointment.employeeId, async () => {
+      // Re-read after taking the existing guard: a preceding reschedule/cancel
+      // may have changed this appointment while this request was waiting.
+      const appointment = await this.repository.findById(command.tenantId, command.appointmentId);
+      if (!appointment) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_FOUND" });
+      if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
+        return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
+      }
+      if (appointment.startAt === new Date(command.startAt).toISOString()) return success(appointment);
       const slot = await this.scheduling.validateSlot({
         tenantId: appointment.tenantId,
         serviceId: appointment.serviceId,
@@ -161,41 +170,19 @@ export class AppointmentServiceImpl implements AppointmentService {
         );
       }
 
-      const configuration = await this.businesses.getBusinessProfile(appointment.tenantId);
-      const service = configuration.ok
-        ? configuration.value.services.find((candidate) => candidate.id === appointment.serviceId)
-        : undefined;
-      const customer = await this.customers.get(appointment.tenantId, appointment.customerId);
-      const replacement = await this.calendar.createEvent({
+      const moved = await this.calendar.rescheduleEvent({
         tenantId: appointment.tenantId,
         appointmentId: appointment.id,
-        employeeId: appointment.employeeId,
-        title: `${service?.name ?? "Appointment"} appointment`,
-        serviceName: service?.name ?? "Appointment",
-        ...(customer ? { patient: customer } : {}),
+        externalEventId: appointment.externalCalendarEventId,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
-        idempotencyKey: `${appointment.idempotencyKey}:reschedule:${slot.value.startAt}`,
       });
-      if (!replacement.ok) return failure<RescheduleAppointmentError>(calendarFailure(replacement.error));
-
-      const oldCancelled = await this.calendar.cancelEvent({
-        tenantId: appointment.tenantId,
-        externalEventId: appointment.externalCalendarEventId!,
-      });
-      if (!oldCancelled.ok) {
-        await this.calendar.cancelEvent({
-          tenantId: appointment.tenantId,
-          externalEventId: replacement.value.externalEventId,
-        });
-        return failure<RescheduleAppointmentError>(calendarFailure(oldCancelled.error));
-      }
+      if (!moved.ok) return failure<RescheduleAppointmentError>(calendarFailure(moved.error));
 
       const updated: Appointment = {
         ...appointment,
         startAt: slot.value.startAt,
         endAt: slot.value.endAt,
-        externalCalendarEventId: replacement.value.externalEventId,
       };
       await this.repository.save(updated);
       return success(updated);

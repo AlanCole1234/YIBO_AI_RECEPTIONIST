@@ -8,6 +8,7 @@ import type {
 
 export type AgentToolName =
   | "check_availability"
+  | "confirm_appointment"
   | "create_appointment"
   | "update_customer"
   | "cancel_appointment"
@@ -41,6 +42,8 @@ export interface ToolExecutionContext {
 }
 
 export interface ToolExecutor {
+  /** Discard call-scoped proposals and invalidate pending availability work on disconnect. */
+  releaseCall?(context: ToolExecutionContext): void;
   execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult>;
 }
 
@@ -64,6 +67,7 @@ export interface ConversationBehavior {
     threshold?: number;
     prefixPaddingMs?: number;
     silenceDurationMs?: number;
+    responseDelayMs?: number;
   };
 }
 

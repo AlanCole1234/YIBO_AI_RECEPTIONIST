@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   decodeWav,
   floatAudioToRealtimeFrame,
+  realtimeFrameToUlaw,
+  RealtimeToUlawStream,
   splitRealtimeFrame,
+  pcm16ToUlaw,
+  ulawToPcm16,
+  ulawToRealtimeFrame,
 } from "../../src/modules/voice/index.js";
 
 describe("voice/media PCM conversion", () => {
@@ -24,7 +29,58 @@ describe("voice/media PCM conversion", () => {
     const frame = floatAudioToRealtimeFrame(decoded);
     expect(splitRealtimeFrame(frame, 20)).toHaveLength(1);
   });
+
+  it("converts G.711 µ-law telephone audio to the Realtime format and back", () => {
+    const inbound = ulawToRealtimeFrame(new Uint8Array(160).fill(0xff));
+    expect(inbound).toMatchObject({ codec: "pcm_s16le", sampleRate: 24_000, channels: 1 });
+    expect(inbound.data.byteLength).toBe(960);
+
+    const outbound = realtimeFrameToUlaw(inbound);
+    expect(outbound).toHaveLength(160);
+    expect(outbound.every((byte) => Number.isInteger(byte))).toBe(true);
+  });
+
+  it("keeps decimation continuous across OpenAI audio chunk boundaries", () => {
+    const samples = new Int16Array(9_600);
+    for (let index = 0; index < samples.length; index += 1) samples[index] = Math.round(Math.sin(index / 9) * 12_000);
+    const frame = pcmFrame(samples);
+    const allAtOnce = new RealtimeToUlawStream().convert(frame);
+    const streaming = new RealtimeToUlawStream();
+    const chunks = [
+      streaming.convert({ ...frame, data: frame.data.slice(0, 3_840) }),
+      streaming.convert({ ...frame, data: frame.data.slice(3_840, 11_520) }),
+      streaming.convert({ ...frame, data: frame.data.slice(11_520) }),
+    ];
+    expect(Array.from(concat(chunks))).toEqual(Array.from(allAtOnce));
+    expect(allAtOnce).toHaveLength(3_200);
+  });
+
+  it("matches core G.711 µ-law vectors without clipping wraparound", () => {
+    expect(pcm16ToUlaw(0)).toBe(0xff);
+    expect(pcm16ToUlaw(32_767)).toBe(0x80);
+    expect(pcm16ToUlaw(-32_768)).toBe(0);
+    expect(ulawToPcm16(0xff)).toBe(0);
+    expect(ulawToPcm16(0x80)).toBeGreaterThan(32_000);
+    expect(ulawToPcm16(0)).toBeLessThan(-32_000);
+  });
 });
+
+function pcmFrame(samples: Int16Array) {
+  return {
+    data: new Uint8Array(samples.buffer.slice(0)),
+    codec: "pcm_s16le",
+    sampleRate: 24_000,
+    channels: 1,
+  } as const;
+}
+
+function concat(parts: Uint8Array[]): Uint8Array {
+  const length = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const output = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) { output.set(part, offset); offset += part.byteLength; }
+  return output;
+}
 
 function pcm16Wav(samples: number[], sampleRate: number, channels: number): Uint8Array {
   const dataLength = samples.length * 2;
