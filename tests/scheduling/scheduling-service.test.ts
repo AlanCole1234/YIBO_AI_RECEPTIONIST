@@ -250,6 +250,23 @@ describe("Checkpoint A availability suggestions", () => {
     const result = await createService(noAppointments, calendar, workingHours, configured()).findAvailableSlots(query);
     expect(result).toEqual({ ok: false, error: { code: "EXTERNAL_CALENDAR_UNAVAILABLE", retryable: true } });
   });
+  it("does not offer or accept a disabled professional", async () => {
+    const inactiveProfessional = upgradeBusinessProfile(structuredClone(business));
+    inactiveProfessional.professionals[0]!.active = false;
+    inactiveProfessional.locations[0]!.professionals[0]!.active = false;
+    const inactiveAssignment = upgradeBusinessProfile(structuredClone(business));
+    inactiveAssignment.locations[0]!.professionals[0]!.active = false;
+    const query = {
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      rangeStart: "2026-08-10T00:00:00.000Z", rangeEnd: "2026-08-11T00:00:00.000Z",
+    };
+    const slot = { ...query, employeeId: "dr-lee", startAt: "2026-08-10T16:30:00.000Z" };
+    for (const profile of [inactiveProfessional, inactiveAssignment]) {
+      const service = createService(noAppointments, noCalendarConflicts, workingHours, profile);
+      expect(await service.findAvailableSlots(query)).toEqual({ ok: false, error: { code: "EMPLOYEE_UNAVAILABLE" } });
+      expect(await service.validateSlot(slot)).toEqual({ ok: false, error: { code: "EMPLOYEE_NOT_FOUND" } });
+    }
+  });
   it("rejects malformed expansion settings before scheduling", () => {
     expect(() => createService(noAppointments, noCalendarConflicts, workingHours, configured(true, 100))).toThrow();
     expect(() => createService(noAppointments, noCalendarConflicts, workingHours, configured(true, 1, 0))).toThrow();

@@ -330,6 +330,19 @@ describe("AppointmentServiceImpl", () => {
     });
   });
 
+  it("does not book a disabled professional or an inactive location assignment", async () => {
+    const inactiveProfessional = upgradeBusinessProfile(structuredClone(business));
+    inactiveProfessional.professionals[0]!.active = false;
+    inactiveProfessional.locations[0]!.professionals[0]!.active = false;
+    const inactiveAssignment = upgradeBusinessProfile(structuredClone(business));
+    inactiveAssignment.locations[0]!.professionals[0]!.active = false;
+    for (const profile of [inactiveProfessional, inactiveAssignment]) {
+      const { calendar, service } = fixture({ business: profile });
+      await expect(service.createAppointment(command)).resolves.toEqual({ ok: false, error: { code: "EMPLOYEE_NOT_FOUND" } });
+      expect(calendar.eventCount()).toBe(0);
+    }
+  });
+
   it("does not book when the caller hangs up during calendar creation", async () => {
     const { calendar, repository, service } = fixture();
     const original = calendar.createEvent.bind(calendar);
