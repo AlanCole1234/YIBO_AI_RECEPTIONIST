@@ -2,7 +2,7 @@
 
 Branch: `grok/yibo-final-hardening`  
 Pushed to the fork only: https://github.com/pantojadl/YIBO_AI_RECEPTIONIST  
-Full tip: `373dbb235d50fe162d894adc1bf01a6917aeaddb`  
+Suite and production build were run on `373dbb235d50fe162d894adc1bf01a6917aeaddb`. This report is the only commit after that run.  
 Draft review PR (fork `main` only): https://github.com/pantojadl/YIBO_AI_RECEPTIONIST/pull/1
 
 Upstream `AlanCole1234/YIBO_AI_RECEPTIONIST` was fetched read-only. Its push URL is `DISABLED`. Nothing was pushed, merged, or commented there. `main` in the fork was not committed to. Live Telnyx, SIP numbers, Asterisk dialplans, Cloudflare, Google OAuth, and production databases were not touched.
@@ -82,7 +82,7 @@ The dashboard booking change is a request header, not a layout change. It was ex
 
 ## 5. Final verification
 
-Recorded on `373dbb2` after the phone-fixture reset:
+Recorded on `373dbb2` after the phone-fixture reset. The report commit on top of that does not change product code:
 
 | Command | Result |
 | --- | --- |
