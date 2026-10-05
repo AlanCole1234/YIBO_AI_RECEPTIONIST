@@ -134,13 +134,14 @@ export class AppointmentServiceImpl implements AppointmentService {
         return failure<CreateAppointmentError>(calendarFailure(external.error));
       }
 
-      const confirmed: Appointment = {
-        ...pending,
-        version: 2,
-        status: "CONFIRMED",
-        externalCalendarEventId: external.value.externalEventId,
-      };
-      await this.repository.save(confirmed);
+      const linked: Appointment = { ...pending, externalCalendarEventId: external.value.externalEventId };
+      await this.repository.save(linked);
+      const confirmed: Appointment = { ...linked, version: 2, status: "CONFIRMED" };
+      try {
+        await this.repository.save(confirmed);
+      } catch {
+        return this.abandonUnconfirmed(linked, "CALENDAR_SYNC_FAILED");
+      }
       await this.record(confirmed, "CREATED", command.source === "AI_CALL" ? "AI" : "OFFICE");
       await this.notify("CONFIRMATION", confirmed);
       calendarLog("calendar.booking.completed", { tenantId: confirmed.tenantId, appointmentId: confirmed.id, externalEventId: confirmed.externalCalendarEventId });
@@ -331,6 +332,43 @@ export class AppointmentServiceImpl implements AppointmentService {
 
   listTenantHistory(tenantId: string, limit = 5_000) {
     return this.repository.findByTenant(tenantId, Math.min(10_000, Math.max(1, limit)));
+  }
+
+  async reconcileUnconfirmedBookings(tenantId: string) {
+    const released: string[] = [];
+    const held: string[] = [];
+    for (const appointment of await this.repository.findByTenant(tenantId, 10_000)) {
+      if (appointment.status !== "PENDING_CONFIRMATION") continue;
+      if (appointment.externalCalendarEventId) {
+        held.push(appointment.id);
+        continue;
+      }
+      await this.repository.save({ ...appointment, version: (appointment.version ?? 1) + 1, status: "FAILED" });
+      released.push(appointment.id);
+    }
+    return { released, held };
+  }
+
+  /** Drop a calendar event created in this request when the booking cannot be confirmed. */
+  private async abandonUnconfirmed(appointment: Appointment, code: "CALENDAR_SYNC_FAILED" | "CALL_ENDED")
+    : Promise<Result<Appointment, CreateAppointmentError>> {
+    if (appointment.externalCalendarEventId) {
+      const cancelled = await this.calendar.cancelEvent({
+        appointmentId: appointment.id,
+        tenantId: appointment.tenantId,
+        locationId: appointment.locationId,
+        employeeId: appointment.employeeId,
+        externalEventId: appointment.externalCalendarEventId,
+      });
+      if (!cancelled.ok) return failure({ code: "CALENDAR_SYNC_FAILED", retryable: true });
+    }
+    await this.repository.save({
+      ...appointment,
+      version: (appointment.version ?? 1) + 1,
+      status: "FAILED",
+      externalCalendarEventId: undefined,
+    });
+    return failure(code === "CALL_ENDED" ? { code: "CALL_ENDED" } : { code: "CALENDAR_SYNC_FAILED", retryable: false });
   }
 
   private record(appointment: Appointment, type: "CREATED" | "RESCHEDULED" | "CANCELLED" | "COMPLETED" | "NO_SHOW",

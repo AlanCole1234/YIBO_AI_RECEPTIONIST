@@ -122,7 +122,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
   async findConfirmedIntervals(query: ConfirmedAppointmentQuery): Promise<OccupiedInterval[]> {
     return this.database.prepare(`
       SELECT start_at, end_at FROM appointments
-      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND employee_id = ? AND status = 'CONFIRMED'
+      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND employee_id = ? AND status IN ('CONFIRMED', 'PENDING_CONFIRMATION')
         AND start_at < ? AND ? < end_at
       ORDER BY start_at
     `).all(this.region, query.tenantId, query.locationId, query.employeeId, query.rangeEnd, query.rangeStart)
@@ -134,7 +134,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
 
   async findConfirmedLocationIntervals(query: { tenantId: string; locationId: string; rangeStart: string; rangeEnd: string }) {
     return this.database.prepare(`SELECT start_at, end_at FROM appointments
-      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND status = 'CONFIRMED'
+      WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND status IN ('CONFIRMED', 'PENDING_CONFIRMATION')
         AND start_at < ? AND ? < end_at ORDER BY start_at`
     ).all(this.region, query.tenantId, query.locationId, query.rangeEnd, query.rangeStart)
       .map((row) => {

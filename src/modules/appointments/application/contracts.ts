@@ -81,6 +81,7 @@ export type CreateAppointmentError =
   | { code: "EMPLOYEE_NOT_FOUND" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
   | { code: "IDEMPOTENCY_CONFLICT" }
+  | { code: "CALL_ENDED" }
   | { code: "VALIDATION_ERROR"; message: string };
 
 export type CancelAppointmentError =
@@ -123,4 +124,6 @@ export interface AppointmentService {
   markAppointmentOutcome(command: MarkAppointmentOutcomeCommand): Promise<Result<Appointment, AppointmentLookupError | AppointmentEditConflict>>;
   listCustomerHistory(tenantId: TenantId, customerId: CustomerId, limit?: number): Promise<Appointment[]>;
   listTenantHistory(tenantId: TenantId, limit?: number): Promise<Appointment[]>;
+  /** Releases pending rows that never reached a calendar, and reports rows that still have an external event. */
+  reconcileUnconfirmedBookings(tenantId: TenantId): Promise<{ released: string[]; held: string[] }>;
 }

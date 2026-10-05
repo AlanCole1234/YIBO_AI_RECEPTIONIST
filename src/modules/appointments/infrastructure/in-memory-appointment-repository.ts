@@ -78,7 +78,7 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
       .filter((appointment) => appointment.tenantId === query.tenantId
         && appointment.locationId === query.locationId
         && appointment.employeeId === query.employeeId
-        && appointment.status === "CONFIRMED"
+        && occupiesSlot(appointment.status)
         && appointment.startAt < query.rangeEnd && query.rangeStart < appointment.endAt)
       .map(({ startAt, endAt }) => ({ startAt, endAt }))
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
@@ -87,7 +87,7 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
   async findConfirmedLocationIntervals(query: { tenantId: TenantId; locationId: string; rangeStart: string; rangeEnd: string }) {
     return [...this.appointments.values()]
       .filter((appointment) => appointment.tenantId === query.tenantId
-        && appointment.locationId === query.locationId && appointment.status === "CONFIRMED"
+        && appointment.locationId === query.locationId && occupiesSlot(appointment.status)
         && appointment.startAt < query.rangeEnd && query.rangeStart < appointment.endAt)
       .map(({ startAt, endAt }) => ({ startAt, endAt }))
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
@@ -103,3 +103,7 @@ export class InMemoryAppointmentRepository implements AppointmentRepository, Con
     this.appointments.set(`${appointment.tenantId}:${appointment.id}`, { ...appointment });
   }
 }
+
+/** A pending write still owns the slot until it is confirmed or explicitly failed. */
+const occupiesSlot = (status: Appointment["status"]): boolean =>
+  status === "CONFIRMED" || status === "PENDING_CONFIRMATION";
