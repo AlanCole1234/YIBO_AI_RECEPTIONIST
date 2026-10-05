@@ -167,8 +167,8 @@ export async function verifyRegionalBackup(directory: string): Promise<BackupMan
 
 /** Online snapshot that does not change the source journal mode. */
 async function copyConsistentSnapshot(sourcePath: string, target: string): Promise<void> {
-  const sqlite = await import("node:sqlite") as typeof import("node:sqlite") & {
-    backup?: (sourceDb: DatabaseSync, path: string) => Promise<void>;
+  const sqlite = await import("node:sqlite") as unknown as {
+    backup?: (sourceDb: DatabaseSync, path: string) => Promise<unknown>;
   };
   const db = new DatabaseSync(sourcePath, { readOnly: true, timeout: 5_000 });
   try {
