@@ -139,3 +139,38 @@ Yes. The event's private `yiboOperationId` is a hash of the tenant and idempoten
 Nothing from the round 1 contract was reverted. Mocked Google only. No live provider call.
 
 Round 2 verification: `pnpm exec tsc --noEmit` exit 0, `pnpm exec vue-tsc --noEmit -p dashboard/tsconfig.json` exit 0, `pnpm test` 745 passed and 1 skipped, `pnpm build` exit 0.
+
+## Codex follow-up — stale booking compensation
+
+Base: `2520609`, branch `codex/pr19-stale-compensation-fix`.
+
+The reproduction was committed as a regression test after first verifying that it
+failed on the unchanged base. A booking creates its Google event and pauses before
+saving confirmation. After its lease expires, another worker recovers and
+reschedules the appointment. The old confirmation write then fails its fence
+check, but the generic catch previously deleted the newer event during rollback.
+The database remained confirmed while Google had no event.
+
+The fix distinguishes stale writes from confirmation failures. Rollback also
+requires the current fence and a conditional write against the still-pending
+appointment revision before any provider action. That write records
+`compensationRequired`, so recovery cannot confirm an appointment being rolled
+back. Initial rollback now uses the existing recovery compensation path: inspect
+the owned event, recheck the fence, delete with the inspected ETag, and conditionally
+mark failure only after the event is gone. Lost ownership, changed provider state,
+or an uncertain delete leaves the decision for a current owner to reconcile.
+
+Six new regression cases cover:
+
+- The reproduced stale confirmation-save rollback after recovery/rescheduling.
+- A late caller hangup after the stale writer linked the event.
+- Lease loss during compensation inspection, preserving the durable cleanup flag.
+- An ETag change before deletion, without fetching a replacement ETag.
+- An exception from the initial delete, preserving pending compensation.
+- Failure to persist the compensation decision, with no provider deletion.
+
+Validation: the focused appointment/recovery run passed 45 tests; the full suite
+passed 751 tests with one optional live-provider test skipped. Backend and frontend
+typechecks and the production build passed. SQLite databases and Google HTTP
+responses were synthetic. No live provider, phone route, deployment configuration,
+or production data was changed. No existing test assertions were weakened.

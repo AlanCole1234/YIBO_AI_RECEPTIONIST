@@ -153,7 +153,10 @@ export class AppointmentServiceImpl implements AppointmentService {
       const confirmed: Appointment = { ...linked, version: 2, status: "CONFIRMED" };
       try {
         await this.repository.save(confirmed);
-      } catch {
+      } catch (error) {
+        // A successor may already have confirmed or moved this event. Losing the
+        // write fence is not a failed booking that this writer may roll back.
+        if (error instanceof StaleAppointmentWriteError) throw error;
         return this.abandonUnconfirmed(linked, "CALENDAR_SYNC_FAILED");
       }
       await this.record(confirmed, "CREATED", command.source === "AI_CALL" ? "AI" : "OFFICE");
@@ -478,12 +481,14 @@ export class AppointmentServiceImpl implements AppointmentService {
 
   /** A compensation row is failed only after the event is proven gone. Timeout and 5xx stay pending. */
   private async finishCompensation(current: Appointment): Promise<"released" | "held" | "skipped"> {
+    if (!current.compensationRequired || !this.fenceHeld(current)) return "skipped";
     const expected = current.version ?? 1;
     const externalCalendarEventId = current.externalCalendarEventId;
     if (externalCalendarEventId) {
       let gone = false;
       try {
         const inspection = await this.calendar.inspectEvent(this.inspectionQuery(current));
+        if (!this.fenceHeld(current)) return "skipped";
         if (!inspection.ok) return "held";
         gone = !inspection.value.present;
         if (!gone) {
@@ -554,32 +559,31 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
   }
 
-  /** Drop a calendar event created in this request when the booking cannot be confirmed. */
+  /** Only the current owner of a still-pending booking may arrange its rollback. */
   private async abandonUnconfirmed(appointment: Appointment, code: "CALENDAR_SYNC_FAILED" | "CALL_ENDED")
     : Promise<Result<Appointment, CreateAppointmentError>> {
-    if (appointment.externalCalendarEventId) {
-      const cancelled = await this.calendar.cancelEvent({
-        appointmentId: appointment.id,
-        tenantId: appointment.tenantId,
-        locationId: appointment.locationId,
-        employeeId: appointment.employeeId,
-        externalEventId: appointment.externalCalendarEventId,
-      });
-      if (!cancelled.ok) {
-        await this.repository.save({
-          ...appointment,
-          compensationRequired: true,
-          updatedAt: this.clock.now().toISOString(),
-        });
+    if (!this.fenceHeld(appointment)) return failure({ code: "APPOINTMENT_VERSION_CONFLICT" });
+    const pending: Appointment = {
+      ...appointment, compensationRequired: true, updatedAt: this.clock.now().toISOString(),
+    };
+    try {
+      // Persist the rollback decision before any provider call, without replacing
+      // a successor's state. Recovery must not confirm this row during a delete.
+      if (!await this.writeIfCurrent(pending, appointment.version ?? 1, "PENDING_CONFIRMATION")) {
+        return failure({ code: "APPOINTMENT_VERSION_CONFLICT" });
+      }
+      // Reuse recovery's ownership check, pinned ETag and conditional final save.
+      const outcome = await this.finishCompensation(pending);
+      if (outcome === "skipped") return failure({ code: "APPOINTMENT_VERSION_CONFLICT" });
+      if (outcome === "held") {
         return failure({ code: "CALENDAR_SYNC_FAILED", retryable: true });
       }
+    } catch (error) {
+      if (error instanceof StaleAppointmentWriteError || !this.fenceHeld(appointment)) {
+        return failure({ code: "APPOINTMENT_VERSION_CONFLICT" });
+      }
+      return failure({ code: "CALENDAR_SYNC_FAILED", retryable: true });
     }
-    await this.repository.save({
-      ...appointment,
-      version: (appointment.version ?? 1) + 1,
-      status: "FAILED",
-      externalCalendarEventId: undefined,
-    });
     return failure(code === "CALL_ENDED" ? { code: "CALL_ENDED" } : { code: "CALENDAR_SYNC_FAILED", retryable: false });
   }
 

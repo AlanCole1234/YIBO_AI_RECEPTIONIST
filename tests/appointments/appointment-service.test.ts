@@ -340,6 +340,42 @@ describe("AppointmentServiceImpl", () => {
     });
   });
 
+  it("retains the compensation decision when the initial calendar delete throws", async () => {
+    const { calendar, repository, service } = fixture();
+    const save = repository.save.bind(repository);
+    repository.save = async appointment => {
+      if (appointment.status === "CONFIRMED") throw new Error("disk full");
+      return save(appointment);
+    };
+    calendar.cancelEvent = async () => { throw new Error("synthetic delete timeout"); };
+
+    await expect(service.createAppointment(command)).resolves.toEqual({
+      ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true },
+    });
+    expect(await repository.findById(command.tenantId, "appointment-1")).toMatchObject({
+      status: "PENDING_CONFIRMATION", compensationRequired: true, externalCalendarEventId: "event-1",
+    });
+    expect(calendar.eventCount()).toBe(1);
+  });
+
+  it("does not delete the event if recording the compensation decision fails", async () => {
+    const { calendar, repository, service } = fixture();
+    const save = repository.save.bind(repository);
+    repository.save = async appointment => {
+      if (appointment.status === "CONFIRMED") throw new Error("disk full");
+      return save(appointment);
+    };
+    repository.saveIfVersion = async () => { throw new Error("disk still full"); };
+    const cancel = vi.spyOn(calendar, "cancelEvent");
+
+    await expect(service.createAppointment(command)).resolves.toEqual({
+      ok: false, error: { code: "CALENDAR_SYNC_FAILED", retryable: true },
+    });
+    expect(cancel).not.toHaveBeenCalled();
+    expect(calendar.eventCount()).toBe(1);
+    expect(await repository.findById(command.tenantId, "appointment-1")).toMatchObject({ status: "PENDING_CONFIRMATION" });
+  });
+
   it("does not book a disabled professional or an inactive location assignment", async () => {
     const inactiveProfessional = upgradeBusinessProfile(structuredClone(business));
     inactiveProfessional.professionals[0]!.active = false;
