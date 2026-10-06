@@ -637,6 +637,9 @@ describe("AppointmentServiceImpl", () => {
       listClaims: () => claims.map((claim) => ({ ...claim })),
       heartbeat: () => false,
       ownsFence: () => true,
+      hasLiveLease: () => false,
+      hasUnresolvedSteal: () => false,
+      clearSteal: () => undefined,
       releaseClaim: () => false,
     };
     const { repository, service } = fixture({ guard });

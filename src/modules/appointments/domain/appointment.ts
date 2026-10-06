@@ -47,6 +47,8 @@ export interface Appointment {
   operationIntent?: AppointmentOperationIntent;
   intentKey?: IdempotencyKey;
   intentFingerprint?: string;
+  /** Calendar etag observed when the intent was written. Later writes use this value and do not read a newer one. */
+  intentEtag?: string;
   /** Fence held by the writer that last committed this row. Stored for the lock check, not returned on reads. */
   writeFence?: number;
 }

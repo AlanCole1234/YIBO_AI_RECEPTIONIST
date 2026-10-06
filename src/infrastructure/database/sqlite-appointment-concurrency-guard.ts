@@ -15,6 +15,8 @@ import type { RegionId } from "../../shared/types/identifiers.js";
  * the owner and fence that entered this call.
  */
 export class SqliteAppointmentConcurrencyGuard implements AppointmentConcurrencyGuard {
+  private readonly stolen = new Set<string>();
+
   constructor(
     private readonly database: DatabaseSync,
     private readonly region: RegionId,
@@ -36,6 +38,7 @@ export class SqliteAppointmentConcurrencyGuard implements AppointmentConcurrency
         WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND heartbeat_ms <= ?`)
         .run(ownerId, process.pid, new Date(now).toISOString(), now, this.region, tenantId, locationId, now - this.leaseMs());
       if (stolen.changes !== 1) throw new AppointmentOperationInProgressError();
+      this.stolen.add(`${tenantId}:${locationId}`);
       const row = this.database.prepare(`SELECT fence FROM appointment_operation_locks
         WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND owner_id = ?`)
         .get(this.region, tenantId, locationId, ownerId) as { fence: number };
@@ -67,6 +70,21 @@ export class SqliteAppointmentConcurrencyGuard implements AppointmentConcurrency
       WHERE region_id = ? AND tenant_id = ? AND location_id = ? AND owner_id = ? AND fence = ?`)
       .get(this.region, tenantId, locationId, ownerId, fence) as { found: number } | undefined;
     return row?.found === 1;
+  }
+
+  hasLiveLease(tenantId: string, locationId: string): boolean {
+    const row = this.database.prepare(`SELECT heartbeat_ms FROM appointment_operation_locks
+      WHERE region_id = ? AND tenant_id = ? AND location_id = ?`)
+      .get(this.region, tenantId, locationId) as { heartbeat_ms: number } | undefined;
+    return row !== undefined && !leaseIsExpired(row.heartbeat_ms, this.now(), this.leaseMs());
+  }
+
+  hasUnresolvedSteal(tenantId: string, locationId: string): boolean {
+    return this.stolen.has(`${tenantId}:${locationId}`);
+  }
+
+  clearSteal(tenantId: string, locationId: string): void {
+    this.stolen.delete(`${tenantId}:${locationId}`);
   }
 
   listClaims(tenantId: string): AppointmentLockClaim[] {

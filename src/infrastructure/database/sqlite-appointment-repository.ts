@@ -23,6 +23,7 @@ type AppointmentRow = {
   operation_intent: Appointment["operationIntent"] | null;
   intent_key: string | null;
   intent_fingerprint: string | null;
+  intent_etag: string | null;
 };
 
 export class SqliteAppointmentRepository implements AppointmentRepository, ConfirmedAppointmentReader {
@@ -113,8 +114,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
         region_id, tenant_id, location_id, id, customer_id, service_id, service_name_snapshot,
         price_amount_minor, price_currency, employee_id, start_at, end_at, status, idempotency_key,
         source, source_call_id, external_calendar_event_id, outcome_status, version, updated_at, compensation_required,
-        write_fence, operation_intent, intent_key, intent_fingerprint
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        write_fence, operation_intent, intent_key, intent_fingerprint, intent_etag
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(region_id, tenant_id, id) DO UPDATE SET
         location_id = excluded.location_id, customer_id = excluded.customer_id, service_id = excluded.service_id,
         service_name_snapshot = excluded.service_name_snapshot, price_amount_minor = excluded.price_amount_minor,
@@ -125,7 +126,8 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
         outcome_status = excluded.outcome_status, version = excluded.version,
         updated_at = excluded.updated_at, compensation_required = excluded.compensation_required,
         write_fence = excluded.write_fence, operation_intent = excluded.operation_intent,
-        intent_key = excluded.intent_key, intent_fingerprint = excluded.intent_fingerprint
+        intent_key = excluded.intent_key, intent_fingerprint = excluded.intent_fingerprint,
+        intent_etag = excluded.intent_etag
     `).run(
       this.region, value.tenantId, value.locationId, value.id, value.customerId, value.serviceId,
       value.serviceNameSnapshot, value.priceAmountMinor, value.priceCurrency, value.employeeId,
@@ -134,6 +136,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       value.updatedAt ?? null, value.compensationRequired ? 1 : 0,
       currentAppointmentFence()?.fence ?? value.writeFence ?? 0,
       value.operationIntent ?? null, value.intentKey ?? null, value.intentFingerprint ?? null,
+      value.intentEtag ?? null,
     );
   }
 
@@ -197,7 +200,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       price_amount_minor = ?, price_currency = ?, employee_id = ?, start_at = ?, end_at = ?,
       status = ?, idempotency_key = ?, source = ?, source_call_id = ?, external_calendar_event_id = ?,
       outcome_status = ?, version = ?, updated_at = ?, compensation_required = ?,
-      write_fence = ?, operation_intent = ?, intent_key = ?, intent_fingerprint = ?
+      write_fence = ?, operation_intent = ?, intent_key = ?, intent_fingerprint = ?, intent_etag = ?
       WHERE region_id = ? AND tenant_id = ? AND id = ? AND version = ? AND (? IS NULL OR status = ?)`).run(
       value.locationId, value.customerId, value.serviceId, value.serviceNameSnapshot,
       value.priceAmountMinor, value.priceCurrency, value.employeeId, value.startAt, value.endAt,
@@ -205,6 +208,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       value.externalCalendarEventId ?? null, value.outcomeStatus ?? null, value.version ?? expectedVersion + 1,
       value.updatedAt ?? null, value.compensationRequired ? 1 : 0,
       fence?.fence ?? value.writeFence ?? 0, value.operationIntent ?? null, value.intentKey ?? null, value.intentFingerprint ?? null,
+      value.intentEtag ?? null,
       this.region, value.tenantId, value.id, expectedVersion, expectedStatus ?? null, expectedStatus ?? null,
     );
     return result.changes === 1;
@@ -266,6 +270,7 @@ export class SqliteAppointmentRepository implements AppointmentRepository, Confi
       ...(value.operation_intent ? { operationIntent: value.operation_intent } : {}),
       ...(value.intent_key ? { intentKey: value.intent_key } : {}),
       ...(value.intent_fingerprint ? { intentFingerprint: value.intent_fingerprint } : {}),
+      ...(value.intent_etag ? { intentEtag: value.intent_etag } : {}),
     };
   }
 }
@@ -274,6 +279,6 @@ const SELECT_APPOINTMENT = `
   SELECT id, tenant_id, location_id, customer_id, service_id, service_name_snapshot,
     price_amount_minor, price_currency, employee_id, start_at, end_at, status,
     idempotency_key, source, source_call_id, external_calendar_event_id, outcome_status, version,
-    updated_at, compensation_required, operation_intent, intent_key, intent_fingerprint
+    updated_at, compensation_required, operation_intent, intent_key, intent_fingerprint, intent_etag
   FROM appointments WHERE region_id = ? AND tenant_id = ?
 `;

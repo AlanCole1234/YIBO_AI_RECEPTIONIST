@@ -128,6 +128,7 @@ export class AppointmentServiceImpl implements AppointmentService {
         await this.repository.save({ ...pending, version: 2, status: "FAILED" });
         return failure<CreateAppointmentError>({ code: "CALL_ENDED" });
       }
+      if (!this.fenceHeld(pending)) return failure<CreateAppointmentError>({ code: "APPOINTMENT_VERSION_CONFLICT" });
       const external = await this.calendar.createEvent({
         tenantId: pending.tenantId,
         locationId: pending.locationId,
@@ -178,6 +179,9 @@ export class AppointmentServiceImpl implements AppointmentService {
         if (appointment.intentFingerprint !== fingerprint) return failure<CancelAppointmentError>({ code: "IDEMPOTENCY_CONFLICT" });
         return this.finishCancel(appointment, command.idempotencyKey, fingerprint);
       }
+      if (this.otherIntent(appointment, command.idempotencyKey)) {
+        return failure<CancelAppointmentError>({ code: "APPOINTMENT_OPERATION_IN_PROGRESS" });
+      }
       if (appointment.status === "CANCELLED") {
         return failure<CancelAppointmentError>({ code: "APPOINTMENT_ALREADY_CANCELLED" });
       }
@@ -187,7 +191,10 @@ export class AppointmentServiceImpl implements AppointmentService {
         < cancellationPolicy.value.location.policies.minimumCancellationNoticeMinutes) {
         return failure<CancelAppointmentError>({ code: "CANCELLATION_NOTICE_NOT_MET" });
       }
-      const marked = await this.markIntent(appointment, "CANCELLING", command.idempotencyKey, fingerprint);
+      const captured = await this.captureIntentEtag(appointment);
+      if (captured.state === "stale") return failure<CancelAppointmentError>({ code: "NEEDS_RECONCILE" });
+      if (captured.state === "unavailable") return failure<CancelAppointmentError>({ code: "CALENDAR_SYNC_FAILED", retryable: true });
+      const marked = await this.markIntent(appointment, "CANCELLING", command.idempotencyKey, fingerprint, captured.etag);
       if (!marked) return failure<CancelAppointmentError>({ code: "APPOINTMENT_VERSION_CONFLICT" });
       return this.finishCancel(marked, command.idempotencyKey, fingerprint);
     });
@@ -220,6 +227,9 @@ export class AppointmentServiceImpl implements AppointmentService {
         }
         return this.finishReschedule(appointment, command.idempotencyKey, fingerprint, slot.value);
       }
+      if (this.otherIntent(appointment, command.idempotencyKey)) {
+        return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_OPERATION_IN_PROGRESS" });
+      }
       if (appointment.status !== "CONFIRMED" || !appointment.externalCalendarEventId) {
         return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_NOT_CONFIRMED" });
       }
@@ -237,7 +247,10 @@ export class AppointmentServiceImpl implements AppointmentService {
         const mapped = mapSchedulingError(slot.error);
         return failure<RescheduleAppointmentError>(mapped.code === "CALENDAR_SYNC_FAILED" ? mapped : { code: "SLOT_NO_LONGER_AVAILABLE" });
       }
-      const marked = await this.markIntent(appointment, "RESCHEDULING", command.idempotencyKey, fingerprint);
+      const captured = await this.captureIntentEtag(appointment);
+      if (captured.state === "stale") return failure<RescheduleAppointmentError>({ code: "NEEDS_RECONCILE" });
+      if (captured.state === "unavailable") return failure<RescheduleAppointmentError>({ code: "CALENDAR_SYNC_FAILED", retryable: true });
+      const marked = await this.markIntent(appointment, "RESCHEDULING", command.idempotencyKey, fingerprint, captured.etag);
       if (!marked) return failure<RescheduleAppointmentError>({ code: "APPOINTMENT_VERSION_CONFLICT" });
       return this.finishReschedule(marked, command.idempotencyKey, fingerprint, slot.value);
     });
@@ -367,19 +380,38 @@ export class AppointmentServiceImpl implements AppointmentService {
     const released: string[] = [];
     const confirmed: string[] = [];
     const held: string[] = [];
+    const repairHeld = new Set<string>();
+    const liveLocations = new Set<string>();
     const staleBefore = this.clock.now().getTime() - STALE_APPOINTMENT_LOCK_MS;
-    for (const appointment of await this.repository.findByTenant(tenantId, 10_000)) {
+    const appointments = await this.repository.findByTenant(tenantId, 10_000);
+    for (const appointment of appointments) {
+      if (this.guard.hasLiveLease(appointment.tenantId, appointment.locationId)) {
+        liveLocations.add(appointment.locationId);
+        continue;
+      }
       const outcome = await this.reconcileOne(appointment, staleBefore);
       if (outcome === "released") released.push(appointment.id);
       else if (outcome === "confirmed") confirmed.push(appointment.id);
       else if (outcome === "held") held.push(appointment.id);
+      if (outcome === "held" && this.repairCandidate(appointment)) repairHeld.add(appointment.locationId);
+    }
+    const locations = new Set(appointments.map((item) => item.locationId));
+    for (const locationId of locations) {
+      if (liveLocations.has(locationId) || repairHeld.has(locationId)) continue;
+      if (this.guard.hasUnresolvedSteal(tenantId, locationId)) this.guard.clearSteal(tenantId, locationId);
     }
     return { released, confirmed, held };
   }
 
   private async reconcileOne(appointment: Appointment, staleBefore: number): Promise<"released" | "confirmed" | "held" | "skipped"> {
+    if (this.guard.hasLiveLease(appointment.tenantId, appointment.locationId)) return "skipped";
     if (appointment.operationIntent) return this.reconcileOpenIntent(appointment);
-    if (appointment.status !== "PENDING_CONFIRMATION") return "skipped";
+    if (appointment.status !== "PENDING_CONFIRMATION") {
+      if (!this.repairCandidate(appointment) || !this.guard.hasUnresolvedSteal(appointment.tenantId, appointment.locationId)) {
+        return "skipped";
+      }
+      return this.repairCommitted(appointment);
+    }
     const updatedAt = appointment.updatedAt ? Date.parse(appointment.updatedAt) : 0;
     if (!appointment.compensationRequired && updatedAt >= staleBefore) return "skipped";
     const preview = await this.calendar.inspectEvent(this.inspectionQuery(appointment));
@@ -455,9 +487,11 @@ export class AppointmentServiceImpl implements AppointmentService {
         if (!inspection.ok) return "held";
         gone = !inspection.value.present;
         if (!gone) {
+          if (!inspection.value.etag || !this.fenceHeld(current)) return "held";
           const cancelled = await this.calendar.cancelEvent({
             appointmentId: current.id, tenantId: current.tenantId, locationId: current.locationId,
             employeeId: current.employeeId, externalEventId: externalCalendarEventId,
+            expectedEtag: inspection.value.etag,
           });
           if (!cancelled.ok && cancelled.error.code !== "EVENT_NOT_FOUND") return "held";
           gone = true;
@@ -498,12 +532,16 @@ export class AppointmentServiceImpl implements AppointmentService {
           return saved ? "confirmed" : "skipped";
         }
         if (inspection.value.present && current.externalCalendarEventId) {
+          if (!current.intentEtag || !this.fenceHeld(current)) return "held";
           try {
             const cancelled = await this.calendar.cancelEvent({
               appointmentId: current.id, tenantId: current.tenantId, locationId: current.locationId,
               employeeId: current.employeeId, externalEventId: current.externalCalendarEventId,
+              expectedEtag: current.intentEtag,
             });
-            if (!cancelled.ok && cancelled.error.code !== "EVENT_NOT_FOUND") return "held";
+            if (cancelled.ok || cancelled.error.code === "EVENT_NOT_FOUND") {
+              /* The stored etag still matched, so the delete is the intent's delete. */
+            } else return "held";
           } catch {
             return "held";
           }
@@ -571,11 +609,89 @@ export class AppointmentServiceImpl implements AppointmentService {
     }
   }
 
+  private fenceHeld(scope: { tenantId: string; locationId: string }): boolean {
+    const fence = currentAppointmentFence();
+    if (!fence) return true;
+    return this.guard.ownsFence(scope.tenantId, scope.locationId, fence.ownerId, fence.fence);
+  }
+
+  private otherIntent(appointment: Appointment, key: string): boolean {
+    return Boolean(appointment.operationIntent && appointment.intentKey !== key);
+  }
+
+  /** Read the etag once, before the intent is stored. A later mutation must not read a replacement. */
+  private async captureIntentEtag(appointment: Appointment): Promise<{ state: "ready"; etag?: string } | { state: "stale" } | { state: "unavailable" }> {
+    if (!this.fenceHeld(appointment)) return { state: "stale" };
+    if (!appointment.externalCalendarEventId) return { state: "ready" };
+    try {
+      const inspection = await this.calendar.inspectEvent(this.inspectionQuery(appointment));
+      if (!this.fenceHeld(appointment)) return { state: "stale" };
+      if (!inspection.ok) return { state: "unavailable" };
+      if (!inspection.value.present) return { state: "ready" };
+      if (!inspection.value.etag) return { state: "unavailable" };
+      return { state: "ready", etag: inspection.value.etag };
+    } catch {
+      return { state: "unavailable" };
+    }
+  }
+
+  /** A committed row this recovery pass may push back onto Google. */
+  private repairCandidate(appointment: Appointment): boolean {
+    return !appointment.operationIntent && this.recentlyCommitted(appointment);
+  }
+
+  private recentlyCommitted(appointment: Appointment): boolean {
+    if (appointment.status !== "CONFIRMED" && appointment.status !== "CANCELLED") return false;
+    if (!appointment.externalCalendarEventId) return false;
+    const updated = appointment.updatedAt ? Date.parse(appointment.updatedAt) : Number.NaN;
+    return Number.isFinite(updated) && this.clock.now().getTime() - updated <= REPAIR_WINDOW_MS;
+  }
+
+  /** Push Google back to a committed row. The read here is the repair, not the original mutation's etag. */
+  private async repairCommitted(appointment: Appointment): Promise<"released" | "confirmed" | "held" | "skipped"> {
+    try {
+      return await this.guard.execute(appointment.tenantId, appointment.locationId, appointment.employeeId, async () => {
+        const current = await this.repository.findById(appointment.tenantId, appointment.id);
+        if (!current || current.operationIntent || (current.version ?? 1) !== (appointment.version ?? 1)) return "skipped";
+        if (!this.fenceHeld(current)) return "skipped";
+        const inspection = await this.calendar.inspectEvent(this.inspectionQuery(current));
+        if (!inspection.ok) return "held";
+        if (current.status === "CANCELLED") {
+          if (!inspection.value.present || !current.externalCalendarEventId) return "skipped";
+          if (!inspection.value.etag || !this.fenceHeld(current)) return "held";
+          const cancelled = await this.calendar.cancelEvent({
+            appointmentId: current.id, tenantId: current.tenantId, locationId: current.locationId,
+            employeeId: current.employeeId, externalEventId: current.externalCalendarEventId,
+            expectedEtag: inspection.value.etag,
+          });
+          if (!cancelled.ok && cancelled.error.code !== "EVENT_NOT_FOUND") return "held";
+          return "released";
+        }
+        if (current.status !== "CONFIRMED" || !current.externalCalendarEventId) return "skipped";
+        if (!inspection.value.present) return "held";
+        const sameStart = Boolean(inspection.value.startAt) && Date.parse(inspection.value.startAt!) === Date.parse(current.startAt);
+        const sameEnd = Boolean(inspection.value.endAt) && Date.parse(inspection.value.endAt!) === Date.parse(current.endAt);
+        if (sameStart && sameEnd) return "skipped";
+        if (!inspection.value.etag || !this.fenceHeld(current)) return "held";
+        const moved = await this.calendar.rescheduleEvent({
+          tenantId: current.tenantId, locationId: current.locationId, appointmentId: current.id,
+          employeeId: current.employeeId, externalEventId: current.externalCalendarEventId,
+          startAt: current.startAt, endAt: current.endAt, expectedEtag: inspection.value.etag,
+        });
+        return moved.ok ? "confirmed" : "held";
+      });
+    } catch (error) {
+      if (error instanceof AppointmentOperationInProgressError) return "skipped";
+      throw error;
+    }
+  }
+
   private async markIntent(
     appointment: Appointment,
     intent: "CANCELLING" | "RESCHEDULING",
     key: string,
     fingerprint: string,
+    etag?: string,
   ): Promise<Appointment | null> {
     const expected = appointment.version ?? 1;
     const next: Appointment = {
@@ -584,6 +700,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       operationIntent: intent,
       intentKey: key,
       intentFingerprint: fingerprint,
+      ...(etag ? { intentEtag: etag } : {}),
       updatedAt: this.clock.now().toISOString(),
     };
     return await this.writeIfCurrent(next, expected, appointment.status) ? next : null;
@@ -608,7 +725,8 @@ export class AppointmentServiceImpl implements AppointmentService {
   private async finishCancel(appointment: Appointment, key: string, fingerprint: string) {
     if (appointment.externalCalendarEventId) {
       const removed = await this.proveCancelled(appointment);
-      if (!removed) {
+      if (removed === "stale" || removed === "reconcile") return failure<CancelAppointmentError>({ code: "NEEDS_RECONCILE" });
+      if (removed !== "done") {
         await this.markUnknown(appointment);
         return failure<CancelAppointmentError>({ code: "CALENDAR_SYNC_FAILED", retryable: true });
       }
@@ -623,7 +741,7 @@ export class AppointmentServiceImpl implements AppointmentService {
       idempotencyKey: key, action: "cancel", appointmentId: result.id, fingerprint, appointment: result,
     }, "CANCELLED", undefined, appointment.status);
     if (!persisted.ok) {
-      await this.markUnknown(appointment);
+      if (this.fenceHeld(appointment)) await this.markUnknown(appointment);
       return persisted;
     }
     await this.notify("CANCELLATION", result);
@@ -637,7 +755,8 @@ export class AppointmentServiceImpl implements AppointmentService {
     slot: { startAt: string; endAt: string },
   ) {
     const moved = await this.proveRescheduled(appointment, slot);
-    if (!moved) {
+    if (moved === "stale" || moved === "reconcile") return failure<RescheduleAppointmentError>({ code: "NEEDS_RECONCILE" });
+    if (moved !== "done") {
       await this.markUnknown(appointment);
       return failure<RescheduleAppointmentError>({ code: "CALENDAR_SYNC_FAILED", retryable: true });
     }
@@ -652,44 +771,55 @@ export class AppointmentServiceImpl implements AppointmentService {
       idempotencyKey: key, action: "reschedule", appointmentId: updated.id, fingerprint, appointment: updated,
     }, "RESCHEDULED", { previousStartAt: appointment.startAt }, appointment.status);
     if (!persisted.ok) {
-      await this.markUnknown(appointment);
+      if (this.fenceHeld(appointment)) await this.markUnknown(appointment);
       return persisted;
     }
     await this.notify("RESCHEDULE", updated);
     return success(updated);
   }
 
-  /** True when the event is already gone or this call just deleted it. Unknown results stay false. */
-  private async proveCancelled(appointment: Appointment): Promise<boolean> {
+  /** done: the event is gone or this call deleted it with the stored etag. reconcile/stale keep the intent. */
+  private async proveCancelled(appointment: Appointment): Promise<"done" | "unknown" | "reconcile" | "stale"> {
+    if (!this.fenceHeld(appointment)) return "stale";
     try {
       const inspection = await this.calendar.inspectEvent(this.inspectionQuery(appointment));
-      if (!inspection.ok) return false;
-      if (!inspection.value.present) return true;
-      if (!appointment.externalCalendarEventId) return false;
+      if (!inspection.ok) return "unknown";
+      if (!inspection.value.present) return "done";
+      if (!appointment.externalCalendarEventId || !appointment.intentEtag) return "reconcile";
+      if (!this.fenceHeld(appointment)) return "stale";
       const cancelled = await this.calendar.cancelEvent({
         appointmentId: appointment.id, tenantId: appointment.tenantId, locationId: appointment.locationId,
         employeeId: appointment.employeeId, externalEventId: appointment.externalCalendarEventId,
+        expectedEtag: appointment.intentEtag,
       });
-      return cancelled.ok || cancelled.error.code === "EVENT_NOT_FOUND";
+      if (cancelled.ok || cancelled.error.code === "EVENT_NOT_FOUND") return "done";
+      if (cancelled.error.code === "NEEDS_RECONCILE") return "reconcile";
+      return "unknown";
     } catch {
-      return false;
+      return "unknown";
     }
   }
 
-  /** True when Google already shows the target time, or this call just moved the event. */
-  private async proveRescheduled(appointment: Appointment, slot: { startAt: string; endAt: string }): Promise<boolean> {
+  /** done: Google already shows the target time, or this call moved it with the stored etag. */
+  private async proveRescheduled(appointment: Appointment, slot: { startAt: string; endAt: string }): Promise<"done" | "unknown" | "reconcile" | "stale"> {
+    if (!this.fenceHeld(appointment)) return "stale";
     try {
       const inspection = await this.calendar.inspectEvent(this.inspectionQuery(appointment));
-      if (!inspection.ok || !inspection.value.present || !appointment.externalCalendarEventId) return false;
-      if (inspection.value.startAt && Date.parse(inspection.value.startAt) === Date.parse(slot.startAt)) return true;
+      if (!inspection.ok || !inspection.value.present || !appointment.externalCalendarEventId) return "unknown";
+      if (inspection.value.startAt && Date.parse(inspection.value.startAt) === Date.parse(slot.startAt)
+        && inspection.value.endAt && Date.parse(inspection.value.endAt) === Date.parse(slot.endAt)) return "done";
+      if (!appointment.intentEtag) return "reconcile";
+      if (!this.fenceHeld(appointment)) return "stale";
       const moved = await this.calendar.rescheduleEvent({
         tenantId: appointment.tenantId, locationId: appointment.locationId, appointmentId: appointment.id,
         employeeId: appointment.employeeId, externalEventId: appointment.externalCalendarEventId,
-        startAt: slot.startAt, endAt: slot.endAt,
+        startAt: slot.startAt, endAt: slot.endAt, expectedEtag: appointment.intentEtag,
       });
-      return moved.ok;
+      if (moved.ok) return "done";
+      if (moved.error.code === "NEEDS_RECONCILE") return "reconcile";
+      return "unknown";
     } catch {
-      return false;
+      return "unknown";
     }
   }
 
@@ -750,9 +880,13 @@ export class AppointmentServiceImpl implements AppointmentService {
 export const STALE_APPOINTMENT_LOCK_MS = 3 * 60 * 1000;
 
 const clearIntent = (appointment: Appointment): Appointment => {
-  const { operationIntent: _operationIntent, intentKey: _intentKey, intentFingerprint: _intentFingerprint, ...rest } = appointment;
+  const {
+    operationIntent: _operationIntent, intentKey: _intentKey, intentFingerprint: _intentFingerprint, intentEtag: _intentEtag, ...rest
+  } = appointment;
   return rest;
 };
+
+const REPAIR_WINDOW_MS = 15 * 60 * 1000;
 
 const requiredKey = (key: string | undefined): string | null =>
   key && key.trim() ? null : "An idempotency key is required";

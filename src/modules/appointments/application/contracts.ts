@@ -94,6 +94,7 @@ export type CancelAppointmentError =
   | { code: "APPOINTMENT_ALREADY_CANCELLED" }
   | { code: "CANCELLATION_NOTICE_NOT_MET" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
+  | { code: "NEEDS_RECONCILE" }
   | { code: "IDEMPOTENCY_CONFLICT" }
   | { code: "VALIDATION_ERROR"; message: string };
 
@@ -104,6 +105,7 @@ export type RescheduleAppointmentError =
   | { code: "RESCHEDULE_NOTICE_NOT_MET" }
   | { code: "SLOT_NO_LONGER_AVAILABLE" }
   | { code: "CALENDAR_SYNC_FAILED"; retryable: boolean }
+  | { code: "NEEDS_RECONCILE" }
   | { code: "IDEMPOTENCY_CONFLICT" }
   | { code: "VALIDATION_ERROR"; message: string };
 

@@ -97,3 +97,45 @@ Nothing in the addendum was rejected. The `response_created` re-request and the 
 - Hangup mark still set when a tool finishes after the old TTL.
 - Reschedule/outcome lands during recovery: the newer row is kept.
 - One stuck-booking scan at a time.
+
+## Round 2 — Codex final re-review
+
+Head before this pass: `888f100`. The two attached specs (`uploads/alan-codex-round2.md` and `uploads/heavy-answer-round2.md`) were not on disk and PR #19 had no review text. The seven steps below are the design from the request. Where the implementation is narrower, the answer says so.
+
+The Codex interleaving was reproduced on `888f100` before the fix. The same fixture, run against that commit, fails: writer A blocks inside the reschedule re-fetch, the lease expires, writer B steals the fence and commits 12 August, then A reads B's etag and PATCHes Google back to 11 August (`Google 2026-08-11T10:00:00-06:00 diverged from row 2026-08-12T16:00:00.000Z`). That fixture now keeps Google and the row on the same instant, sends no PATCH, returns `NEEDS_RECONCILE` for A, and rejects B with `APPOINTMENT_OPERATION_IN_PROGRESS`.
+
+### 1. Is the etag stored at intent time and never re-fetched?
+
+Yes for the value sent to Google. `captureIntentEtag` reads once. `intent_etag` (migration 14) is stored with `CANCELLING` or `RESCHEDULING`. Cancel and reschedule send that stored value as `If-Match`. A later inspect still reads the event so a same-key retry can see that the change is already present. That read is not copied into `If-Match`. A direct adapter call that omits `expectedEtag` still reads once so older identity checks keep working. The service does not use that path.
+
+### 2. Do open intents block a different key?
+
+Yes. A different idempotency key is `APPOINTMENT_OPERATION_IN_PROGRESS` and does not call Google. The same key still continues, including after `OUTCOME_UNKNOWN`.
+
+### 3. Is the fence checked before every Google call?
+
+Yes before create, before the intent-time read, and again before the mutating cancel or reschedule. In the interleaving fixture the stolen fence returns `NEEDS_RECONCILE` with zero PATCH requests.
+
+### 4. Does If-Match treat HTTP 412 as NEEDS_RECONCILE?
+
+Yes. The calendar port returns `NEEDS_RECONCILE`. Cancel and reschedule return that code, keep the original intent and etag, and do not mark `OUTCOME_UNKNOWN`. HTTP status is 409.
+
+### 5. Does a fence reject keep the intent?
+
+Yes. `markUnknown` runs only while this writer still holds the fence. A stolen fence leaves `CANCELLING` or `RESCHEDULING`, the key, the fingerprint, and the etag on the row.
+
+### 6. Does recovery repair Google toward the committed row?
+
+Yes, with two bounds. After this process steals an expired lease, recovery may inspect appointments updated in the last 15 minutes and PATCH or DELETE Google back to the committed row. It uses the etag from that repair read while it holds the new fence. It does not refresh the etag stored on the original intent. The steal flag is cleared only after every appointment at that location has been considered, and only when none of those repairs is still held and the location has no live lease. Scanning every historical row on every booking was rejected because it would read Google for the whole book. The steal flag is process memory: a restart before the next recovery pass drops it.
+
+### 7. Does recovery skip a live heartbeat?
+
+Yes. `hasLiveLease` is checked before any recovery Google call. A heartbeat inside the 90 second lease is left alone, including when the claim is older than three minutes.
+
+### 8. Is create deduplicated by a private operation id?
+
+Yes. The event's private `yiboOperationId` is a hash of the tenant and idempotency key. A retry looks that property up first and returns the existing event instead of inserting another. A 409 whose operation id differs, or whose times differ, is a mismatch.
+
+Nothing from the round 1 contract was reverted. Mocked Google only. No live provider call.
+
+Round 2 verification: `pnpm exec tsc --noEmit` exit 0, `pnpm exec vue-tsc --noEmit -p dashboard/tsconfig.json` exit 0, `pnpm test` 745 passed and 1 skipped, `pnpm build` exit 0.

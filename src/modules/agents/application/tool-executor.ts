@@ -627,5 +627,6 @@ const formatAddress = (address: { line1: string; line2?: string; city: string; a
 function appointmentConflictMessage(code: string): string | undefined {
   if (code === "APPOINTMENT_VERSION_CONFLICT") return "This appointment changed since it was listed. List upcoming appointments again and verify the current details with the caller before another change. Do not claim success.";
   if (code === "APPOINTMENT_OPERATION_IN_PROGRESS") return "Another appointment operation is in progress. Do not retry automatically or claim success. Check the current appointment again before continuing.";
+  if (code === "NEEDS_RECONCILE") return "The calendar event no longer matches this operation. Do not claim success. Check the appointment again before continuing.";
   return undefined;
 }

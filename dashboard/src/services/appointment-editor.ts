@@ -71,6 +71,7 @@ export function appointmentErrorMessage(error: unknown): string {
     RESCHEDULE_NOTICE_NOT_MET: "Rescheduling is inside the location’s minimum notice period.",
     SLOT_NO_LONGER_AVAILABLE: "That slot is no longer available. Check availability again.",
     CALENDAR_SYNC_FAILED: "Calendar operation could not be verified. Refresh and check with staff before retrying.",
+    NEEDS_RECONCILE: "The calendar event changed during this operation. Refresh and review the appointment before trying again.",
     APPOINTMENT_NOT_FOUND: "Appointment not found at this location.",
     APPOINTMENT_NOT_CONFIRMED: "This appointment is no longer confirmed. Reload it before continuing.",
     APPOINTMENT_ALREADY_CANCELLED: "This appointment is already cancelled. Reload to see its status.",

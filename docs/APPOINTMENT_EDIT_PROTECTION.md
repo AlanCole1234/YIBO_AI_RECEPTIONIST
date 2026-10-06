@@ -106,6 +106,15 @@ Compatibility and remaining limits:
   as `OUTCOME_UNKNOWN` without a success receipt. The same key inspects Google
   before it cancels or moves the event again. Reconciliation may delete only a
   compensation-required event, and only after that delete is proven.
+- A cancel or reschedule reads the Google etag once, stores it on the intent, and
+  sends that value as `If-Match`. It does not read a newer etag for that write.
+  HTTP 412 is `NEEDS_RECONCILE` and leaves the intent in place. A different
+  idempotency key is rejected while an intent is open. The fence is checked again
+  before each Google call. If the fence has moved, the intent is kept. Recovery
+  does not call Google while that location's heartbeat is inside the lease. After
+  this process has stolen an expired lease, recovery can push a recently committed
+  row back onto Google. Create stores a private operation id and reuses that event
+  instead of inserting a second one.
 - Same-location mutations serialize even for different professionals, preserving
   the existing capacity boundary. A slow provider/notification can temporarily
   block another operation at that location.

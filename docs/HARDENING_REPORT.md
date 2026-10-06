@@ -44,7 +44,7 @@ Hardening commits on top of the launch-candidate merge:
 | `982ce2b` | Merge launch-candidate onto main hardening |
 | `cee4df4` | DST conversion repeats until the wall clock matches and rejects a time that does not exist |
 | `0aa384b`, `c7e34d5` | Snapshot with `node:sqlite` `backup()` when that export exists, otherwise `VACUUM INTO` a new file. The second commit fixes the type of that probe |
-| `da9cc42` | Pending rows occupy the slot. A failed confirmed save cancels the event from that request. Reconciliation fails pending rows that never received an event and holds rows that did, without deleting external events |
+| `da9cc42` | Pending rows occupy the slot. A failed confirmed save cancels the event from that request. Reconciliation fails pending rows that never received an event and holds rows that still have one. A compensation-required event is deleted only after that delete is proven; a timeout or a 5xx response does not delete it |
 | `d300d55` | Hangup marks the call ended before cleanup. A voice create that sees the mark fails the row and removes the same-request event |
 | `bb87140` | Dashboard booking sends one `Idempotency-Key` per click, outside the JSON body |
 | `592f12e` | Disabled-staff regression tests |

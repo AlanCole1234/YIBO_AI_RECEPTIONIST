@@ -33,7 +33,7 @@ describe("GoogleCalendarAdapter", () => {
       startAt: "2026-08-24T16:00:00.000Z", endAt: "2026-08-24T16:30:00.000Z", idempotencyKey: "request-1",
     })).resolves.toEqual({ ok: true, value: { provider: "google-calendar", externalEventId: "event-1" } });
 
-    const request = fetcher.mock.calls[0]?.[1];
+    const request = fetcher.mock.calls.find(([, init]) => init?.method === "POST")?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({
       start: { dateTime: "2026-08-24T11:00:00-05:00", timeZone: "America/Chicago" },
       end: { dateTime: "2026-08-24T11:30:00-05:00", timeZone: "America/Chicago" },
@@ -53,7 +53,7 @@ describe("GoogleCalendarAdapter", () => {
       startAt: selectedSlot, endAt: "2026-08-24T21:30:00.000Z", idempotencyKey: "request-3pm",
     });
 
-    const event = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+    const event = JSON.parse(String(fetcher.mock.calls.find(([, init]) => init?.method === "POST")?.[1]?.body));
     expect(selectedSlot).toBe("2026-08-24T21:00:00.000Z");
     expect(event.start).toEqual({ dateTime: "2026-08-24T15:00:00-06:00", timeZone: "America/Denver" });
   });
@@ -70,7 +70,7 @@ describe("GoogleCalendarAdapter", () => {
       startAt: "2026-08-24T21:00:00.000Z", endAt: "2026-08-24T21:30:00.000Z", idempotencyKey: "test-request",
     });
 
-    const event = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+    const event = JSON.parse(String(fetcher.mock.calls.find(([, init]) => init?.method === "POST")?.[1]?.body));
     expect(event.summary).toBe("[YIBO TEST] Test Appointment");
   });
 
@@ -87,8 +87,9 @@ describe("GoogleCalendarAdapter", () => {
     await adapter.createEvent({ tenantId: "central", locationId: "default", appointmentId: "central-1", employeeId: "employee-1", title: "Consultation appointment", serviceName: "Consultation", startAt: "2026-08-24T16:00:00.000Z", endAt: "2026-08-24T16:30:00.000Z", idempotencyKey: "central-1" });
     await adapter.createEvent({ tenantId: "mountain", locationId: "default", appointmentId: "mountain-1", employeeId: "employee-1", title: "Consultation appointment", serviceName: "Consultation", startAt: "2026-08-24T17:00:00.000Z", endAt: "2026-08-24T17:30:00.000Z", idempotencyKey: "mountain-1" });
 
-    const central = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
-    const mountain = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body));
+    const posts = fetcher.mock.calls.filter(([, init]) => init?.method === "POST");
+    const central = JSON.parse(String(posts[0]?.[1]?.body));
+    const mountain = JSON.parse(String(posts[1]?.[1]?.body));
     expect(central.start).toEqual({ dateTime: "2026-08-24T11:00:00-05:00", timeZone: "America/Chicago" });
     expect(mountain.start).toEqual({ dateTime: "2026-08-24T11:00:00-06:00", timeZone: "America/Denver" });
   });
@@ -153,7 +154,9 @@ describe("GoogleCalendarAdapter", () => {
       tenantId: "tenant-1", locationId: "north", employeeId: "employee-2", appointmentId: "appointment-safe", externalEventId: "event-safe",
     });
 
-    expect(requests).toEqual([
+    expect(requests[0]?.method).toBe("GET");
+    expect(requests[0]?.url).toContain("privateExtendedProperty=yiboOperationId%3D");
+    expect(requests.slice(1)).toEqual([
       { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events", method: "POST" },
       { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events/event-safe", method: "GET" },
       { url: "https://www.googleapis.com/calendar/v3/calendars/private-calendar%40example.com/events/event-safe", method: "DELETE" },

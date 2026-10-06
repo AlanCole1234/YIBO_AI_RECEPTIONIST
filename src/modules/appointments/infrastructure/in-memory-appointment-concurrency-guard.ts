@@ -46,6 +46,16 @@ export class InMemoryAppointmentConcurrencyGuard implements AppointmentConcurren
     return Boolean(claim?.live && claim.ownerId === ownerId && claim.fence === fence);
   }
 
+  hasLiveLease(tenantId: TenantId, locationId: LocationId): boolean {
+    return Boolean(this.claims.get(`${tenantId}:${locationId}`)?.live);
+  }
+
+  hasUnresolvedSteal(_tenantId: TenantId, _locationId: LocationId): boolean {
+    return false;
+  }
+
+  clearSteal(_tenantId: TenantId, _locationId: LocationId): void {}
+
   listClaims(tenantId: TenantId): AppointmentLockClaim[] {
     return [...this.claims.values()]
       .filter((claim) => claim.tenantId === tenantId)

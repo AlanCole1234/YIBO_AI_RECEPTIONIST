@@ -54,6 +54,9 @@ describe("integrated phone booking through Google Calendar", () => {
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic-access");
+      if ((init?.method ?? "GET") === "GET" && url.searchParams.get("privateExtendedProperty")?.startsWith("yiboOperationId=")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
       expect(init?.method).toBe("POST");
       const body = JSON.parse(String(init?.body));
       if (url.pathname.endsWith("/freeBusy")) {
