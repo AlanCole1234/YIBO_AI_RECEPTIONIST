@@ -12,6 +12,8 @@ import type { ConversationUsageRecorder } from "../ports/conversation-usage.js";
 
 export interface AudioSink {
   write(frame: AudioFrame, assistantTurnId: string): Promise<void>;
+  /** Finalize this turn's queued audio; playback-idle still comes from the transport. */
+  complete?(assistantTurnId?: string): void;
   /** Optional per-turn timing handoff for transports that can report audible playback. */
   observeResponseTiming?(timing: Extract<ConversationRuntimeEvent, { type: "assistant.response_timing" }>): void;
   /** Fires when the telephone/browser transport has actually finished queued assistant audio. */

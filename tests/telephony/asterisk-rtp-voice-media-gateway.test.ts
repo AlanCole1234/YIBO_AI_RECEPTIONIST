@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import dgram from "node:dgram";
 import { AsteriskRtpVoiceMediaGateway } from "../../src/modules/telephony/index.js";
 import type { AsteriskEvent, AsteriskMediaClient } from "../../src/modules/telephony/index.js";
+import { createRtpPacket, parseRtpPacket } from "../../src/modules/telephony/infrastructure/asterisk/rtp.js";
 
 class FakeAriMediaClient implements AsteriskMediaClient {
   readonly createMixingBridge = vi.fn(async () => ({ bridgeId: "bridge-1" }));
@@ -14,6 +16,41 @@ class FakeAriMediaClient implements AsteriskMediaClient {
 }
 
 describe("AsteriskRtpVoiceMediaGateway", () => {
+  it("reports playback-idle after the completed provider's partial final packet is actually sent", async () => {
+    const client = new FakeAriMediaClient();
+    const gateway = new AsteriskRtpVoiceMediaGateway(client, { host: "127.0.0.1", portStart: 40_004, portEnd: 40_010, logger: () => {} });
+    const peer = dgram.createSocket("udp4");
+    const packets: Uint8Array[] = [];
+    const idle = vi.fn();
+    peer.on("message", data => { const packet = parseRtpPacket(data); if (packet) packets.push(packet.payload); });
+    try {
+      await new Promise<void>(resolve => peer.bind(0, "127.0.0.1", resolve));
+      await gateway.prepare("partial", "caller");
+      const opened = await gateway.open("partial");
+      if (!opened.ok) throw new Error("Synthetic media setup failed");
+      const transport = opened.value;
+      transport.outboundAudio.onPlaybackIdle!(idle);
+      const received = transport.inboundAudio[Symbol.asyncIterator]().next();
+      const port = (client.createExternalMedia.mock.calls[0] as unknown as [{ port: number }])[0].port;
+      const inbound = createRtpPacket({ payload: new Uint8Array(160).fill(0xff), sequenceNumber: 1, timestamp: 0, ssrc: 1, marker: false });
+      await new Promise<void>((resolve, reject) => peer.send(inbound, port, "127.0.0.1", error => error ? reject(error) : resolve()));
+      await received;
+      await transport.outboundAudio.write({ data: new Uint8Array(5280), codec: "pcm_s16le", sampleRate: 24_000, channels: 1 }, "prompt");
+      transport.outboundAudio.complete!("prompt");
+      await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(packets).toHaveLength(6));
+      expect(transport.outboundAudio.getBargeInDiagnostics!().outboundQueueDepth).toBe(0);
+      expect(transport.outboundAudio.getBargeInDiagnostics!().outboundRtpPlaying).toBe(false);
+      transport.outboundAudio.complete!("prompt");
+      expect(idle).toHaveBeenCalledTimes(1);
+    } finally {
+      peer.close();
+      await gateway.cleanup("partial");
+    }
+    expect(client.hangup).toHaveBeenCalledWith("external-1");
+    expect(client.destroyBridge).toHaveBeenCalledWith("bridge-1");
+  });
+
   it("creates one mixing bridge and an External Media channel, then tears both down", async () => {
     const client = new FakeAriMediaClient();
     const gateway = new AsteriskRtpVoiceMediaGateway(client, { host: "127.0.0.1", portStart: 40_000, portEnd: 40_020, logger: () => {} });

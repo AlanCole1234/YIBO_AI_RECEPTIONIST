@@ -184,6 +184,9 @@ class AsteriskRtpSession {
       inboundAudio: this.inbound,
       outboundAudio: {
         write: async (frame, assistantTurnId) => this.sendRealtimeAudio(frame, assistantTurnId),
+        complete: (assistantTurnId) => {
+          if (assistantTurnId && assistantTurnId === this.outboundConverterTurnId) this.pacer.complete(assistantTurnId);
+        },
         observeResponseTiming: (timing) => {
           this.pendingResponseTiming = timing;
         },
@@ -529,6 +532,16 @@ export class PcmuRtpPacer {
     this.queue.length = 0;
     this.queuedBytes = 0;
     this.options.log("telephony.media.rtp_pacing_stopped", { callId: this.options.callId, reason });
+  }
+
+  complete(assistantTurnId: string): void {
+    if (this.stopped || this.queue.at(-1)?.assistantTurnId !== assistantTurnId) return;
+    // OpenAI's last PCM delta need not end on a 20 ms telephone packet boundary.
+    // Only after the provider completes this turn, pad its final packet with
+    // PCMU silence so it drains normally and reports playback-idle. Never clear
+    // playback merely because model generation has finished.
+    const remainder = this.queuedBytes % RTP_FRAME_BYTES;
+    if (remainder) this.enqueue(new Uint8Array(RTP_FRAME_BYTES - remainder).fill(0xff), assistantTurnId);
   }
 
   stop(reason: "call_closed"): void {

@@ -5,6 +5,44 @@ import { TELEPHONE_SAMPLE_RATE } from "../../src/modules/voice/index.js";
 afterEach(() => vi.useRealTimers());
 
 describe("PcmuRtpPacer", () => {
+  it("drains a stalled partial tail after completion, pads only with PCMU silence, and ignores duplicate completion", async () => {
+    vi.useFakeTimers();
+    const packets: Array<{ payload: Uint8Array; queueBecameEmpty: boolean }> = [];
+    const pacer = new PcmuRtpPacer({ callId: "partial-tail", log: () => {},
+      send: async (payload, _turn, _depth, timing) => { packets.push({ payload: payload.slice(), queueBecameEmpty: timing.queueBecameEmpty }); } });
+    pacer.enqueue(new Uint8Array(880).fill(0x42), "prompt");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(pacer.queueDepth()).toBe(80);
+    expect(packets).toHaveLength(5);
+    pacer.complete("prompt");
+    await vi.runAllTimersAsync();
+    expect(pacer.queueDepth()).toBe(0);
+    expect(packets).toHaveLength(6);
+    expect(packets[5]!.payload).toEqual(new Uint8Array([...Array(80).fill(0x42), ...Array(80).fill(0xff)]));
+    expect(packets[5]!.queueBecameEmpty).toBe(true);
+    pacer.complete("prompt");
+    await vi.runAllTimersAsync();
+    expect(packets).toHaveLength(6);
+  });
+
+  it("does not pad an incomplete stream or a newer turn when an old completion arrives", async () => {
+    vi.useFakeTimers();
+    const packets: Uint8Array[] = [];
+    const pacer = new PcmuRtpPacer({ callId: "late-completion", log: () => {},
+      send: async payload => { packets.push(payload.slice()); } });
+    pacer.enqueue(new Uint8Array(100).fill(0x41), "old");
+    pacer.clear("barge_in");
+    pacer.enqueue(new Uint8Array(100).fill(0x42), "new");
+    await vi.advanceTimersByTimeAsync(80);
+    pacer.complete("old");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(packets).toHaveLength(0);
+    expect(pacer.queueDepth()).toBe(100);
+    pacer.enqueue(new Uint8Array(60).fill(0x43), "new");
+    await vi.runAllTimersAsync();
+    expect(packets).toEqual([new Uint8Array([...Array(100).fill(0x42), ...Array(60).fill(0x43)])]);
+  });
+
   it("splits a 3200-byte Realtime output chunk into paced 160-byte RTP payloads", async () => {
     vi.useFakeTimers();
     const packets: Array<{ bytes: number; turn: string; queueDepth: number }> = [];

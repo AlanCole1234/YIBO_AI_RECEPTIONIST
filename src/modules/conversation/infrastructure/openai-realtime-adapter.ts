@@ -917,10 +917,12 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     const now = performance.now();
     this.pendingBargeIn = {
       serverVadEventId: typeof event.event_id === "string" ? event.event_id : undefined,
+      itemId: typeof event.item_id === "string" ? event.item_id : undefined,
       detectedAt: now,
       assistantPlaybackMs: Math.max(0, now - assistantPlaybackStartedAt),
       turnState: this.state,
       consecutiveSpeechMs: 0,
+      audioFrames: 0,
       totalSpeechDurationMs: 0,
       totalRmsDuration: 0,
       maxRmsDuringSpeech: 0,
@@ -950,6 +952,16 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
     // method only decides whether that retained evidence is sufficient.
     if (candidate.consecutiveSpeechMs < candidate.requiredSpeechMs) return;
     this.callerIsSpeaking = true;
+    // These frames have already been forwarded to Realtime. Retain their
+    // accounting/identity when a delayed VAD event confirms an interruption.
+    this.activeCallerTurn = {
+      turnNumber: ++this.turnNumber,
+      itemId: candidate.itemId,
+      speechStartedAt: candidate.detectedAt,
+      audioFrames: candidate.audioFrames,
+      audioDurationMs: candidate.totalSpeechDurationMs,
+      startingState: candidate.turnState,
+    };
     this.emitBargeIn(true, "sustained_speech_confirmed");
     this.pendingBargeIn = undefined;
     this.setState("user_speaking", { source: "confirmed_barge_in" });
@@ -1008,7 +1020,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
       audioDurationMs: callerTurn.audioDurationMs,
       speechDurationMs: Math.max(callerTurn.audioDurationMs, speechStoppedAt - callerTurn.speechStartedAt),
       startingState: callerTurn.startingState,
-      bargeInOccurred: false,
+      bargeInOccurred: callerTurn.startingState === "assistant_speaking",
       patienceElapsed: false,
       speechCommitted: callerTurn.itemId !== undefined && this.committedAudioItems.has(callerTurn.itemId),
       committedAt: callerTurn.itemId ? this.committedAudioItems.get(callerTurn.itemId) : undefined,
@@ -1213,6 +1225,7 @@ class OpenAIRealtimeSession implements ConversationRuntimeSession {
 
   private observeBargeInAudio(candidate: PendingBargeIn, metrics: AudioMetrics): void {
     if (metrics.durationMs <= 0) return;
+    candidate.audioFrames += 1;
     candidate.totalSpeechDurationMs += metrics.durationMs;
     candidate.totalRmsDuration += metrics.rms * metrics.durationMs;
     candidate.maxRmsDuringSpeech = Math.max(candidate.maxRmsDuringSpeech, metrics.rms);
@@ -1446,10 +1459,12 @@ interface AudioMetrics {
 
 interface PendingBargeIn {
   serverVadEventId?: string;
+  itemId?: string;
   detectedAt: number;
   assistantPlaybackMs: number;
   turnState: RealtimeTurnState;
   consecutiveSpeechMs: number;
+  audioFrames: number;
   totalSpeechDurationMs: number;
   totalRmsDuration: number;
   maxRmsDuringSpeech: number;

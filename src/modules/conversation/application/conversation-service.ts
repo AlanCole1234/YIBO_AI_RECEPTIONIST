@@ -168,6 +168,8 @@ class ActiveConversationSession implements ConversationSession {
         this.runtimeResponseActive = true;
         return;
       case "assistant.audio_completed":
+        this.dependencies.command.transport.outboundAudio.complete?.(event.assistantTurnId);
+        return;
       case "assistant.transcript":
       case "silence.timeout":
         return;
