@@ -16,7 +16,7 @@ That endpoint string is not a route to a carrier. Phone transfers go to `Local/<
 
 ## D4. One process, one database writer
 
-`YIBO_INSTANCE_LOCK=1` uses a hostname-plus-pid lock. Docker Compose sets it. A second live process on the same host exits. This does not make SQLite safe across hosts sharing a file.
+`YIBO_INSTANCE_LOCK=1` holds SQLite's single-writer transaction in a separate lock file. Docker Compose sets it. Every process/container must use the same lock path on local durable storage. A second owner exits, and the OS releases the lock if the owner crashes. The lock file stays in place; do not delete it while any instance may be running. Network filesystems and replicas remain unsupported.
 
 ## D5. Recording stays off
 

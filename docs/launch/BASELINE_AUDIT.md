@@ -61,7 +61,7 @@ Phone-number transfers redirect to `Local/<digits>@yibo-outbound-transfer`, whic
 
 ## Process-local state
 
-One API process is the writer for a regional SQLite file. `YIBO_INSTANCE_LOCK=1` refuses a second live process on the same host. A lock from another container hostname is replaced. Horizontal replicas are not supported. Admin session revocation and the in-memory appointment concurrency guard do not cross processes. Do not run two containers against one database file.
+One API process is the writer for a regional SQLite file. The follow-up review replaced the unsafe hostname/PID takeover with SQLite's single-writer transaction in a separate lock file. With `YIBO_INSTANCE_LOCK=1`, processes sharing that path cannot become simultaneous owners; a crash releases the OS lock. Horizontal replicas remain unsupported. Admin session revocation and the in-memory appointment concurrency guard do not cross processes. Do not run two containers against one database file.
 
 ## Secrets
 

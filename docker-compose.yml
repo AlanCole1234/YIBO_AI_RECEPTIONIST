@@ -8,6 +8,7 @@ services:
     volumes:
       - yibo-data:/var/lib/yibo
     environment:
+      NODE_ENV: development
       HOST: 0.0.0.0
       YIBO_RUNTIME: in-memory
       YIBO_REGION: US

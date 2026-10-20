@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 export interface DatabaseSnapshot {
@@ -16,12 +16,16 @@ export interface DatabaseSnapshot {
  * by hand. The destination must not already exist.
  */
 export function snapshotDatabase(sourcePath: string, destinationPath: string): DatabaseSnapshot {
-  if (resolveSame(sourcePath, destinationPath)) {
+  if (resolve(sourcePath) === resolve(destinationPath)) {
     throw new Error("Refusing to snapshot a database onto itself");
   }
-  mkdirSync(dirname(destinationPath), { recursive: true });
-  const source = new DatabaseSync(sourcePath);
+  // A misspelled source must fail instead of creating and backing up an empty DB.
+  const source = new DatabaseSync(sourcePath, { readOnly: true });
   try {
+    mkdirSync(dirname(destinationPath), { recursive: true, mode: 0o700 });
+    // VACUUM INTO permits an existing empty file. Reserve a new private file
+    // exclusively so even empty pre-existing files/symlinks cannot be replaced.
+    closeSync(openSync(destinationPath, "wx", 0o600));
     const escaped = destinationPath.replaceAll("'", "''");
     source.exec(`VACUUM INTO '${escaped}'`);
   } finally {
@@ -45,8 +49,4 @@ export function snapshotDatabase(sourcePath: string, destinationPath: string): D
   } finally {
     copy.close();
   }
-}
-
-function resolveSame(left: string, right: string): boolean {
-  return left === right;
 }

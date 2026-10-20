@@ -2,6 +2,12 @@
 
 Status of this repository: demo can be started locally. A public phone pilot is not started.
 
+**Existing YIBO infrastructure:** these templates do not describe or replace Alan's
+working DigitalOcean Asterisk/Telnyx configuration. Do not run this installation,
+copy the PBX templates, change routing, or buy a new DID on that server without
+approval. The original repository already has Cloudflare Worker and Tunnel/Node
+deployment work to reuse; see `CODEX_REVIEW.md` for the integration gate.
+
 ## One command (demo, $0)
 
 From a machine with Docker:
@@ -83,13 +89,13 @@ On a copy, not on the only file:
 pnpm db:snapshot -- --source /var/lib/yibo/yibo-us.sqlite --dest /safe/yibo-us-YYYYMMDD.sqlite
 ```
 
-`VACUUM INTO` writes a consistent snapshot. The command prints SHA-256, `integrity_check`, and `foreign_key_check`. Keep `YIBO_TOKEN_ENCRYPTION_KEY` with the backup or Google tokens will not decrypt. Restoring means stopping the process, moving the snapshot to a new path, and starting one instance against that path. Practice on a copy.
+`VACUUM INTO` writes a consistent snapshot. The source is opened read-only; a missing source fails instead of creating an empty database. The destination must not exist, even as an empty file, and is created with owner-only permissions (0600). A failed snapshot can leave a private incomplete file; only a successful command result verifies it. Choose a fresh destination for retry. The command prints SHA-256, `integrity_check`, and `foreign_key_check`. Keep `YIBO_TOKEN_ENCRYPTION_KEY` with the backup or Google tokens will not decrypt. Restoring means stopping the process, moving the snapshot to a new path, and starting one instance against that path. Practice on a copy.
 
 ## Shutdown
 
 Demo: `docker compose down`.
 
-Pilot, once it exists: stop the API (SIGTERM closes telephony and the HTTP server), then stop Asterisk. Revoke or cap the OpenAI key in the provider dashboard if a runaway session is the problem. The process lock is released on shutdown. A crash on the same host is replaced on the next start; a live second process is refused.
+Pilot, once separately approved: stop only the intended YIBO API (SIGTERM closes its telephony and HTTP resources). Do not stop the existing shared Asterisk service. The process lock is released on shutdown or process death, so a crash permits restart without unlinking the lock file. A live second process is refused. If upgrading a test setup that used the earlier plain-text hostname/PID lock, stop all its writers and move that old lock aside before starting this version; it is never automatically stolen. All instances must share the same lock path on local disk. Do not delete or replace a live lock file.
 
 ## Host comparison (not purchased)
 
