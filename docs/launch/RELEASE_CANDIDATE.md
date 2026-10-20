@@ -2,6 +2,8 @@
 
 Date: 2026-10-20. Branch: `cursor/yibo-us-launch-zero-cost-dd18`.
 
+Suite commit: `be5ba9ab9a8021b0183508ba3937aeea8d6189ce`. The commands below were run on that tree. This file's SHA line is the only later edit.
+
 Decision: **DEMO ONLY**. Not pilot ready. Not production ready.
 
 ## Commands run on this tree
@@ -22,4 +24,4 @@ Decision: **DEMO ONLY**. Not pilot ready. Not production ready.
 
 Spent: $0. No DID. No live model call.
 
-The commit SHA for this note is added when the branch is pushed. See the pull request for the exact SHA.
+Parent of the suite: `01dc29a7fc2385126dc88018d4e213099480696f` (`main`).
