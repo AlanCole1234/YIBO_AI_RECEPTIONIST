@@ -7,3 +7,16 @@ data
 .env
 .git
 coverage
+worktrees
+.codex
+.agents
+**/.env*
+**/.dev.vars*
+**/.wrangler
+**/.cloudflared
+**/data
+**/*.sqlite*
+**/recordings
+**/*.pem
+**/*.key
+deploy/asterisk/rendered
