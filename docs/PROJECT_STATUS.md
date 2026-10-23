@@ -3,6 +3,22 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS preparado — cuenta y despliegue pendientes — 23 de octubre de 2026
+
+- Integración aprobada conservada en `bca66a4`, rama `codex/launch-integration-reviewed`.
+- El usuario necesita crear su cuenta AWS. No recursos, credenciales, DNS, costos
+  nuevos ni infraestructura de producción configurados. Free plan sujeto al saldo
+  y vencimiento real; no se presenta como hosting gratuito permanente.
+- Preparada plantilla Caddy: dashboard estático y `/api` hacia Fastify loopback,
+  mismo origen HTTPS, sin publicar Voice Lab/ARI. Reutiliza servicio Node, SQLite
+  regional persistente y backups existentes; PBX DigitalOcean sigue intacto.
+- Caddy 2.11.7 validado; **16/16 checks locales de proxy** (assets/SPA, API, cookies,
+  Origin, errores, no-store, rutas privadas y backend caído). Suite final **773+1
+  omitido**, ambos typechecks y build aprobados. Sin nuevas dependencias/runtime.
+- [Plan AWS, variables, cuenta y gates](AWS_DEPLOYMENT.md). Próximo paso: crear
+  cuenta, verificar créditos/expiry, confirmar dominio/región y aprobar propuesta
+  concreta antes de provisionar. OAuth HTTPS y Voice Lab hosted aún pendientes.
+
 ## Integración revisada — 23 de octubre de 2026
 
 - Rama aislada `codex/launch-integration-reviewed`: combina `701d434` (producto,
