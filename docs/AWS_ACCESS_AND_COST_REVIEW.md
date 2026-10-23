@@ -2,56 +2,69 @@
 
 ## Current state
 
-The owner reports an active **Free plan, $100 credit balance, 183 days remaining,
-and registered MFA**. This is owner-provided information, not an authenticated AWS
-API check. The Mac has no AWS CLI, AWS config or credentials file. No AWS resources,
-IAM identities, policies, access keys, DNS records or plan changes were created.
-The reviewed integration branch remains `codex/launch-integration-reviewed`.
+The owner reports an active **Free plan and $100 credit balance**. Read-only Safari
+inspection confirmed the new AWS experience, project **Happy Path**, region
+**us-east-2 (Ohio)**, **183 days remaining**, and a registered Builder ID MFA device.
+The Builder ID uses GitHub sign-in. The credit balance has not been API-verified.
+The official **AWS CLI 2.38.5** is now installed for the Mac user only, under
+`~/.local/share/aws-cli`, with a binary at `~/.local/bin/aws`. The vendor installer
+verified the macOS package signature; `aws --version` and local login help passed.
+No AWS login has been authorized and no AWS config/credentials file exists yet.
+No AWS resources, IAM identities, policies, access keys, DNS records or plan changes
+were created. The reviewed integration branch remains
+`codex/launch-integration-reviewed`.
 
-## First access step: inspect only
+## Account-specific access plan — authorization pending
 
-The owner should open the AWS account menu and identify whether the session is
-root or an IAM user. Do not send passwords, MFA codes, access keys or login URLs
-containing authorization codes. We will confirm the identity setup before creating
-anything or attaching permissions.
+The earlier root/IAM-console-user proposal does **not** apply to this account.
+In the new AWS experience, Builder ID owns the project; there is no root user.
+Human project access is administrator access, and custom IAM users/roles support
+programmatic access only. AWS already manages Organizations/Identity Center for
+this experience. That automatic setup does not itself mean the Free plan was
+upgraded. Do not activate advanced features or change the account plan for this
+connection. The designated project region is Ohio, not the earlier N. Virginia
+planning assumption.
+[AWS account and access comparison](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html).
 
-Proposed connection, subject to owner approval of the exact IAM changes:
+Next connection step, requiring the owner to review and approve AWS authorization:
 
-1. A dedicated non-root identity named `yibo-codex-audit`, with console access and
-   its own MFA. If an appropriate restricted identity already exists, reuse it.
-2. Grant only the EC2 inventory permissions in
-   `deploy/aws/codex-audit-policy.example.json`, plus AWS's
-   `SignInLocalDevelopmentAccess` policy for temporary browser-based CLI login.
-   The example is **not applied**. It grants no deployment actions, database/object
-   access, secrets retrieval, IAM administration or plan changes. `Resource: "*"`
-   supports inventory APIs; the allowed actions remain explicitly enumerated.
-   Adding it to an administrator does not restrict that administrator: use an
-   identity with no broader attached/group permissions.
-3. Install the official AWS CLI v2 locally (minimum 2.32.0), then use a named
-   `yibo-audit` profile with `aws login`. The owner completes sign-in/MFA and reviews
-   the CLI authorization. No long-lived access keys are needed; temporary sessions
-   can refresh for up to 12 hours. Never use root for this Codex session.
-4. Verify session identity and perform read-only EC2/network inventory. Keep
-   credential caches outside the repository and don't print/export them. Keep
-   Codex approval controls enabled; an AWS write remains separately unauthorized.
-   End the session with `aws logout --profile yibo-audit` when finished.
+1. Use a separate local `yibo-audit` profile with region `us-east-2` and browser-based
+   `aws login`. The user must review the selected project and consent screen.
+   **The resulting CLI session inherits project permissions; naming a profile
+   "audit" does not make it read-only.** Explain that administrator capability
+   before authorization. No long-lived access key is needed.
+2. After approval, verify the session identity without printing credentials, then
+   perform only the agreed inventory reads. No resource creation, IAM change,
+   plan upgrade or deployment is authorized. Keep approval controls enabled and
+   credentials outside the repository. Use `aws logout --profile yibo-audit` when
+   finished; AWS documents temporary credential refresh for up to 12 hours.
+3. If adding AWS MCP later, use the SigV4 proxy with `--read-only`, only the
+   `yibo-audit` profile allowed, and `AWS_REGION=us-east-2` operation metadata.
+   The MCP endpoint can be in `us-east-1` while operations target Ohio. Read-only
+   mode filters tools; it does **not** reduce the underlying CLI/IAM permissions.
+   No MCP server, toolkit rules, or automatic approval setting has been installed.
+4. The existing `deploy/aws/codex-audit-policy.example.json` remains an **unapplied
+   inventory allowlist**. It is not a restriction on an administrator session.
+   Any enforceable restricted-role setup requires separate review of the actual
+   managed project policies and explicit approval before IAM changes.
 
 AWS documentation: [temporary local login](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html),
-[SignInLocalDevelopmentAccess](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/SignInLocalDevelopmentAccess.html).
+[official CLI installation](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
+[MCP connection options](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/getting-started-aws-mcp-server.html),
+[proxy read-only mode](https://github.com/aws/mcp-proxy-for-aws#configuration-parameters).
 
 No suitable EC2/deployment plugin was found in the available plugin directory;
-the available AWS analytics plugin does not serve this task. Use the official CLI.
-Do not enable Organizations/Control Tower as a shortcut to authentication: some
-account actions automatically upgrade the Free plan. The currently proposed IAM
-connection does not require them.
-[Free-plan transition rules](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html).
+the available AWS analytics plugin does not serve this task. The CLI preparation
+does not require installing the complete Agent Toolkit or changing other tools.
 
 ## Preliminary hosting estimate
 
-Assumptions: Linux in **us-east-1 (N. Virginia)**, 730 running hours/month, one
+Historical assumptions: Linux in **us-east-1 (N. Virginia)**, 730 running hours/month, one
 instance, 20 GiB total gp3 storage at baseline performance, one public IPv4,
 existing DNS provider/domain, and low initial traffic. This is a planning estimate,
-not an approved resource selection or an AWS account-specific quote.
+not an approved resource selection or an AWS account-specific quote. **The actual
+project is in us-east-2 (Ohio); verify Ohio rates and eligibility before using this
+table for approval.** No resources have been selected or launched.
 
 | Component | x86 baseline | Conditional ARM trial |
 | --- | ---: | ---: |
@@ -95,8 +108,9 @@ is proposed. Budget alerts should precede resource launch; they do not cap usage
 
 ## Next gates
 
-1. Identify the current AWS sign-in type; approve a narrowly scoped read-only
-   identity setup if needed. Complete the CLI connection before provisioning.
+1. Sign-in type and project region are identified; the local CLI is installed.
+   The Mac subsequently locked, so browser authorization remains pending. Have
+   the owner unlock it and review the exact CLI consent before granting access.
 2. Verify regional availability/account limits, the ARM trial and post-trial rate;
    obtain the approved domain and produce the final resource/cost proposal.
 3. Obtain explicit approval for infrastructure, then start with synthetic data.

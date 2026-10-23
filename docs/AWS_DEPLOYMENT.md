@@ -2,33 +2,34 @@
 
 23 October 2026. **Prepared locally, not deployed.** The owner selected AWS instead
 of Cloudflare and now reports a Free-plan account with $100 credits, 183 days
-remaining and registered MFA. No authenticated AWS access, hostname, server or
-billable resource has been configured here. See the current
-[read-only access and cost review](AWS_ACCESS_AND_COST_REVIEW.md). The account
-creation instructions below are retained as the preparation history.
+remaining and registered MFA. Read-only browser inspection identified Builder ID
+GitHub sign-in, project Happy Path, and us-east-2 (Ohio). The local AWS CLI is
+installed, but CLI authorization, a hostname, server and billable resources remain
+unconfigured. See the current [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md).
 
 ## Account action for the owner
 
-1. Start at [AWS Free Tier](https://aws.amazon.com/free/). Create the account
-   yourself, including verification, payment details and terms. Choose the **Free
-   account plan** if AWS offers it to this new account, and Basic Support.
-2. Enable root-account MFA. Do not send passwords, access keys or payment details
-   in chat. No root access key is needed for this preparation.
-3. Open **Billing and Cost Management → Free Tier** and record the plan, credit
-   balance and expiry. Share only those non-secret facts, your intended AWS region
-   and an existing domain/subdomain you control. Do not launch an instance yet.
-4. Review the concrete resource/cost proposal and approve provisioning separately.
-   Root account access must not be the application/deployment identity; prepare
-   limited operator access and an EC2 instance role at that approved stage.
+1. Account creation and Builder ID MFA are complete. Reuse this account and
+   project. Do not create a duplicate account, root identity or IAM console user.
+2. Review the temporary CLI authorization before granting it. This new experience
+   grants human project administrators broad permissions; an audit profile name
+   or MCP read-only filter is not an IAM restriction. No AWS writes are authorized.
+3. Confirm the credit balance/expiry in AWS Settings → Billing, and provide an
+   existing domain/subdomain you control. Region is already designated us-east-2.
+   Do not send passwords, access keys, tokens or payment details in chat.
+4. Review the Ohio-specific resource/cost proposal and approve provisioning
+   separately. Review application instance-role permissions at that stage.
 
 Current new-account rules provide $100 initial credits and opportunities to earn
 another $100. The Free plan lasts until six months or credit exhaustion, whichever
 comes first; it is not permanent free hosting. Expiry closes the account and makes
 resources inaccessible unless upgraded. Do not depend on it for uninterrupted
 paying-customer service. Obtain approval for a Paid-plan transition and ongoing
-cost ceiling before production. Joining AWS Organizations can trigger an automatic
-Paid-plan upgrade; do not set that up as an incidental onboarding step.
+cost ceiling before production. This new AWS experience already includes an
+AWS-managed organization; do not apply the classic account-joining warning to
+that automatic setup or change organization/advanced-feature settings incidentally.
 [AWS account-plan documentation](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html).
+[New-experience account model](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html).
 
 ## Smallest deployment that fits this application
 

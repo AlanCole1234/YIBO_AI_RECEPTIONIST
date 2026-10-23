@@ -3,16 +3,21 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS cuenta creada — acceso read-only pendiente — 23 de octubre de 2026
+## AWS cuenta identificada — autorización CLI pendiente — 23 de octubre de 2026
 
-- Usuario informa Free plan, **$100**, **183 días** y MFA; todavía sin comprobación
-  autenticada ni CLI/credenciales locales. Rama de integración preservada.
-- Preparada política de inventario EC2 limitada y conexión temporal con `aws login`;
-  ninguna política/identidad/recurso aplicado. Falta identificar login root/IAM y
-  aprobar el acceso concreto. No root keys ni permisos administrativos propuestos.
+- Usuario informa Free plan y **$100**. Inspección browser read-only confirma
+  Builder ID/GitHub, proyecto Happy Path, **us-east-2 (Ohio)**, **183 días** y MFA.
+  No es login root/IAM clásico; instrucciones anteriores corregidas.
+- AWS CLI oficial **2.38.5** instalado sólo para el usuario Mac; firma del paquete,
+  versión y ayuda local verificadas. No autorización, credenciales, MCP, IAM,
+  recursos ni cambios de plan. El Mac volvió a bloquearse antes de autorizar.
+- `aws login` heredaría permisos administrativos del proyecto: un perfil de
+  auditoría o filtro MCP read-only no los limita. Consentimiento del usuario
+  pendiente; sólo inventario será autorizado. Política ejemplo sigue sin aplicar.
 - Estimación x86 inicial **$22–24/mes**; trial ARM t4g.small publicado hasta fin de
   2026 podría reducirlo a **$6–8/mes** temporalmente, sujeto a verificación de cuenta,
-  compatibilidad Linux ARM y tarifa posterior. No promesa de 183 días gratis.
+  compatibilidad Linux ARM y tarifa posterior. Es cálculo previo de N. Virginia;
+  falta cotizar Ohio antes de aprobar. No promesa de 183 días gratis.
 - [Acceso, cálculo, fuentes y límites](AWS_ACCESS_AND_COST_REVIEW.md). Sin deploy,
   upgrade de plan, cambios live ni lógica de aplicación. Validación local de JSON
   y diff; suite de integración anterior sigue 773+1 omitido, tipos/build/CI verdes.
