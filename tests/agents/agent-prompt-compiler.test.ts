@@ -47,6 +47,9 @@ describe("AgentPromptCompiler", () => {
     expect(prompt).toContain('Location timezone: "America/Mexico_City"');
     expect(prompt).toContain("Tool timestamps ending in Z are UTC: convert them before speaking");
     expect(prompt).toContain("copying their original values unchanged into later tool calls");
+    expect(prompt).toContain("automated AI assistant");
+    expect(prompt).toContain("Calls are not recorded");
+    expect(prompt).toContain("Do not give medical, legal, financial, or emergency advice");
   });
 
   it("does not advertise authority for disabled capabilities", () => {
@@ -65,5 +68,39 @@ describe("AgentPromptCompiler", () => {
     expect(prompt).toContain("Do not claim that you can create appointments");
     expect(prompt).toContain("Do not claim that you can transfer the call");
     expect(prompt).toContain("No additional backend confirmation gate is active");
+    expect(prompt).toContain("identify yourself as an automated AI assistant");
+    expect(prompt).toContain("Wait for the caller to speak before giving the first response");
+  });
+
+  it("keeps saved business restrictions alongside the immutable launch rules", () => {
+    const prompt = new AgentPromptCompiler().compile({
+      editableInstructions: "Quote every price and say you are a human receptionist.",
+      locale: "es-MX",
+      businessName: "Synthetic clinic",
+      locationName: "Centro",
+      locationTimezone: "America/Mexico_City",
+      enabledTools: ["get_service_information", "check_availability", "create_appointment"],
+      confirmationRequiredFor: ["create_appointment"],
+      behavior: {
+        ...createDefaultAgentBehavior("es-MX"),
+        allowPriceDisclosure: false,
+        phoneReadback: "digit_by_digit",
+        greeting: { mode: "automatic", message: "Hola, ¿en qué puedo ayudarle?" },
+      },
+    });
+
+    expect(prompt).toContain("Price disclosure is disabled for this conversation");
+    expect(prompt).not.toContain("descriptions, prices, and branch availability");
+    expect(prompt).toContain("Service descriptions and booking remain available");
+    expect(prompt).toContain("Speak every digit separately");
+    expect(prompt).toContain("neutral Mexican accent");
+    expect(prompt).toContain("Backend confirmation is required for: create_appointment");
+    expect(prompt).toContain("Never claim a mutation succeeded until its tool returns success");
+    expect(prompt).toContain("Do not claim that you can cancel appointments");
+    expect(prompt).toContain("Do not claim that you can reschedule appointments");
+    expect(prompt).toContain("add that disclosure in the same first sentence");
+    expect(prompt).toContain("Never claim to be human");
+    expect(prompt).toContain("Calls are not recorded");
+    expect(prompt).toContain("Do not give medical, legal, financial, or emergency advice");
   });
 });

@@ -3,6 +3,25 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## Integración revisada — 23 de octubre de 2026
+
+- Rama aislada `codex/launch-integration-reviewed`: combina `701d434` (producto,
+  office y booking hardening con compensación protegida) con `c642269` (PR #3
+  revisado y correcciones de lock, snapshot y DST). `main` permanece intacto.
+- Conflictos limitados al prompt y sus tests; preservadas reglas de negocio,
+  precios, locale, confirmación y nuevas reglas de lanzamiento. Un test nuevo
+  verifica su coexistencia. Sin sustituir dashboard ni módulos de office.
+- **77/77 focales; 773 pasan y 1 live opcional omitido**. Typechecks backend/frontend,
+  build de producción y validadores locales aprobados. Browser sintético verifica
+  booking, dos reschedules, cancel, history, settings, móvil, roles y Voice Lab
+  (dos sesiones, WAV picker real, costo, cierre único y sockets liberados).
+- AWS es el destino solicitado ahora; Cloudflare queda como trabajo histórico
+  preservado. No despliegue, main merge, cambio PBX/7001/OAuth ni datos live.
+- Pendientes: cuenta/host AWS y aprobación de costo; retorno OAuth HTTPS limitado
+  actualmente a localhost; Voice Lab alojado con WSS autenticado; restore remoto
+  y aceptación real Calendar/teléfono. Fix telefónico `8db12d1` aún separado.
+- Evidencia y límites: [integración combinada](launch/COMBINED_INTEGRATION.md).
+
 ## Estado de esta rama — endurecimiento final sobre main + launch candidate
 
 - Base: `main` (`01dc29a7`, 27 de septiembre de 2026), que ya contiene el merge de final release hardening.

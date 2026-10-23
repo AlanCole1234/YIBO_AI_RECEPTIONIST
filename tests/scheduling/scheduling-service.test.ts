@@ -39,6 +39,27 @@ const createService = (
 );
 
 describe("SchedulingService", () => {
+  it("skips nonexistent DST slots without failing the rest of the availability search", async () => {
+    const profile: BusinessProfile = { ...business, timezone: "America/Chicago", openingHours: [
+      { dayOfWeek: 0, startTime: "01:00", endTime: "04:00" },
+    ] };
+    const service = new SchedulingServiceImpl(
+      new BusinessDirectoryService(new InMemoryBusinessRepository([profile])),
+      { getWorkingHours: async () => [] }, noAppointments, noCalendarConflicts,
+      { now: () => new Date("2026-03-01T00:00:00.000Z") },
+    );
+    const result = await service.findAvailableSlots({
+      tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",
+      rangeStart: "2026-03-08T06:00:00.000Z", rangeEnd: "2026-03-09T05:00:00.000Z",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toContainEqual(expect.objectContaining({ startAt: "2026-03-08T07:00:00.000Z" }));
+    expect(result.value).toContainEqual(expect.objectContaining({ startAt: "2026-03-08T08:00:00.000Z" }));
+    expect(result.value.every(slot => Number.isFinite(new Date(slot.startAt).valueOf()))).toBe(true);
+    expect(new Set(result.value.map(slot => slot.startAt)).size).toBe(result.value.length);
+  });
+
   it("returns slots only in the intersection of business and employee hours", async () => {
     const result = await createService().findAvailableSlots({
       tenantId: business.tenantId, locationId: "default", serviceId: "cleaning",

@@ -203,6 +203,7 @@ export class SchedulingServiceImpl implements SchedulingService {
           const endMinute = Math.min(minuteOfDay(businessRule.endTime), minuteOfDay(employeeRule.endTime));
           for (let minute = startMinute; minute + input.service.durationMinutes + input.service.bufferMinutes <= endMinute; minute += input.slotIncrementMinutes) {
             const start = toUtc({ ...day, hour: Math.floor(minute / 60), minute: minute % 60 }, input.timezone);
+            if (!Number.isFinite(start.valueOf())) continue; // No slot exists in a DST gap.
             const end = new Date(start.valueOf() + (input.service.durationMinutes + input.service.bufferMinutes) * 60_000);
             if (start < input.rangeStart || end > input.rangeEnd
               || intersects(start, end, closureIntervals(input.closures, input.timezone))
