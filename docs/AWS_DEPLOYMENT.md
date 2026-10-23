@@ -1,8 +1,11 @@
 # AWS launch preparation
 
 23 October 2026. **Prepared locally, not deployed.** The owner selected AWS instead
-of Cloudflare and needs to create an AWS account. No AWS credentials, account
-allowance, hostname, server or billable resource has been configured here.
+of Cloudflare and now reports a Free-plan account with $100 credits, 183 days
+remaining and registered MFA. No authenticated AWS access, hostname, server or
+billable resource has been configured here. See the current
+[read-only access and cost review](AWS_ACCESS_AND_COST_REVIEW.md). The account
+creation instructions below are retained as the preparation history.
 
 ## Account action for the owner
 
@@ -128,8 +131,8 @@ Full application evidence is in [the combined integration report](launch/COMBINE
 
 Before provisioning:
 
-1. Confirm account allowances, region/residency, hostname ownership and approved
-   cost estimate. The account does not yet exist; no IAM/DNS/EC2 change was made.
+1. Verify the owner-reported account allowances, region/residency, hostname
+   ownership and approved cost estimate. No IAM/DNS/EC2 change was made.
 2. Approve the exact EC2/EBS/address/backup/management-access proposal. Provision
    isolated synthetic data first; no automatic production deployment workflow.
 

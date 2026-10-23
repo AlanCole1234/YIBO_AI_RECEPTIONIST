@@ -3,6 +3,20 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS cuenta creada — acceso read-only pendiente — 23 de octubre de 2026
+
+- Usuario informa Free plan, **$100**, **183 días** y MFA; todavía sin comprobación
+  autenticada ni CLI/credenciales locales. Rama de integración preservada.
+- Preparada política de inventario EC2 limitada y conexión temporal con `aws login`;
+  ninguna política/identidad/recurso aplicado. Falta identificar login root/IAM y
+  aprobar el acceso concreto. No root keys ni permisos administrativos propuestos.
+- Estimación x86 inicial **$22–24/mes**; trial ARM t4g.small publicado hasta fin de
+  2026 podría reducirlo a **$6–8/mes** temporalmente, sujeto a verificación de cuenta,
+  compatibilidad Linux ARM y tarifa posterior. No promesa de 183 días gratis.
+- [Acceso, cálculo, fuentes y límites](AWS_ACCESS_AND_COST_REVIEW.md). Sin deploy,
+  upgrade de plan, cambios live ni lógica de aplicación. Validación local de JSON
+  y diff; suite de integración anterior sigue 773+1 omitido, tipos/build/CI verdes.
+
 ## AWS preparado — cuenta y despliegue pendientes — 23 de octubre de 2026
 
 - Integración aprobada conservada en `bca66a4`, rama `codex/launch-integration-reviewed`.
