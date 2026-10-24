@@ -3,24 +3,48 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS cuenta identificada — autorización CLI pendiente — 23 de octubre de 2026
+## AWS costos Ohio verificados — acceso temporal expirado — 24 de octubre de 2026
 
-- Usuario informa Free plan y **$100**. Inspección browser read-only confirma
-  Builder ID/GitHub, proyecto Happy Path, **us-east-2 (Ohio)**, **183 días** y MFA.
-  No es login root/IAM clásico; instrucciones anteriores corregidas.
-- AWS CLI oficial **2.38.5** instalado sólo para el usuario Mac; firma del paquete,
-  versión y ayuda local verificadas. No autorización, credenciales, MCP, IAM,
-  recursos ni cambios de plan. El Mac volvió a bloquearse antes de autorizar.
-- `aws login` heredaría permisos administrativos del proyecto: un perfil de
-  auditoría o filtro MCP read-only no los limita. Consentimiento del usuario
-  pendiente; sólo inventario será autorizado. Política ejemplo sigue sin aplicar.
-- Estimación x86 inicial **$22–24/mes**; trial ARM t4g.small publicado hasta fin de
-  2026 podría reducirlo a **$6–8/mes** temporalmente, sujeto a verificación de cuenta,
-  compatibilidad Linux ARM y tarifa posterior. Es cálculo previo de N. Virginia;
-  falta cotizar Ohio antes de aprobar. No promesa de 183 días gratis.
-- [Acceso, cálculo, fuentes y límites](AWS_ACCESS_AND_COST_REVIEW.md). Sin deploy,
-  upgrade de plan, cambios live ni lógica de aplicación. Validación local de JSON
-  y diff; suite de integración anterior sigue 773+1 omitido, tipos/build/CI verdes.
+- La sesión STS y el trust de 24 h expiraron según diseño; no renovados ni ampliados.
+  Conexión read-only validada el día anterior; no se presenta como acceso activo.
+- Tarifas públicas Ohio verificadas: t3.small $0.0208/h, t4g.small $0.0168/h,
+  gp3 $0.08/GB-mes, snapshot standard $0.05/GB-mes e IPv4 $0.005/h.
+- Candidato ARM 2 GiB + disco 20 GiB + IPv4: $6.25–8.25/mes con trial vigente;
+  $18.51–20.51/mes después, incluyendo reserva pequeña $1–3. Trial publicado hasta
+  2026-12-31, 750 h mensuales compartidas; aplicado en cuenta aún no verificado.
+  Forecast ilustrativo de 182 días: $82.96–94.93, sin garantía de saldo suficiente.
+- [Estimación, fuentes y riesgos](AWS_ACCESS_AND_COST_REVIEW.md). Próximo paso seguro:
+  validar Linux ARM sin crear hosting; confirmar dominio, oferta/créditos/quota y
+  backups antes de propuesta de recursos. Nuevo acceso IAM requiere aprobación.
+- Sólo documentación y plantillas IAM sin secretos; no deploy, recursos pagos,
+  upgrade, cambios PBX/7001/Calendar/datos live/main ni lógica de negocio.
+
+## AWS read-only verificado — 23 de octubre de 2026
+
+- Aprobación explícita del owner ejecutada: sólo rol `yibo-codex-audit`, política
+  inline `YiboReadOnlyInventory` y una sesión STS de una hora. Trust exclusivo al
+  rol de proyecto verificado, máximo 3600 s, trece acciones exactas y deny de todo
+  lo demás. Sin modificar roles existentes ni copiar credenciales admin al Mac.
+- Readback de trust/policies/duración correcto; **26/26 decisiones AWS** verificadas.
+  Simulación inicial omitió contexto regional y recibió deny de Organizations;
+  misma política con `aws:RequestedRegion=us-east-2` pasa. Ningún permiso ampliado.
+- Sesión real verificada en CloudShell y Mac: identity/inventory pasan y
+  `CreateVolume --dry-run` devuelve `UnauthorizedOperation`. No creación real.
+  Perfil `yibo-audit`, archivos privados fuera del repo, sin default/admin ni
+  renovación automática. Expira **2026-10-23 19:56:13 UTC**; nuevas sesiones bloqueadas
+  por trust después de **2026-10-24 18:53:41 UTC**. Registro histórico tras expiry.
+- Ohio: **0 EC2, 0 volúmenes EBS, 0 Elastic IPs**; VPC default y tres subnets.
+  `t3.small` y `t4g.small` disponibles (2 vCPU/2 GiB), marcados Free Tier eligible;
+  esto no confirma descuentos, créditos, cuotas ni hosting sin costo.
+- Usuario informa Free plan y **$100**. Browser previo confirmó Builder ID/GitHub,
+  proyecto Happy Path, **us-east-2**, **183 días** y MFA. Balance aún no verificado.
+- Próximo gate: cotizar Ohio, trial ARM/tarifa posterior y compatibilidad, dominio,
+  backups y runway real; luego aprobación explícita de recursos. Estimaciones
+  anteriores de N. Virginia son históricas; las de Ohio arriba las reemplazan.
+- [Autorización y pruebas](AWS_READ_ONLY_AUTHORIZATION.md),
+  [costos y límites](AWS_ACCESS_AND_COST_REVIEW.md). Sin deploy, main, cambios de
+  plan, PBX/7001/Calendar/datos live ni código runtime. JSON/diff validados; no se
+  repitió suite de aplicación (último estado: 773 pasan + 1 omitido, tipos/build/CI).
 
 ## AWS preparado — cuenta y despliegue pendientes — 23 de octubre de 2026
 
