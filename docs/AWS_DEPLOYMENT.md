@@ -1,21 +1,24 @@
 # AWS launch preparation
 
-23 October 2026. **Prepared locally, not deployed.** The owner selected AWS instead
-of Cloudflare and now reports a Free-plan account with $100 credits, 183 days
-remaining and registered MFA. Read-only browser inspection identified Builder ID
-GitHub sign-in, project Happy Path, and us-east-2 (Ohio). The local AWS CLI is
-installed, but CLI authorization, a hostname, server and billable resources remain
-unconfigured. See the current [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md).
+25 October 2026. **Validated locally on Linux ARM64, not deployed.** The owner
+selected AWS instead of Cloudflare. Read-only Billing inspection on October 24
+confirmed the Free plan, $100 unused credits and an April 23, 2027 plan deadline.
+The existing project is Happy Path in us-east-2 (Ohio), using Builder ID/GitHub
+sign-in with MFA. The approved audit connection was verified and has expired;
+it was not renewed. A hostname and hosting resources remain unconfigured.
+See the [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md) and
+[Linux ARM64 validation](AWS_ARM64_VALIDATION.md).
 
 ## Account action for the owner
 
 1. Account creation and Builder ID MFA are complete. Reuse this account and
    project. Do not create a duplicate account, root identity or IAM console user.
-2. Review the temporary CLI authorization before granting it. This new experience
-   grants human project administrators broad permissions; an audit profile name
-   or MCP read-only filter is not an IAM restriction. No AWS writes are authorized.
-3. Confirm the credit balance/expiry in AWS Settings → Billing, and provide an
-   existing domain/subdomain you control. Region is already designated us-east-2.
+2. The initial restricted CLI audit is complete. A fresh session needs separate
+   approval; do not reuse administrator credentials or silently extend the expired
+   audit trust. No hosting-resource writes are authorized.
+3. Provide an existing domain/subdomain you control. Credit balance and deadline
+   were verified in AWS Settings → Billing; recheck before resource approval.
+   Region is already designated us-east-2.
    Do not send passwords, access keys, tokens or payment details in chat.
 4. Review the Ohio-specific resource/cost proposal and approve provisioning
    separately. Review application instance-role permissions at that stage.
@@ -34,24 +37,28 @@ that automatic setup or change organization/advanced-feature settings incidental
 ## Smallest deployment that fits this application
 
 ```text
-Browser → approved HTTPS hostname:443 → Caddy on dedicated AWS EC2
+Browser → approved HTTPS hostname:443 → Caddy on dedicated AWS Linux host
                                        ├─ dashboard/dist (Vue assets)
                                        └─ /api/* → 127.0.0.1:3000 Fastify
-                                                      └─ regional SQLite on EBS
+                                                      └─ regional SQLite on persistent disk
 
 Later, separately approved:
 same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean Asterisk
                                                     ↔ existing Telnyx service
 ```
 
-- Start with **one** persistent Linux Node host. A `t3.small` (x86, 2 GiB) is a
-  candidate, subject to the account's eligibility, selected region, estimate and
-  load tests. AWS lists it among eligible types for new accounts. Eligibility
-  means credits can offset usage, not unlimited free 24/7 compute. ARM `t4g.small`
-  is an alternative after Linux ARM validation. Do not assume a 1 GiB host has
+- Start with **one** persistent Linux Node host with at least 2 GiB RAM. Linux
+  ARM64 validation now passes, making `t4g.small` the validated EC2 architecture
+  candidate; `t3.small` remains an x86 alternative. Eligibility means credits can
+  offset usage, not unlimited free 24/7 compute. Do not assume a 1 GiB host has
   enough headroom for simultaneous voice, API and builds.
   [EC2 Free Tier rules](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
-- Use encrypted gp3 EBS for the existing regional SQLite databases. One
+- **Budget candidate:** Lightsail's 2 GiB Linux/IPv4 bundle has a lower regular
+  price. Before selecting it, verify the actual Ubuntu blueprint/architecture,
+  account quota and secure off-host backup authentication; this ARM test does not
+  validate a different CPU target. Do not create both hosts. See the cost review
+  for the comparison and approval boundary.
+- Use persistent encrypted storage (gp3 EBS for EC2) for the existing regional SQLite databases. One
   authoritative writer/runtime; no autoscaling replicas, network-shared SQLite,
   Lambda, D1 or database migration. Startup can migrate a database: start only on
   a new synthetic volume until a backed-up production transition is approved.
@@ -65,7 +72,8 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
 - Reuse `deploy/node/yibo-api.service.example` for restart-on-failure, dedicated
   user, private files and `/var/lib/yibo` persistence. Enable/start it only after
   approval. It deliberately removes ARI/media variables, preventing an accidental
-  second phone application. Reboot/restart tests on AWS remain a release gate.
+  second phone application. Local systemd restart, crash recovery and VM reboot
+  passed; equivalent checks on the eventual AWS host remain a release gate.
 - Keep Caddy's TLS storage persistent and private under its service user. Public
   security-group ingress is only TCP 80/443; restrict management access. Fastify
   binds loopback. Do not expose 3000, 4317, 8088, SIP or RTP publicly on this host.
@@ -101,7 +109,7 @@ Cloudflare Worker/Access variables are not used in this AWS topology.
 | `OPENAI_API_KEY`, `OPENAI_REALTIME_MODEL` | Server-only provider key and approved supported model when AI is activated. Existing saved configuration/defaults remain authoritative. `OPENAI_ADMIN_KEY` is optional cost reporting, not necessary for login. |
 | `RESEND_API_KEY`, `YIBO_EMAIL_FROM` | Only for separately approved real email delivery. Existing disabled-provider behavior remains SKIPPED. |
 | ARI/Telnyx/media/Voice Lab settings | Absent in the first HTTP-only AWS phase. No phone-route or port 7001 change. |
-| `deploy/backup/*` | Existing online regional backup, verify and restic upload workflow; use a private encrypted off-host repository. Prefer an EC2 IAM role scoped to the approved S3 bucket/prefix instead of long-lived AWS keys. Restic encryption secret remains private. Validate restore into a separate directory. |
+| `deploy/backup/*` | Existing online regional backup, verify and restic upload workflow; use a private encrypted off-host repository. On EC2 prefer an IAM role scoped to the approved S3 bucket/prefix. Do not assume this instance-role mechanism exists on a Lightsail target; review its authentication before selecting it. Restic encryption secret remains private. Local backup/verify/isolated restore passed; off-host restore remains pending. |
 
 Do not share production SQLite between independent Mac and AWS writers or run two
 owners of the same Stasis application. The separate phone playback fix `8db12d1`
@@ -128,14 +136,21 @@ forwarding, no-store responses, blocked private paths and unavailable-upstream
 behavior. This does not test public DNS, a public certificate or AWS networking.
 [Caddy SPA/proxy pattern](https://caddyserver.com/docs/caddyfile/patterns),
 [configuration validation](https://caddyserver.com/docs/command-line#caddy-validate).
-Full application evidence is in [the combined integration report](launch/COMBINED_INTEGRATION.md).
+Full application evidence is in [the combined integration report](launch/COMBINED_INTEGRATION.md)
+and [Linux ARM64 validation](AWS_ARM64_VALIDATION.md): 773 tests passed, one optional
+live test skipped, both typechecks/build passed, and 23 synthetic runtime/voice/
+reboot checks passed. Production dashboard login rendered in the browser; real
+HTTP login and appointment workflows passed. No live provider calls were made.
 
 Before provisioning:
 
-1. Verify the owner-reported account allowances, region/residency, hostname
-   ownership and approved cost estimate. No IAM/DNS/EC2 change was made.
-2. Approve the exact EC2/EBS/address/backup/management-access proposal. Provision
-   isolated synthetic data first; no automatic production deployment workflow.
+1. Account plan/balance, Ohio and Linux ARM64 compatibility are verified. Confirm
+   hostname ownership, current quota and the selected target's architecture and
+   backup access. Review the conservative cost estimate without assuming trials.
+2. Approve the exact host/storage/address/backup/management-access proposal and
+   any narrowly scoped deployment authorization. Only then provision one host,
+   install the reviewed release and services, and enable HTTPS for synthetic
+   acceptance. No automatic production deployment workflow is authorized.
 
 Before public business acceptance:
 

@@ -1,11 +1,15 @@
-# AWS access and cost review — 24 October 2026
+# AWS access and cost review — 25 October 2026
 
 ## Current state
 
-The owner reports an active **Free plan and $100 credit balance**. Read-only Safari
-inspection confirmed the new AWS experience, project **Happy Path**, region
-**us-east-2 (Ohio)**, **183 days remaining**, and a registered Builder ID MFA device.
-The Builder ID uses GitHub sign-in. The credit balance has not been API-verified.
+Read-only Safari inspection of AWS Settings → Billing on October 24 confirmed
+**Free plan, $100.00 credits remaining, $0.00 due and $0.00 project usage**. The page
+displayed **182 days remaining, ending April 23, 2027**. The credits detail showed
+$100 issued October 23, zero used, and credit expiry October 23, 2027 06:21 UTC.
+That later credit expiry does **not** extend the six-month Free-plan deadline.
+These are observed console values, not an API billing forecast. Existing account
+inspection also confirmed project **Happy Path**, **us-east-2 (Ohio)**, Builder ID
+GitHub sign-in and registered MFA.
 The official **AWS CLI 2.38.5** is now installed for the Mac user only, under
 `~/.local/share/aws-cli`, with a binary at `~/.local/bin/aws`. The vendor installer
 verified the macOS package signature; `aws --version` and local login help passed.
@@ -53,9 +57,9 @@ or Agent Toolkit installation is required.
 [Temporary CLI login](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html),
 [MCP connection options](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/getting-started-aws-mcp-server.html).
 
-## Ohio hosting estimate — public rates verified 24 October
+## Ohio hosting estimate — public rates checked October 24–25
 
-Candidate, **not approved or provisioned**: one Linux `t4g.small` (2 vCPU/2 GiB),
+Validated ARM candidate, **not approved or provisioned**: one Linux `t4g.small` (2 vCPU/2 GiB),
 20 GiB total encrypted gp3 storage at baseline performance, one public IPv4,
 existing domain/DNS, and low initial traffic. Reuse the prepared Caddy + Node
 service, regional SQLite, and backup workflow. Keep Asterisk on its existing
@@ -63,14 +67,14 @@ DigitalOcean server and its routing unchanged. A single instance is a low-cost
 launch candidate, not a high-availability design; restore and load tests remain
 release gates. The Mac must not remain part of the eventual production path.
 
-| Component, 730 hours/month | x86 fallback `t3.small` | ARM `t4g.small` after trial | ARM during eligible trial |
-| --- | ---: | ---: | ---: |
-| Linux compute | $15.18 ($0.0208/h) | $12.26 ($0.0168/h) | $0 within 750 shared hours/month |
-| 20 GiB gp3 | $1.60 | $1.60 | $1.60 |
-| One public IPv4 | $3.65 | $3.65 | $3.65 |
-| Base subtotal | **$20.43** | **$17.51** | **$5.25** |
-| Small backup/log/request reserve | $1–3 | $1–3 | $1–3 |
-| Planning total | **$21.43–23.43** | **$18.51–20.51** | **$6.25–8.25** |
+| Component, 730 hours/month | x86 fallback `t3.small` | ARM `t4g.small` |
+| --- | ---: | ---: |
+| Linux compute | $15.18 ($0.0208/h) | $12.26 ($0.0168/h) |
+| 20 GiB gp3 | $1.60 | $1.60 |
+| One public IPv4 | $3.65 | $3.65 |
+| Base subtotal | **$20.43** | **$17.51** |
+| Small backup/log/request reserve | $1–3 | $1–3 |
+| Planning total | **$21.43–23.43** | **$18.51–20.51** |
 
 Compute rates come from AWS's [Ohio Linux pricing data](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20%28Ohio%29/Linux/index.json).
 AWS's [EBS pricing data](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ebs.json)
@@ -80,30 +84,54 @@ and changed blocks determine the bill. The reserve is a planning allowance, not
 a quoted bundle or cap. Public IPv4 is [$0.005/hour](https://aws.amazon.com/vpc/pricing/)
 for both used and idle allocated addresses. Extra gp3 IOPS/throughput are not proposed.
 
-AWS publishes a **750 aggregate monthly t4g.small hour trial through December 31,
-2026 UTC**, including Ohio, for new/existing customers. It is shared across the
-payer organization and covers compute only. Starting January 1, 2027, ordinary
-On-Demand rates apply if the instance continues running. Surplus CPU credits are
-extra. The account's applied offer and any other usage still need checking in
-Billing; EC2's `FreeTierEligible=true` is not proof of a zero bill.
-[T4g trial terms](https://aws.amazon.com/ec2/faqs/).
+AWS publishes a 750-hour monthly t4g.small trial through December 31, 2026, with
+regular pricing from January 1. However, AWS's Free-plan rules exclude other
+promotional discounts. **Do not assume the trial stacks with this account's
+Free plan.** The earlier $6.25–8.25/month trial estimate is conditional and is not
+the launch budget. An account-specific applied offer would need separate proof;
+`FreeTierEligible=true` alone does not provide it. Surplus CPU credits cost extra.
+[T4g trial terms](https://aws.amazon.com/ec2/faqs/),
+[Free-plan restrictions](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html).
+
+### Lower regular-cost candidate: Lightsail
+
+The Linux **2 GiB / 2 vCPU / 60 GB SSD / public IPv4** bundle is **$12/month**, with
+3 TB included transfer. IPv4/storage are already included; do not add EC2's
+separate charges. Allowing $1–3 for small backups/logs gives **$13–15/month**.
+[Official bundle table](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-bundles.html).
+Snapshots are additional; a stopped instance still accrues charges until deleted.
+New customers use Free Tier credits, not the older Lightsail trial offer.
+[Lightsail billing rules](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html).
+
+AWS explicitly lists Lightsail, EC2 and EBS as supported in this account's **new
+experience Free Tier**. This establishes documented plan eligibility, not an
+observed Lightsail quota or permission in Happy Path.
+[Supported services](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html).
+The current expired audit role did not include Lightsail inventory actions.
 
 ### Credit runway and recommendation
 
-Illustration only: starting October 24 and running to April 24 (182 days, based on
-183 days reported the previous day), there are 69 trial days and 113 post-trial
-days. With the published trial applied, unchanged rates, one instance, and the
-$1–3/month reserve, estimated AWS usage is **$82.96–94.93**. This leaves little
-room within the reported $100. Exact account expiry/balance and applied credits
-remain unverified. Do not promise six months free or 24/7 service after expiry.
+At regular EC2 rates, $100 covers about **4.9–5.4 months** of the ARM estimate.
+An illustrative 180-day October 25 → April 23 run is **$109.56–121.40**, assuming
+730-hour months and the stated reserve. It can exhaust credits before the plan
+deadline. The earlier trial-based six-month forecast is superseded.
 
-**Recommended next step:** validate the existing app on Linux ARM at no hosting
-cost before proposing `t4g.small`. In particular check native SQLite dependencies,
-production startup/restart, persistence, and synthetic load. If ARM validation
-fails, keep x86 as a fallback; its planning cost consumes $100 in about 4.3–4.7
-months. Do not choose a smaller RAM size or Spot just to advertise free hosting.
+**Cost recommendation:** shortlist one **2 GiB Lightsail Ubuntu host** for the
+lowest regular cost among these 2 GiB options. Six full months at $13–15/month
+would consume **$78–90**, before exclusions below. First inspect its actual Ubuntu
+blueprint/CPU architecture, account quota and secure backup authentication, then
+validate any target differing from the tested ARM64 environment. Do not assume
+EC2 instance-profile backup authentication transfers unchanged to Lightsail.
+No Lightsail instance or deployment authorization has been created.
 
-Use Standard CPU-credit mode for the initial synthetic evaluation to avoid
+**Validated ARM alternative:** `t4g.small` with the existing EC2 service/backup
+design. The [local Linux ARM64 validation](AWS_ARM64_VALIDATION.md) passed all
+automated checks, real SQLite persistence/restore and synthetic Voice Lab sessions.
+It is not a Graviton concurrency/load benchmark. If Lightsail's target/access
+constraints make it unsuitable, use this option with an explicitly approved
+credit runway. Do not choose 1 GiB or Spot solely to reduce the advertised cost.
+
+For EC2, use Standard CPU-credit mode for the initial synthetic evaluation to avoid
 surplus CPU charges; measure throttling before real voice use. Credits do not
 cover existing DigitalOcean, Telnyx or direct OpenAI charges. Totals exclude domain
 registration, taxes, excess transfer, storage growth, and larger backup/log usage.
@@ -117,10 +145,13 @@ service afterward needs a separately approved funding/continuity decision.
 1. **Completed:** account/region identified, local CLI installed, and the approved
    read-only role/session verified from the Mac. Observe its expiry; administrator
    CLI login and broader access remain unauthorized.
-2. **Public pricing complete; account checks remain:** verify the applied trial,
-   credits/expiry and vCPU quota; confirm the domain; complete Linux ARM validation
-   and a backup/restore plan before the final resource proposal. A new read-only
-   session/trust extension needs fresh explicit approval; none was issued.
-3. Obtain explicit approval for infrastructure, then start with synthetic data.
+2. **Completed:** Free-plan balance/deadline inspected read-only; ARM64 full suite,
+   typechecks, build, runtime, reboot and local backup/restore validated at zero
+   hosting cost. Temporary VM stopped; source and evidence preserved.
+3. **Next safe step:** inspect the selected Lightsail target and quota read-only,
+   settle off-host backup access, and confirm the owner's hostname. Any new or
+   expanded audit session needs explicit approval; do not silently extend IAM.
+   Prepare one exact resource/cost proposal, with EC2 ARM as the tested alternative.
+4. Obtain explicit approval for infrastructure, then start with synthetic data.
    Existing hosted OAuth, Voice Lab, backup and real-call gates remain in
    [AWS_DEPLOYMENT.md](AWS_DEPLOYMENT.md). No production deployment is authorized.

@@ -3,6 +3,29 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS Linux ARM64 validado — hosting aún no creado — 25 de octubre de 2026
+
+- Fuente `2232ade`, rama `codex/launch-integration-reviewed`, validada en VM local
+  Ubuntu 24.04.5 ARM64, 2 vCPU/2 GiB, Node 22.23.4 y pnpm 11.19.0. Sin secretos
+  live ni cambios runtime: **773 tests pasan, 1 live opcional omitido**, ambos
+  typechecks, build, templates Asterisk y cost model pasan.
+- **23 checks adicionales**: 14 API/Caddy/SQLite/backup/restore/restart, 5 Voice Lab
+  WebSocket sintético y 4 reboot/autostart/persistencia. Browser muestra login;
+  login y appointment CRUD probados por HTTP. Calendar real y voz humana pendientes.
+- Sin defecto ARM64 encontrado. Corregida sólo regla de forwarding de la VM
+  temporal; VM detenida al terminar y puertos liberados. Sesiones admin requieren
+  nuevo login tras restart (comportamiento existente, no pérdida de cuenta/datos).
+- Billing leído el 24: Free plan, **$100 sin usar**, $0 due/uso; vence plan
+  **2027-04-23**. Expiry del crédito 2027-10-23 no extiende el plan.
+- Estimación anterior con trial queda sustituida: no asumir descuentos adicionales
+  en Free plan. EC2 ARM **$18.51–20.51/mes**; candidato económico Lightsail 2 GiB
+  **$13–15/mes** con reserva. Antes de elegir Lightsail: revisar target/arquitectura,
+  cuota y autenticación de backups. Ningún recurso o sesión IAM nueva creado.
+- [Evidencia ARM64 y próximos gates](AWS_ARM64_VALIDATION.md),
+  [costos/eligibilidad](AWS_ACCESS_AND_COST_REVIEW.md). Próximo paso: revisión
+  read-only del candidato/hostname, propuesta concreta y aprobación antes de
+  provisionar. Sin main/merge/deploy, PBX/7001/Calendar/Cloudflare/datos live.
+
 ## AWS costos Ohio verificados — acceso temporal expirado — 24 de octubre de 2026
 
 - La sesión STS y el trust de 24 h expiraron según diseño; no renovados ni ampliados.
