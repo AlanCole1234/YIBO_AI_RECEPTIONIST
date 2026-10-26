@@ -1,0 +1,12 @@
+# SYNTHETIC STAGING ONLY. No certificate is requested by caddy adapt/validate.
+# Use Caddy 2.11.7; this explicitly selects public IP certificate support.
+# Start only after approval for the assigned static IP and ACME registration.
+{
+	cert_issuer acme https://acme-v02.api.letsencrypt.org/directory {
+		profile shortlived
+	}
+}
+
+# Keep dashboard/API/private-route behavior in the already tested AWS template.
+# The service reads this file in the immutable release, preserving relative import.
+import ../Caddyfile.example

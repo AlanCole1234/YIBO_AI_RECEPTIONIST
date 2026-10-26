@@ -3,6 +3,29 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS Lightsail staging preparado — aprobación pendiente — 25 de octubre de 2026
+
+- Inventario read-only Ohio: 0 instancias/vCPU usados, cuota 10 vCPU; 0 IPs estáticas,
+  cuota 5; 0 buckets. `ubuntu_24_04` activo, listing oficial **x86-64**.
+- Propuesta concreta: `small_3_0`, 2 GB/2 vCPU/60 GB/IPv4/3 TB, **$12/mes**;
+  bucket privado 5 GB **$1/mes**; base **$13/mes**, $78 por seis meses completos,
+  sin extras/tax/overages. Free plan observado $100 sin usar; vence 2027-04-23.
+- Sin dominio: wrapper Caddy para certificado público de IP estática, perfil
+  `shortlived`, manteniendo las rutas AWS existentes. Emisión/renovación reales
+  pendientes. Sin DNS inventado, compra de dominio ni cambios de confianza browser.
+- Templates sólo sintéticos: DB persistente `staging-us.sqlite`, preflight que
+  rechaza proveedores/datos no staging, services con restart, backup consistente
+  y cifrado, SSH browser-only y 80/443 públicos. Reutiliza código existente.
+- **37/37 tests focales**, ambos typechecks/build Linux Node 22.23.4 y **7 checks**
+  de Caddy/systemd/ingress pasan. Suite ARM previa 773 + 1 live omitido conservada;
+  no se confunde con ejecución nativa x86/capacidad del host AWS aún no creado.
+- Pendiente tras aprobación: primer boot x86, HTTPS real, metadata-auth de backup,
+  restore off-host, reboot/browser y renovación. Voz/Calendar reales siguen gates
+  separados; nada de PBX/7001/main/Cloudflare/OAuth/producción modificado.
+- [Propuesta, archivos y procedimiento](../deploy/aws/lightsail/README.md).
+  Próximo paso: aprobación explícita del host/IP/bucket/acceso antes de gastar
+  créditos. Inspección usó console existente; no nuevo rol/sesión IAM ni secretos.
+
 ## AWS Linux ARM64 validado — hosting aún no creado — 25 de octubre de 2026
 
 - Fuente `2232ade`, rama `codex/launch-integration-reviewed`, validada en VM local

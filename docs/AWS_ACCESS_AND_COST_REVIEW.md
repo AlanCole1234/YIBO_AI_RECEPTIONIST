@@ -95,17 +95,22 @@ the launch budget. An account-specific applied offer would need separate proof;
 
 ### Lower regular-cost candidate: Lightsail
 
-The Linux **2 GiB / 2 vCPU / 60 GB SSD / public IPv4** bundle is **$12/month**, with
-3 TB included transfer. IPv4/storage are already included; do not add EC2's
-separate charges. Allowing $1–3 for small backups/logs gives **$13–15/month**.
+Read-only account inspection on October 25 confirmed `small_3_0`: **2 GB / 2 vCPU /
+60 GB SSD / one public IPv4**, **$12/month**, 3,072 GB transfer. IPv4/storage are
+already included; do not add EC2's separate charges. The available private backup
+bucket `small_1_0` adds **$1/month** for 5 GB storage/25 GB transfer. The concrete
+base proposal is **$13/month**, before overage, optional snapshots and tax.
 [Official bundle table](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-bundles.html).
 Snapshots are additional; a stopped instance still accrues charges until deleted.
 New customers use Free Tier credits, not the older Lightsail trial offer.
 [Lightsail billing rules](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html).
 
 AWS explicitly lists Lightsail, EC2 and EBS as supported in this account's **new
-experience Free Tier**. This establishes documented plan eligibility, not an
-observed Lightsail quota or permission in Happy Path.
+experience Free Tier**. The actual Ohio quota is **10 vCPUs, zero used**, and
+**5 static IPs, zero used**; no Lightsail buckets exist there. The active
+`ubuntu_24_04` blueprint links to Canonical's **64-bit x86** image. These results
+were read through the existing owner console/CloudShell, not by renewing the
+expired audit role. No AWS write operation or credential transfer occurred.
 [Supported services](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html).
 The current expired audit role did not include Lightsail inventory actions.
 
@@ -116,13 +121,14 @@ An illustrative 180-day October 25 → April 23 run is **$109.56–121.40**, ass
 730-hour months and the stated reserve. It can exhaust credits before the plan
 deadline. The earlier trial-based six-month forecast is superseded.
 
-**Cost recommendation:** shortlist one **2 GiB Lightsail Ubuntu host** for the
-lowest regular cost among these 2 GiB options. Six full months at $13–15/month
-would consume **$78–90**, before exclusions below. First inspect its actual Ubuntu
-blueprint/CPU architecture, account quota and secure backup authentication, then
-validate any target differing from the tested ARM64 environment. Do not assume
-EC2 instance-profile backup authentication transfers unchanged to Lightsail.
-No Lightsail instance or deployment authorization has been created.
+**Cost recommendation:** one **2 GB Lightsail Ubuntu host plus private backup
+bucket**, **$13/month base**, or **$78 for six full months**, before exclusions
+below. The [concrete proposal](../deploy/aws/lightsail/README.md) reuses Node,
+regional SQLite, Caddy and existing backups. Native Lightsail bucket resource
+access avoids long-lived keys; actual restic authentication/restore and native
+x86 execution are first-host gates, not claimed results of the ARM test. The
+owner has no domain; public-IP HTTPS is prepared and locally validated, but no
+certificate or AWS address has been issued. No provisioning is authorized yet.
 
 **Validated ARM alternative:** `t4g.small` with the existing EC2 service/backup
 design. The [local Linux ARM64 validation](AWS_ARM64_VALIDATION.md) passed all
@@ -148,10 +154,11 @@ service afterward needs a separately approved funding/continuity decision.
 2. **Completed:** Free-plan balance/deadline inspected read-only; ARM64 full suite,
    typechecks, build, runtime, reboot and local backup/restore validated at zero
    hosting cost. Temporary VM stopped; source and evidence preserved.
-3. **Next safe step:** inspect the selected Lightsail target and quota read-only,
-   settle off-host backup access, and confirm the owner's hostname. Any new or
-   expanded audit session needs explicit approval; do not silently extend IAM.
-   Prepare one exact resource/cost proposal, with EC2 ARM as the tested alternative.
+3. **Prepared:** Lightsail image/bundle/quota inspected read-only; no domain owned.
+   Staging files, IP HTTPS, restricted ingress and bucket-resource-access proposal
+   prepared. **37 focused tests**, both typechecks/build and seven Linux config
+   checks pass. No business/runtime logic changed. Any new or expanded IAM session
+   still needs explicit approval; the Mac's expired audit credentials stay expired.
 4. Obtain explicit approval for infrastructure, then start with synthetic data.
    Existing hosted OAuth, Voice Lab, backup and real-call gates remain in
    [AWS_DEPLOYMENT.md](AWS_DEPLOYMENT.md). No production deployment is authorized.

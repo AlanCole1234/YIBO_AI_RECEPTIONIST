@@ -5,9 +5,13 @@ selected AWS instead of Cloudflare. Read-only Billing inspection on October 24
 confirmed the Free plan, $100 unused credits and an April 23, 2027 plan deadline.
 The existing project is Happy Path in us-east-2 (Ohio), using Builder ID/GitHub
 sign-in with MFA. The approved audit connection was verified and has expired;
-it was not renewed. A hostname and hosting resources remain unconfigured.
+it was not renewed. Hosting resources remain unconfigured. The owner has no
+domain; an IP-certificate staging option is now prepared, with issuance pending.
 See the [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md) and
-[Linux ARM64 validation](AWS_ARM64_VALIDATION.md).
+[Linux ARM64 validation](AWS_ARM64_VALIDATION.md). The concrete next proposal is
+[Lightsail synthetic staging](../deploy/aws/lightsail/README.md): **$13/month base**,
+including one 2 GB host and a private 5 GB backup bucket. Read-only account checks
+confirmed available quota and an active Ubuntu 24.04 **x86-64** image. No AWS writes.
 
 ## Account action for the owner
 
@@ -16,12 +20,15 @@ See the [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md) and
 2. The initial restricted CLI audit is complete. A fresh session needs separate
    approval; do not reuse administrator credentials or silently extend the expired
    audit trust. No hosting-resource writes are authorized.
-3. Provide an existing domain/subdomain you control. Credit balance and deadline
-   were verified in AWS Settings → Billing; recheck before resource approval.
-   Region is already designated us-east-2.
+3. No domain purchase is required for initial synthetic staging: the prepared
+   Caddy wrapper requests a trusted IP certificate for the future assigned static
+   IPv4. Issuance and renewal must be verified after approval. A business hostname
+   remains a later gate. Recheck credit balance/deadline before resource approval;
+   region is already designated us-east-2.
    Do not send passwords, access keys, tokens or payment details in chat.
 4. Review the Ohio-specific resource/cost proposal and approve provisioning
-   separately. Review application instance-role permissions at that stage.
+   separately, including restricted management access and Lightsail bucket resource
+   access. Do not assume EC2 instance roles are interchangeable with Lightsail.
 
 Current new-account rules provide $100 initial credits and opportunities to earn
 another $100. The Free plan lasts until six months or credit exhaustion, whichever
@@ -37,7 +44,7 @@ that automatic setup or change organization/advanced-feature settings incidental
 ## Smallest deployment that fits this application
 
 ```text
-Browser → approved HTTPS hostname:443 → Caddy on dedicated AWS Linux host
+Browser → approved HTTPS address:443 → Caddy on dedicated AWS Linux host
                                        ├─ dashboard/dist (Vue assets)
                                        └─ /api/* → 127.0.0.1:3000 Fastify
                                                       └─ regional SQLite on persistent disk
@@ -53,11 +60,12 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
   offset usage, not unlimited free 24/7 compute. Do not assume a 1 GiB host has
   enough headroom for simultaneous voice, API and builds.
   [EC2 Free Tier rules](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
-- **Budget candidate:** Lightsail's 2 GiB Linux/IPv4 bundle has a lower regular
-  price. Before selecting it, verify the actual Ubuntu blueprint/architecture,
-  account quota and secure off-host backup authentication; this ARM test does not
-  validate a different CPU target. Do not create both hosts. See the cost review
-  for the comparison and approval boundary.
+- **Budget candidate checked:** Lightsail `small_3_0`, Ubuntu `ubuntu_24_04`, Ohio,
+  x86-64, 2 GB/2 vCPU/60 GB, $12/month. Account quota has room; private backup bucket
+  adds $1/month. The [staging runbook](../deploy/aws/lightsail/README.md) covers the
+  exact files, IP HTTPS, security and approval boundary. Actual x86 host execution
+  and bucket authentication remain staging gates; ARM validation is not a native
+  x86 benchmark. Do not create both EC2 and Lightsail hosts.
 - Use persistent encrypted storage (gp3 EBS for EC2) for the existing regional SQLite databases. One
   authoritative writer/runtime; no autoscaling replicas, network-shared SQLite,
   Lambda, D1 or database migration. Startup can migrate a database: start only on
@@ -85,7 +93,7 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
   not enforce a spending cap. [AWS VPC pricing](https://aws.amazon.com/vpc/pricing/).
 
 This is a low-cost single-host candidate, not high availability. Host failure
-causes downtime until recovery. A stable approved hostname and public address,
+causes downtime until recovery. A stable approved HTTPS address,
 off-host backups, a tested restore and monitoring are prerequisites for launch.
 There is **no working AWS URL yet** and no invented `API_ORIGIN` value. The
 Cloudflare Worker/Access variables are not used in this AWS topology.
@@ -109,7 +117,8 @@ Cloudflare Worker/Access variables are not used in this AWS topology.
 | `OPENAI_API_KEY`, `OPENAI_REALTIME_MODEL` | Server-only provider key and approved supported model when AI is activated. Existing saved configuration/defaults remain authoritative. `OPENAI_ADMIN_KEY` is optional cost reporting, not necessary for login. |
 | `RESEND_API_KEY`, `YIBO_EMAIL_FROM` | Only for separately approved real email delivery. Existing disabled-provider behavior remains SKIPPED. |
 | ARI/Telnyx/media/Voice Lab settings | Absent in the first HTTP-only AWS phase. No phone-route or port 7001 change. |
-| `deploy/backup/*` | Existing online regional backup, verify and restic upload workflow; use a private encrypted off-host repository. On EC2 prefer an IAM role scoped to the approved S3 bucket/prefix. Do not assume this instance-role mechanism exists on a Lightsail target; review its authentication before selecting it. Restic encryption secret remains private. Local backup/verify/isolated restore passed; off-host restore remains pending. |
+| `deploy/backup/*` | Existing online regional backup, verify and restic upload workflow. EC2 can use a scoped instance role; the Lightsail proposal uses native same-region bucket resource access without static keys. Verify actual metadata authentication and off-host restore before enabling the timer. Restic encryption secret remains private. |
+| `deploy/aws/lightsail/*` | Synthetic-only environment, startup guard, IP-certificate Caddy wrapper, service drop-ins, ingress proposal and runbook. Reuses the existing API/proxy/backup implementation; not installed or enabled by builds. |
 
 Do not share production SQLite between independent Mac and AWS writers or run two
 owners of the same Stasis application. The separate phone playback fix `8db12d1`
@@ -144,9 +153,11 @@ HTTP login and appointment workflows passed. No live provider calls were made.
 
 Before provisioning:
 
-1. Account plan/balance, Ohio and Linux ARM64 compatibility are verified. Confirm
-   hostname ownership, current quota and the selected target's architecture and
-   backup access. Review the conservative cost estimate without assuming trials.
+1. Account plan/balance, Ohio, Linux ARM64 behavior, Lightsail quota and the x86
+   Ubuntu image are verified. Review the concrete $13/month staging proposal and
+   the IP-certificate option; no owned domain is currently available. Recheck quota
+   and balance before creation. Target execution and off-host backup authentication
+   require the approved host and must pass before claiming staging success.
 2. Approve the exact host/storage/address/backup/management-access proposal and
    any narrowly scoped deployment authorization. Only then provision one host,
    install the reviewed release and services, and enable HTTPS for synthetic
