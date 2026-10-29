@@ -3,7 +3,7 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS staging desplegado y validado — 28 de octubre de 2026
+## AWS staging desplegado y validado — 28–29 de octubre de 2026
 
 - Aprobado y creado: un Lightsail Ubuntu 24.04 x86-64, 2 GB/60 GB, IP estática
   adjunta y bucket privado cifrado; base **$13/mes**, sin recursos adicionales.
@@ -14,8 +14,11 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - **37/37 tests focales**, ambos typechecks/build en host y Mac; **17 checks**
   HTTPS/login/roles/tenant/appointments/restart/SQLite. Restore cifrado off-host,
   primer backup automático, crash recovery Caddy y reboot completo pasan.
-- Pendientes: contraseña/login privado del owner, copia independiente del secreto
-  de recuperación, primera renovación natural TLS y gates de proveedores reales.
+- Owner completado el 29: contraseña ingresada privadamente, cuenta/rol activo
+  verificado en SQLite, nuevo backup cifrado exitoso y login manual confirmado
+  visualmente en agenda con slots disponibles. Sin leer/copiar la contraseña.
+- Pendientes: copia independiente del secreto de recuperación, primera renovación
+  natural TLS y gates de proveedores reales.
   No cambios en main, PBX/7001, Cloudflare, Google live ni bases de producción.
 - [Evidencia y límites](AWS_STAGING_VALIDATION.md). Free plan muestra $100 y 178
   días restantes; la facturación puede reflejar el consumo con retraso.

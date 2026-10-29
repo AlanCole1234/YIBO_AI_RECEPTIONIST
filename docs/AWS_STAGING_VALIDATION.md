@@ -1,6 +1,6 @@
 # AWS synthetic staging validation
 
-28 October 2026 (server checks continued into 29 October UTC).
+28 October 2026 deployment; owner-access follow-up verified 29 October 2026.
 
 ## Deployed scope
 
@@ -68,6 +68,7 @@ curl --fail "https://$YIBO_PUBLIC_HOSTNAME/api/health"
 | Synthetic HTTPS runtime acceptance | **17 checks passed** |
 | Dashboard, hashed assets, SPA navigation | Pass; browser login screen renders normally |
 | Login/logout and Secure/HttpOnly/SameSite cookie | Pass through deployed HTTPS with generated synthetic accounts |
+| Owner's private password setup and manual browser login | Pass on 29 October; active owner account verified, office schedule and available slots visibly loaded |
 | Invalid Origin, read-only mutation, tenant-selector rejection | Pass |
 | Availability, booking, idempotent replay, double-booking rejection | Pass |
 | Reschedule same synthetic event, cancel, event history | Pass; no Google request |
@@ -94,12 +95,15 @@ Prior full validation remains **773 passed / 1 optional live test skipped** on
 Linux ARM64. Application logic did not change, so the full suite was not repeated.
 The focused suite and production build were rerun for this deployment checkpoint.
 
-## Still required
+## Owner access and remaining gates
 
-- **Owner access:** create separate synthetic `owner@example.test` through the
-  existing interactive admin CLI against staging. The owner enters a fresh
-  password privately, then signs into the staging URL. Generated acceptance
-  credentials are not the owner's password. Owner browser login remains manual.
+- **Owner access is complete:** on 29 October the owner privately created the
+  separate synthetic `owner@example.test` account using the existing interactive
+  admin CLI. A read-only database check confirmed its active owner role. A fresh
+  encrypted off-host backup completed successfully afterward, and the owner's
+  browser sign-in visibly reached the office schedule with available slots.
+  The password was not read or copied into chat, code or documentation. This
+  confirms staging access only; real providers remain disabled.
 - **Recovery vault:** preserve an independent copy of the private restic password
   in the owner's recovery vault. Off-host encrypted data alone cannot recover
   from total host loss without that key.

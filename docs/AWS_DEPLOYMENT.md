@@ -1,6 +1,6 @@
 # AWS deployment and remaining launch gates
 
-28 October 2026. **Approved synthetic Lightsail staging is deployed.** Reuse the
+29 October 2026. **Approved synthetic Lightsail staging is deployed.** Reuse the
 existing Happy Path project in Ohio and its one staging host, attached static IP
 and private backup bucket; do not provision duplicates. Base cost is **$13/month**.
 The assigned IP serves the dashboard and API with a trusted HTTPS certificate.
@@ -17,8 +17,10 @@ Live providers remain disabled. The separate DigitalOcean phone system is unchan
 2. The initial read-only CLI audit expired and was not extended. Approved staging
    was provisioned through the existing owner console; no AWS administrator
    credentials were copied to the Mac. Additional resources still need approval.
-3. Complete private staging-owner password/browser login and preserve the restic
-   recovery key separately. Do not send passwords, keys or tokens in chat.
+3. Private staging-owner password setup and manual browser login passed on October
+   29; the saved owner account is included in a successful encrypted backup.
+   Preserve the restic recovery key separately in the owner's recovery vault;
+   that step remains pending. Do not send passwords, keys or tokens in chat.
 4. No domain purchase was needed for the initial IP certificate. Observe its first
    natural renewal; review an owned business hostname before real-provider setup.
    AWS still displayed $100 credits / 178 Free-plan days on October 28, with usage
