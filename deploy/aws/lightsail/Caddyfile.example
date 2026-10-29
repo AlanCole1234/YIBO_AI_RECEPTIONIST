@@ -2,6 +2,9 @@
 # Use Caddy 2.11.7; this explicitly selects public IP certificate support.
 # Start only after approval for the assigned static IP and ACME registration.
 {
+	# IP-address clients omit SNI. Select this site's managed certificate even
+	# behind Lightsail's public-to-private address translation.
+	default_sni {$YIBO_PUBLIC_HOSTNAME:yibo.invalid}
 	cert_issuer acme https://acme-v02.api.letsencrypt.org/directory {
 		profile shortlived
 	}

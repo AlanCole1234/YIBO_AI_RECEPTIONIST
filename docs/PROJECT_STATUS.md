@@ -3,7 +3,24 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS Lightsail staging preparado — aprobación pendiente — 25 de octubre de 2026
+## AWS staging desplegado y validado — 28 de octubre de 2026
+
+- Aprobado y creado: un Lightsail Ubuntu 24.04 x86-64, 2 GB/60 GB, IP estática
+  adjunta y bucket privado cifrado; base **$13/mes**, sin recursos adicionales.
+- Release inmutable `282f5c7`; dashboard/API con HTTPS público válido, Fastify
+  loopback y SQLite staging persistente. Proveedores reales siguen deshabilitados.
+- Corregida selección del certificado para clientes IP sin SNI mediante
+  `default_sni`; sin cambiar rutas API, lógica de negocio ni certificados cliente.
+- **37/37 tests focales**, ambos typechecks/build en host y Mac; **17 checks**
+  HTTPS/login/roles/tenant/appointments/restart/SQLite. Restore cifrado off-host,
+  primer backup automático, crash recovery Caddy y reboot completo pasan.
+- Pendientes: contraseña/login privado del owner, copia independiente del secreto
+  de recuperación, primera renovación natural TLS y gates de proveedores reales.
+  No cambios en main, PBX/7001, Cloudflare, Google live ni bases de producción.
+- [Evidencia y límites](AWS_STAGING_VALIDATION.md). Free plan muestra $100 y 178
+  días restantes; la facturación puede reflejar el consumo con retraso.
+
+## Histórico: AWS Lightsail staging preparado — 25 de octubre de 2026
 
 - Inventario read-only Ohio: 0 instancias/vCPU usados, cuota 10 vCPU; 0 IPs estáticas,
   cuota 5; 0 buckets. `ubuntu_24_04` activo, listing oficial **x86-64**.

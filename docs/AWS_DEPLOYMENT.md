@@ -1,34 +1,29 @@
-# AWS launch preparation
+# AWS deployment and remaining launch gates
 
-25 October 2026. **Validated locally on Linux ARM64, not deployed.** The owner
-selected AWS instead of Cloudflare. Read-only Billing inspection on October 24
-confirmed the Free plan, $100 unused credits and an April 23, 2027 plan deadline.
-The existing project is Happy Path in us-east-2 (Ohio), using Builder ID/GitHub
-sign-in with MFA. The approved audit connection was verified and has expired;
-it was not renewed. Hosting resources remain unconfigured. The owner has no
-domain; an IP-certificate staging option is now prepared, with issuance pending.
-See the [access and cost review](AWS_ACCESS_AND_COST_REVIEW.md) and
-[Linux ARM64 validation](AWS_ARM64_VALIDATION.md). The concrete next proposal is
-[Lightsail synthetic staging](../deploy/aws/lightsail/README.md): **$13/month base**,
-including one 2 GB host and a private 5 GB backup bucket. Read-only account checks
-confirmed available quota and an active Ubuntu 24.04 **x86-64** image. No AWS writes.
+28 October 2026. **Approved synthetic Lightsail staging is deployed.** Reuse the
+existing Happy Path project in Ohio and its one staging host, attached static IP
+and private backup bucket; do not provision duplicates. Base cost is **$13/month**.
+The assigned IP serves the dashboard and API with a trusted HTTPS certificate.
+Login/appointments, encrypted off-host restore and automatic restart/reboot checks
+passed with synthetic data. See [actual results and remaining manual
+steps](AWS_STAGING_VALIDATION.md), [staging configuration](../deploy/aws/lightsail/README.md),
+[cost review](AWS_ACCESS_AND_COST_REVIEW.md) and [ARM64 evidence](AWS_ARM64_VALIDATION.md).
+Live providers remain disabled. The separate DigitalOcean phone system is unchanged.
 
 ## Account action for the owner
 
 1. Account creation and Builder ID MFA are complete. Reuse this account and
    project. Do not create a duplicate account, root identity or IAM console user.
-2. The initial restricted CLI audit is complete. A fresh session needs separate
-   approval; do not reuse administrator credentials or silently extend the expired
-   audit trust. No hosting-resource writes are authorized.
-3. No domain purchase is required for initial synthetic staging: the prepared
-   Caddy wrapper requests a trusted IP certificate for the future assigned static
-   IPv4. Issuance and renewal must be verified after approval. A business hostname
-   remains a later gate. Recheck credit balance/deadline before resource approval;
-   region is already designated us-east-2.
-   Do not send passwords, access keys, tokens or payment details in chat.
-4. Review the Ohio-specific resource/cost proposal and approve provisioning
-   separately, including restricted management access and Lightsail bucket resource
-   access. Do not assume EC2 instance roles are interchangeable with Lightsail.
+2. The initial read-only CLI audit expired and was not extended. Approved staging
+   was provisioned through the existing owner console; no AWS administrator
+   credentials were copied to the Mac. Additional resources still need approval.
+3. Complete private staging-owner password/browser login and preserve the restic
+   recovery key separately. Do not send passwords, keys or tokens in chat.
+4. No domain purchase was needed for the initial IP certificate. Observe its first
+   natural renewal; review an owned business hostname before real-provider setup.
+   AWS still displayed $100 credits / 178 Free-plan days on October 28, with usage
+   potentially not yet posted. Monitor billing and storage; the plan deadline is
+   April 23, 2027. Do not assume permanent free operation.
 
 Current new-account rules provide $100 initial credits and opportunities to earn
 another $100. The Free plan lasts until six months or credit exhaustion, whichever
@@ -63,9 +58,9 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
 - **Budget candidate checked:** Lightsail `small_3_0`, Ubuntu `ubuntu_24_04`, Ohio,
   x86-64, 2 GB/2 vCPU/60 GB, $12/month. Account quota has room; private backup bucket
   adds $1/month. The [staging runbook](../deploy/aws/lightsail/README.md) covers the
-  exact files, IP HTTPS, security and approval boundary. Actual x86 host execution
-  and bucket authentication remain staging gates; ARM validation is not a native
-  x86 benchmark. Do not create both EC2 and Lightsail hosts.
+  exact files, IP HTTPS, security and approval boundary. Actual x86 execution and
+  instance-to-bucket authentication now pass. This is not a concurrent-call
+  capacity benchmark. Do not create a second EC2 or Lightsail host.
 - Use persistent encrypted storage (gp3 EBS for EC2) for the existing regional SQLite databases. One
   authoritative writer/runtime; no autoscaling replicas, network-shared SQLite,
   Lambda, D1 or database migration. Startup can migrate a database: start only on
@@ -81,7 +76,7 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
   user, private files and `/var/lib/yibo` persistence. Enable/start it only after
   approval. It deliberately removes ARI/media variables, preventing an accidental
   second phone application. Local systemd restart, crash recovery and VM reboot
-  passed; equivalent checks on the eventual AWS host remain a release gate.
+  passed; equivalent checks now also pass on the approved AWS staging host.
 - Keep Caddy's TLS storage persistent and private under its service user. Public
   security-group ingress is only TCP 80/443; restrict management access. Fastify
   binds loopback. Do not expose 3000, 4317, 8088, SIP or RTP publicly on this host.
@@ -95,8 +90,9 @@ same authoritative YIBO runtime ↔ private network ↔ existing DigitalOcean As
 This is a low-cost single-host candidate, not high availability. Host failure
 causes downtime until recovery. A stable approved HTTPS address,
 off-host backups, a tested restore and monitoring are prerequisites for launch.
-There is **no working AWS URL yet** and no invented `API_ORIGIN` value. The
-Cloudflare Worker/Access variables are not used in this AWS topology.
+The assigned staging IP now provides working HTTPS; its exact public origin is
+in the private operator configuration and was delivered to the owner. No
+`API_ORIGIN` or Cloudflare Worker/Access variables are needed in this AWS topology.
 
 ## Reused files and configuration contract
 
@@ -151,17 +147,18 @@ live test skipped, both typechecks/build passed, and 23 synthetic runtime/voice/
 reboot checks passed. Production dashboard login rendered in the browser; real
 HTTP login and appointment workflows passed. No live provider calls were made.
 
-Before provisioning:
+Completed staging provisioning (historical approval boundary):
 
 1. Account plan/balance, Ohio, Linux ARM64 behavior, Lightsail quota and the x86
    Ubuntu image are verified. Review the concrete $13/month staging proposal and
    the IP-certificate option; no owned domain is currently available. Recheck quota
    and balance before creation. Target execution and off-host backup authentication
-   require the approved host and must pass before claiming staging success.
+   were then verified on the approved host; see the staging validation record.
 2. Approve the exact host/storage/address/backup/management-access proposal and
    any narrowly scoped deployment authorization. Only then provision one host,
    install the reviewed release and services, and enable HTTPS for synthetic
-   acceptance. No automatic production deployment workflow is authorized.
+   acceptance. This approval was received and executed within the $13 base scope.
+   No automatic production deployment workflow is authorized.
 
 Before public business acceptance:
 
@@ -173,9 +170,10 @@ Before public business acceptance:
 4. Do not publish the unauthenticated development Voice Lab on port 4317. Its
    hosted authenticated WSS design is separate; the dashboard's voice test is
    not deployment-ready merely because local protocol tests pass.
-5. Verify HTTPS login/logout, role/tenant restrictions, persistent data across
-   service restart/reboot, encrypted off-host backup and restore, disk/memory
-   monitoring and health checks. A service reload/start is not a backup test.
+5. Synthetic HTTPS login/logout, role/tenant restrictions, restart/reboot durability
+   and encrypted off-host restore passed. Complete the owner's browser login,
+   recovery-key vault copy, natural TLS renewal and operational monitoring before
+   advancing to real providers. A service reload/start is not a backup test.
 6. After explicit provider/data approval, verify real Google create → retrieve →
    reschedule same event → cancel, then an actual phone conversation and clean
    hangup with private PBX media. Do not enable both Mac and AWS phone owners.
