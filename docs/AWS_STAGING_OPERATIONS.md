@@ -1,11 +1,11 @@
-# AWS staging operations: observed health and next approval
+# AWS staging operations: observed health and approved alerts
 
 Read-only follow-up: **30 October 2026, 00:54 UTC** (29 October in Denver).
 Applies only to the existing synthetic Lightsail staging host and private bucket.
 No new resources, alarms, subscriptions, provider credentials or service changes
 were made during this audit.
 
-## Observed health
+## Observed health at the initial read-only audit
 
 | Check | Observed result |
 | --- | --- |
@@ -26,7 +26,7 @@ The remote check listed snapshot metadata only. It did not restore over the live
 staging database, prune backups, reveal the recovery key or inspect the owner's
 Apple Note. The previously verified restore remains the restore evidence.
 
-## Proposed native Lightsail alarms — not created
+## Approved native Lightsail alarms — created 30 October
 
 Use the existing Ohio instance and its existing private 5 GB backup bucket. Do
 not create a CloudWatch custom metric, load balancer, extra server or SNS topic.
@@ -35,24 +35,50 @@ use email only, avoiding possible carrier SMS charges. The approved base remains
 $13/month, excluding existing tax/overage.
 [AWS Lightsail monitoring FAQ](https://aws.amazon.com/lightsail/faq/).
 
-| Alarm | Existing resource / metric | Proposed trigger |
+| Alarm | Existing resource / metric | Saved trigger |
 | --- | --- | --- |
 | `yibo-staging-status` | Instance / `StatusCheckFailed` | Greater than 0, one five-minute period |
 | `yibo-staging-cpu` | Instance / `CPUUtilization` | At least 80%, three consecutive five-minute periods |
-| `yibo-staging-backup-capacity` | Existing bucket / `BucketSizeBytes` | At least 4 GB in the console's gigabytes selector; evaluated once daily |
+| Bucket capacity (console-generated alarm name) | Existing bucket / `BucketSizeBytes` | At least 4 in the console's GB selector: 4,294,967,296 bytes (4 GiB); one daily data point in a 24-hour window |
 
-Use the metric's native statistic. Retain missing-data visibility rather than
-reporting it as healthy. Notify on ALARM and recovery to OK; no automatic
-restart, scaling, deletion or resource upgrade. Re-read existing alarms before
-creation so an intervening operator change is not overwritten.
-The bucket form explicitly confirms daily evaluation; do not apply instance
-five-minute evaluation settings to that metric.
+The owner's explicit approval covered these three alerts and one email contact
+in Ohio. AWS reports that contact as **Valid**, matching the approved recipient;
+the owner confirmed the subscription privately. Its address and confirmation link
+are intentionally omitted here. All alarms use Email and ALARM/OK notifications,
+with no SMS, automatic restart, scaling, deletion or resource upgrade.
 
-**Approval needed:** the owner must authorize the email recipient and subscribing
-it to AWS Lightsail notifications in Ohio. This sends a verification email; the
-owner must confirm the subscription privately. Then create the three reviewed
-alarms, read back settings and test the notification without causing an outage.
-Do not put the recipient's personal address or a subscription link in Git.
+The bucket alarm was created through the console and preserved during the later
+instance-alarm setup. Readback confirms its native daily setup: period 300,
+288 evaluation periods, one data point to alarm, missing data `ignore`. The
+CPU alarm uses three data points in three periods; status uses one in one;
+both have period 300 and missing data `missing`. Instance resource identity,
+synthetic-staging tag, verified recipient and absence of conflicting alarms
+were checked before creation, followed by exact setting readback. No existing
+alarm was overwritten.
+
+**Notification test:** after both instance alarms evaluated to `OK`, one native
+`test-alarm` request for `yibo-staging-status` in `ALARM` state returned
+`TestAlarm Succeeded`, with `isTerminal: true`. Subsequent readback shows the
+status alarm back in `OK`; CPU is also `OK`. No host outage or CPU load was
+induced. The owner subsequently confirmed receiving the separate test email on
+30 October. This verifies delivery for this controlled test, separately from
+the earlier subscription confirmation; it is not a simulated server outage.
+[AWS test-alarm behavior](https://docs.aws.amazon.com/cli/latest/reference/lightsail/test-alarm.html).
+
+The bucket alarm is enabled but still `INSUFFICIENT_DATA`, awaiting its sparse
+daily metric. Its threshold and delivery configuration are verified; a completed
+metric evaluation is not. Do not report it as healthy or manufacture data to
+clear that state.
+
+The public staging checks were repeated on 30 October: trusted TLS, dashboard
+and `/api/health` return 200; unauthenticated `/api/auth/me` returns 401;
+`/voice` and `/ari` return 404. The initial certificate expiry is unchanged.
+This checkpoint changes only approved AWS alarms/contact configuration and
+documentation, so application tests, typechecks and build were not rerun.
+
+The refreshed account console displays **$99 credits and 176 Free-plan days** on
+30 October, with $1 posted usage. This is a delayed billing observation, not an
+extra alarm charge or a forecast; the approved $13/month base is unchanged.
 [Notification setup](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-adding-editing-notification-contacts.html),
 [status alarm settings](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configure-status-check-alarms.html),
 [bucket alarms](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-adding-bucket-metric-alarms.html).
@@ -83,8 +109,9 @@ checks below remain operator tasks until separately tested alerting exists.
 
 ## Separate release gates
 
-Natural renewal, notification delivery and the remaining monitoring gaps must
-be explicit in any launch decision. Staging can continue synthetic testing.
+Natural renewal, the bucket's first metric evaluation and the remaining
+monitoring gaps must be explicit in any launch decision. Staging can continue
+synthetic testing.
 An owned business hostname, hosted OAuth return-state support, separately
 approved real Calendar authorization, authenticated hosted Voice Lab and a
 private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes

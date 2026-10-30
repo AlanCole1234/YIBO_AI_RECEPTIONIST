@@ -3,7 +3,7 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS staging: revisión operativa — 30 de octubre de 2026 UTC
+## AWS staging: revisión operativa y alertas — 30 de octubre de 2026
 
 - HTTPS/health/auth y rutas privadas pasan; API/Caddy/timer activos y habilitados.
   Repositorio remoto legible: 25 snapshots, último de hace ~53 minutos al revisar.
@@ -11,12 +11,19 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   0.04 MB de 5 GB; no representa un inventario instantáneo.
 - Certificado inicial válido hasta 4 de noviembre 17:52:47 UTC; primera renovación
   natural aún pendiente. Sin errores Caddy en las seis horas anteriores.
-- No alarmas ni contactos en Ohio. Propuestos tres avisos Lightsail incluidos:
-  fallo de estado, CPU sostenida y capacidad del bucket. Falta aprobación del
-  destinatario/suscripción y prueba de entrega; no creados ni activados.
-- Sólo auditoría read-only y documentación; ningún cambio de runtime, datos,
-  secretos, servicios, recursos pagos, main, PBX/7001 ni proveedores reales.
-- [Evidencia, propuesta y límites de cobertura](AWS_STAGING_OPERATIONS.md).
+- Tras aprobación explícita: tres alertas Lightsail creadas en Ohio, email
+  verificado `Valid`, notificaciones ALARM/OK. Estado >0 durante cinco minutos;
+  CPU >=80% durante quince minutos; bucket >=4 GiB con métrica diaria.
+  Readback exacto pasa; estado/CPU `OK`, bucket aún `INSUFFICIENT_DATA`.
+- Una prueba nativa `TestAlarm` termina `Succeeded`, sin provocar una caída.
+  Owner confirmó recepción del email de prueba, distinto de la confirmación
+  de suscripción ya completada. HTTPS/auth/rutas privadas pasan.
+- Console actualizado: $99 de crédito, 176 días de Free plan y $1 de uso
+  registrado; base aprobada $13/mes sin aumento. Sin nuevos recursos facturables.
+- Cambios sólo en alertas/contacto aprobados y documentación; sin runtime,
+  datos, secretos, servicios, main, PBX/7001 ni proveedores reales. No se repiten
+  tests/typechecks/build de aplicación para este cierre operativo/documental.
+- [Evidencia y límites de cobertura](AWS_STAGING_OPERATIONS.md).
 
 ## AWS staging desplegado y validado — 28–29 de octubre de 2026
 
