@@ -3,6 +3,21 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: revisión operativa — 30 de octubre de 2026 UTC
+
+- HTTPS/health/auth y rutas privadas pasan; API/Caddy/timer activos y habilitados.
+  Repositorio remoto legible: 25 snapshots, último de hace ~53 minutos al revisar.
+  Disco libre 53.57 GiB; RAM disponible 1,440 MiB. Métrica diaria del bucket:
+  0.04 MB de 5 GB; no representa un inventario instantáneo.
+- Certificado inicial válido hasta 4 de noviembre 17:52:47 UTC; primera renovación
+  natural aún pendiente. Sin errores Caddy en las seis horas anteriores.
+- No alarmas ni contactos en Ohio. Propuestos tres avisos Lightsail incluidos:
+  fallo de estado, CPU sostenida y capacidad del bucket. Falta aprobación del
+  destinatario/suscripción y prueba de entrega; no creados ni activados.
+- Sólo auditoría read-only y documentación; ningún cambio de runtime, datos,
+  secretos, servicios, recursos pagos, main, PBX/7001 ni proveedores reales.
+- [Evidencia, propuesta y límites de cobertura](AWS_STAGING_OPERATIONS.md).
+
 ## AWS staging desplegado y validado — 28–29 de octubre de 2026
 
 - Aprobado y creado: un Lightsail Ubuntu 24.04 x86-64, 2 GB/60 GB, IP estática

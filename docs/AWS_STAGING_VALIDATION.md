@@ -122,6 +122,9 @@ The focused suite and production build were rerun for this deployment checkpoint
 - **Operations:** monitor backup freshness, disk and 5 GB bucket growth. Retention,
   alerting, immutable backups and high availability remain future work. No backup
   was pruned and no optional billable service was enabled.
+  A [read-only operations follow-up](AWS_STAGING_OPERATIONS.md) on 30 October UTC
+  confirms recent encrypted snapshots and healthy services; three native
+  Lightsail alarms are proposed, pending notification-recipient approval.
 - **Real providers:** hosted Google OAuth return-state validation, an owned
   business hostname, approved Calendar authorization, authenticated Voice Lab WSS
   and a reviewed private phone handover remain separate gates. DigitalOcean
