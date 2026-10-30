@@ -1,0 +1,11 @@
+# /etc/systemd/system/caddy.service.d/20-yibo.conf
+# Use the vendor Caddy systemd service with the staging wrapper of the AWS routes.
+# The vendor service manages persistent TLS state under /var/lib/caddy.
+[Service]
+EnvironmentFile=/etc/yibo/public.env
+Restart=on-failure
+RestartSec=5s
+ExecStart=
+ExecStart=/usr/bin/caddy run --config /opt/yibo/current/deploy/aws/lightsail/Caddyfile.example --adapter caddyfile
+ExecReload=
+ExecReload=/usr/bin/caddy reload --config /opt/yibo/current/deploy/aws/lightsail/Caddyfile.example --adapter caddyfile --force
