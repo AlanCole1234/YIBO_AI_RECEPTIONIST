@@ -19,8 +19,10 @@ Live providers remain disabled. The separate DigitalOcean phone system is unchan
    credentials were copied to the Mac. Additional resources still need approval.
 3. Private staging-owner password setup and manual browser login passed on October
    29; the saved owner account is included in a successful encrypted backup.
-   Preserve the restic recovery key separately in the owner's recovery vault;
-   that step remains pending. Do not send passwords, keys or tokens in chat.
+   The owner also confirmed saving the restic recovery key and repository details
+   in a locked Apple Note and closing the private handoff. The note/key were not
+   inspected by the agent; recovery using that saved copy has not been separately
+   tested. Do not send passwords, keys or tokens in chat.
 4. No domain purchase was needed for the initial IP certificate. Observe its first
    natural renewal; review an owned business hostname before real-provider setup.
    AWS still displayed $100 credits / 178 Free-plan days on October 28, with usage
@@ -173,9 +175,10 @@ Before public business acceptance:
    hosted authenticated WSS design is separate; the dashboard's voice test is
    not deployment-ready merely because local protocol tests pass.
 5. Synthetic HTTPS login/logout, role/tenant restrictions, restart/reboot durability
-   and encrypted off-host restore passed. Complete the owner's browser login,
-   recovery-key vault copy, natural TLS renewal and operational monitoring before
-   advancing to real providers. A service reload/start is not a backup test.
+   and encrypted off-host restore passed. The owner's browser login and
+   owner-confirmed recovery-key vault copy are complete. Observe natural TLS
+   renewal and establish operational monitoring before advancing to real
+   providers. A service reload/start is not a backup test.
 6. After explicit provider/data approval, verify real Google create → retrieve →
    reschedule same event → cancel, then an actual phone conversation and clean
    hangup with private PBX media. Do not enable both Mac and AWS phone owners.

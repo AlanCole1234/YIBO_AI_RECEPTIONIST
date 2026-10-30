@@ -3,9 +3,9 @@
 **29 October update:** the owner approved this exact proposal and staging now
 exists. Do not provision duplicates. See the [actual deployment and validation
 record](../../../docs/AWS_STAGING_VALIDATION.md), including the IP TLS fix,
-completed owner login and encrypted backup, and remaining recovery-vault/renewal
-checks. The proposal and observations below are retained as historical
-pre-provisioning context.
+completed owner login and encrypted backup, owner-confirmed recovery-key custody,
+and remaining natural certificate renewal and operations checks. The proposal and
+observations below are retained as historical pre-provisioning context.
 
 Prepared October 25, 2026 on `codex/launch-integration-reviewed`. **Nothing in this
 directory provisions resources or runs during the application build.** No AWS

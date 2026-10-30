@@ -17,11 +17,16 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Owner completado el 29: contraseña ingresada privadamente, cuenta/rol activo
   verificado en SQLite, nuevo backup cifrado exitoso y login manual confirmado
   visualmente en agenda con slots disponibles. Sin leer/copiar la contraseña.
-- Pendientes: copia independiente del secreto de recuperación, primera renovación
-  natural TLS y gates de proveedores reales.
+- Owner confirmó el 29 que guardó la clave de recuperación y los datos del
+  repositorio en una Apple Note bloqueada y cerró el terminal privado. No se leyó
+  la nota/clave ni se probó otro restore con esa copia; restore off-host previo
+  permanece verificado. Check read-only: servicios activos y backup automático
+  exitoso a las 17:04:32 UTC.
+- Pendientes: primera renovación natural TLS, monitoreo operativo y gates de
+  proveedores reales.
   No cambios en main, PBX/7001, Cloudflare, Google live ni bases de producción.
-- [Evidencia y límites](AWS_STAGING_VALIDATION.md). Free plan muestra $100 y 178
-  días restantes; la facturación puede reflejar el consumo con retraso.
+- [Evidencia y límites](AWS_STAGING_VALIDATION.md). Free plan observado el 28:
+  $100 y 178 días restantes; la facturación puede reflejar el consumo con retraso.
 
 ## Histórico: AWS Lightsail staging preparado — 25 de octubre de 2026
 

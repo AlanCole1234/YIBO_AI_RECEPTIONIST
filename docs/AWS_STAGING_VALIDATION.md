@@ -1,6 +1,7 @@
 # AWS synthetic staging validation
 
-28 October 2026 deployment; owner-access follow-up verified 29 October 2026.
+28 October 2026 deployment; owner access and recovery-key handoff followed up
+29 October 2026.
 
 ## Deployed scope
 
@@ -104,9 +105,18 @@ The focused suite and production build were rerun for this deployment checkpoint
   browser sign-in visibly reached the office schedule with available slots.
   The password was not read or copied into chat, code or documentation. This
   confirms staging access only; real providers remain disabled.
-- **Recovery vault:** preserve an independent copy of the private restic password
-  in the owner's recovery vault. Off-host encrypted data alone cannot recover
-  from total host loss without that key.
+- **Recovery-key custody confirmed by the owner:** on 29 October the owner
+  reported saving the existing restic recovery key and repository details in a
+  locked Apple Note and closing the private terminal handoff. The agent did not
+  inspect the note or read, record or commit the key. This is a manual custody
+  confirmation, separate from the earlier successful off-host restore; a restore
+  using the owner's saved copy has not been independently tested.
+- **Read-only closeout check:** API, Caddy and the backup timer are active. The
+  latest scheduled backup completed successfully at 17:04:32 UTC on 29 October;
+  the root disk has 53.58 GiB free. Public HTTPS certificate verification and the
+  dashboard/health endpoints pass; unauthenticated `/api/auth/me` returns 401 and
+  `/voice` and `/ari` return 404. No configuration or application changes were
+  needed for this check.
 - **Natural certificate renewal:** issuance and persistence passed; observe the
   first renewal before the initial certificate expires on 4 November 2026 UTC.
 - **Operations:** monitor backup freshness, disk and 5 GB bucket growth. Retention,
