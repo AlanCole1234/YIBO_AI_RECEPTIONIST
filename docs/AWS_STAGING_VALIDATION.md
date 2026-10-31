@@ -133,10 +133,11 @@ The focused suite and production build were rerun for this deployment checkpoint
   read-only follow-up found 68 encrypted remote snapshot records, a successful
   scheduled backup about 39 minutes old, and passing HTTPS/auth/private-route
   checks. No application code or running configuration changed.
-- **Real providers:** hosted Google OAuth return-state validation, an owned
-  business hostname, approved Calendar authorization, authenticated Voice Lab WSS
-  and a reviewed private phone handover remain separate gates. DigitalOcean
-  Asterisk is unchanged. This is not a paying-customer launch.
+- **Real providers:** the [hosted OAuth return-state fix](HOSTED_GOOGLE_OAUTH_RETURN.md)
+  is tested on the launch branch but is not installed on this host. Its deployment,
+  a controlled business hostname, approved Calendar authorization, authenticated
+  Voice Lab WSS and a reviewed private phone handover remain separate gates.
+  DigitalOcean Asterisk is unchanged. This is not a paying-customer launch.
 
 AWS Settings displayed **$100.00 credits and 178 Free-plan days** on 28 October,
 ending 23 April 2027. Billing can post later; this does not mean running resources

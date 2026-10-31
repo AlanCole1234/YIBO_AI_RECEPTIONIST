@@ -3,6 +3,22 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS: retorno OAuth HTTPS corregido en rama — 31 de octubre de 2026
+
+- Reproducción local: estado firmado HTTPS rechazado (`null`/HTTP 400) antes de
+  intercambio de tokens. OAuth recibe ahora el mismo dashboard origin configurado
+  que la API; validación al emitir y al leer state, con localhost preservado.
+- **40 tests OAuth/callback + 42 regresiones relacionadas pasan (82 total)**;
+  24 casos nuevos. Ambos typechecks y build de producción pasan en Mac.
+  Sólo credenciales ficticias, fetch simulado y SQLite en memoria.
+- Fix **no desplegado**; staging sigue con release sintético previo, proveedores
+  reales apagados. Sin main, cambios Google Cloud/OAuth live, PBX ni datos reales.
+- TLS inicial aún vigente, renovación pendiente para 1 de noviembre. El callback
+  real de Google necesita hostname controlado: no admite la IP pública como host.
+  Después: despliegue revisado y autorización de proveedores; Voice Lab privado
+  y handover telefónico siguen gates separados.
+- [Contrato, pruebas y límites](HOSTED_GOOGLE_OAUTH_RETURN.md).
+
 ## AWS staging: evaluación de alarmas verificada — 31 de octubre de 2026
 
 - Las tres alarmas incluidas están habilitadas y `OK`; primera evaluación diaria

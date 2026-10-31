@@ -3,6 +3,7 @@ import { SqliteCallLivenessStore } from "../infrastructure/database/sqlite-call-
 import { configureCallLiveness } from "../modules/calls/application/call-liveness.js";
 import { buildAsteriskIntegration } from "./asterisk-integration.js";
 import { randomUUID } from "node:crypto";
+import { loadConfiguration } from "./configuration.js";
 import {
   defaultDatabasePath,
   migrateDatabase,
@@ -95,7 +96,8 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     if (migrated) await configurationService.update(tenantId, migrated);
   }
 
-  const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
+  const config = options.config ?? loadConfiguration(environment);
+  const google = buildGoogleIntegration(environment, tenant, database, businessRepository, config.dashboardOrigin);
   const notifications = new NotificationService(new SqliteNotificationRepository(database, tenant.region),
     customerRepository, new BusinessDirectoryService(businessRepository),
     environment.RESEND_API_KEY?.trim() && environment.YIBO_EMAIL_FROM?.trim()
@@ -105,6 +107,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   const application = buildApplication({
     ...options,
     environment,
+    config,
     businesses,
     businessRepository,
     tenantId,
@@ -138,6 +141,7 @@ function buildGoogleIntegration(
   tenant: BusinessConfigurationV2,
   database: ReturnType<typeof openRegionalDatabase>,
   businesses: SqliteBusinessRepository,
+  dashboardOrigin: string,
 ): { oauth: GoogleOAuthService; calendar: GoogleCalendarAdapter } | undefined {
   const clientId = environment.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = environment.GOOGLE_CLIENT_SECRET?.trim();
@@ -145,7 +149,7 @@ function buildGoogleIntegration(
   const stateSigningKey = environment.YIBO_TOKEN_ENCRYPTION_KEY?.trim();
   if (!clientId || !clientSecret || !redirectUri || !stateSigningKey) return undefined;
   const oauth = new GoogleOAuthService(
-    { clientId, clientSecret, redirectUri, stateSigningKey },
+    { clientId, clientSecret, redirectUri, stateSigningKey, dashboardOrigin },
     new SqliteGoogleTokenStore(database, tenant.region, stateSigningKey),
   );
   return {

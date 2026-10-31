@@ -6,6 +6,8 @@ export interface GoogleOAuthConfig {
   clientSecret?: string;
   redirectUri?: string;
   stateSigningKey?: string;
+  /** Trusted dashboard origin from application configuration, never request headers. */
+  dashboardOrigin?: string;
 }
 
 type AuthorizationState = { tenantId: string; returnTo: string; expiresAt: number; nonce: string };
@@ -28,7 +30,7 @@ export class GoogleOAuthService {
   }
 
   authorizationUrl(tenantId: string, returnTo: string): string | null {
-    if (!this.isConfigured()) return null;
+    if (!this.isConfigured() || !isAllowedDashboardUrl(returnTo, this.config.dashboardOrigin)) return null;
     const state = this.signState({ tenantId, returnTo, expiresAt: Date.now() + 10 * 60_000, nonce: randomUUID() });
     const query = new URLSearchParams({
       client_id: this.config.clientId!, redirect_uri: this.config.redirectUri!, response_type: "code",
@@ -137,7 +139,7 @@ export class GoogleOAuthService {
     if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     try {
       const state = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthorizationState;
-      return state.tenantId && isLocalDashboardUrl(state.returnTo) && state.expiresAt > Date.now() ? state : null;
+      return state.tenantId && isAllowedDashboardUrl(state.returnTo, this.config.dashboardOrigin) && state.expiresAt > Date.now() ? state : null;
     } catch { return null; }
   }
 
@@ -146,9 +148,13 @@ export class GoogleOAuthService {
   }
 }
 
-const isLocalDashboardUrl = (value: string): boolean => {
+const isAllowedDashboardUrl = (value: string, dashboardOrigin?: string): boolean => {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && Boolean(url.port);
+    if (url.username || url.password) return false;
+    const local = url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && Boolean(url.port);
+    const hosted = url.protocol === "https:" && url.origin === dashboardOrigin
+      && url.pathname === "/" && !url.search && !url.hash;
+    return local || hosted;
   } catch { return false; }
 };

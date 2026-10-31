@@ -166,11 +166,13 @@ Completed staging provisioning (historical approval boundary):
 
 Before public business acceptance:
 
-3. Fix the existing Google OAuth return-state validator to accept only the exact
-   trusted configured HTTPS dashboard origin as well as intended development
-   origins. It currently permits only HTTP localhost with a port, so a hosted
-   reconnect callback fails. Add focused redirect/state tests before any live
-   Google Cloud callback or token change. No OAuth changes were made here.
+3. The [hosted Google OAuth return fix](HOSTED_GOOGLE_OAUTH_RETURN.md) is validated
+   on the launch branch as of 31 October, but not deployed. It uses the existing
+   trusted HTTPS dashboard origin and preserves loopback development flows.
+   Plan its reviewed deployment before live authorization. A controlled DNS
+   hostname and approved Google callback registration are still required; the
+   current public IP is not an eligible Google redirect host. No live Google
+   Cloud callback or token was changed.
 4. Do not publish the unauthenticated development Voice Lab on port 4317. Its
    hosted authenticated WSS design is separate; the dashboard's voice test is
    not deployment-ready merely because local protocol tests pass.

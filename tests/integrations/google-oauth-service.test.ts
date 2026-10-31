@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { GoogleOAuthService, type GoogleToken, type GoogleTokenStore } from "../../src/modules/integrations/index.js";
 
 class MemoryTokenStore implements GoogleTokenStore {
@@ -8,8 +9,84 @@ class MemoryTokenStore implements GoogleTokenStore {
 }
 
 const config = { clientId: "client-id", clientSecret: "client-secret", redirectUri: "http://localhost:3000/api/integrations/google/callback", stateSigningKey: "a".repeat(64) };
+const hostedOrigin = "https://dashboard.example.test";
+const signedState = (returnTo: string, expiresAt = Date.now() + 60_000): string => {
+  const payload = Buffer.from(JSON.stringify({ tenantId: "tenant-1", returnTo, expiresAt, nonce: "synthetic-nonce" })).toString("base64url");
+  return `${payload}.${createHmac("sha256", config.stateSigningKey).update(payload).digest("base64url")}`;
+};
 
 describe("GoogleOAuthService", () => {
+  it("accepts the configured HTTPS dashboard when reading and completing signed state", async () => {
+    const dashboardOrigin = "https://dashboard.example.test";
+    const service = new GoogleOAuthService({ ...config, dashboardOrigin }, new MemoryTokenStore(),
+      async () => new Response(JSON.stringify({ access_token: "synthetic-access", refresh_token: "synthetic-refresh" })));
+    const url = new URL(service.authorizationUrl("tenant-1", dashboardOrigin)!);
+    const state = url.searchParams.get("state")!;
+    expect(service.returnToForState(state)).toBe(dashboardOrigin);
+    await expect(service.completeAuthorization("synthetic-code", state)).resolves.toEqual({ tenantId: "tenant-1", returnTo: dashboardOrigin });
+  });
+
+  it.each([
+    "https://untrusted.example.test", "https://dashboard.example.test.evil.test",
+    "http://dashboard.example.test", "https://dashboard.example.test:444",
+    "https://user:pass@dashboard.example.test", "https://dashboard.example.test/redirect",
+    "https://dashboard.example.test/?next=https://untrusted.example.test",
+    "https://dashboard.example.test/#redirect", "//dashboard.example.test", "javascript:alert(1)",
+    "http://user@localhost:5173",
+  ])("rejects untrusted return address %s at issuance and callback", async returnTo => {
+    const tokens = new MemoryTokenStore();
+    const fetcher = vi.fn<typeof fetch>();
+    const service = new GoogleOAuthService({ ...config, dashboardOrigin: hostedOrigin }, tokens, fetcher);
+    expect(service.authorizationUrl("tenant-1", returnTo)).toBeNull();
+    // A valid signature must not bypass the current redirect policy.
+    const state = signedState(returnTo);
+    expect(service.returnToForState(state)).toBeNull();
+    await expect(service.completeAuthorization("synthetic-code", state)).resolves.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(tokens.value).toBeNull();
+  });
+
+  it.each(["http://localhost:5274", "http://127.0.0.1:5174", "http://[::1]:5174"])(
+    "preserves the development return address %s", async returnTo => {
+      const service = new GoogleOAuthService({ ...config, dashboardOrigin: hostedOrigin }, new MemoryTokenStore(),
+        async () => new Response(JSON.stringify({ access_token: "synthetic-access", refresh_token: "synthetic-refresh" })));
+      const state = new URL(service.authorizationUrl("tenant-1", returnTo)!).searchParams.get("state")!;
+      await expect(service.completeAuthorization("synthetic-code", state)).resolves.toEqual({ tenantId: "tenant-1", returnTo });
+    },
+  );
+
+  it("does not infer a trusted HTTPS dashboard from the Google callback URI", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const service = new GoogleOAuthService({ ...config, redirectUri: `${hostedOrigin}/api/integrations/google/callback` }, new MemoryTokenStore(), fetcher);
+    expect(service.authorizationUrl("tenant-1", hostedOrigin)).toBeNull();
+    await expect(service.completeAuthorization("synthetic-code", signedState(hostedOrigin))).resolves.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects an old signed hosted destination after the configured origin changes", async () => {
+    const first = new GoogleOAuthService({ ...config, dashboardOrigin: hostedOrigin }, new MemoryTokenStore());
+    const state = new URL(first.authorizationUrl("tenant-1", hostedOrigin)!).searchParams.get("state")!;
+    const fetcher = vi.fn<typeof fetch>();
+    const restarted = new GoogleOAuthService({ ...config, dashboardOrigin: "https://new.example.test" }, new MemoryTokenStore(), fetcher);
+    expect(restarted.returnToForState(state)).toBeNull();
+    await expect(restarted.completeAuthorization("synthetic-code", state)).resolves.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(["expired", "tampered"])("keeps rejecting %s hosted state before token exchange", async kind => {
+    const fetcher = vi.fn<typeof fetch>();
+    const service = new GoogleOAuthService({ ...config, dashboardOrigin: hostedOrigin }, new MemoryTokenStore(), fetcher);
+    let state = signedState(hostedOrigin, kind === "expired" ? Date.now() - 1 : Date.now() + 60_000);
+    if (kind === "tampered") {
+      const [payload, signature] = state.split(".");
+      const changed = { ...JSON.parse(Buffer.from(payload!, "base64url").toString("utf8")), tenantId: "different-tenant" };
+      state = `${Buffer.from(JSON.stringify(changed)).toString("base64url")}.${signature}`;
+    }
+    expect(service.returnToForState(state)).toBeNull();
+    await expect(service.completeAuthorization("synthetic-code", state)).resolves.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("creates an authorization URL with a short-lived state and exchanges the matching callback", async () => {
     const tokens = new MemoryTokenStore();
     const fetcher: typeof fetch = async () => new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
