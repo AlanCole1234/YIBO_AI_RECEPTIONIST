@@ -1,6 +1,6 @@
 # AWS staging operations: observed health and approved alerts
 
-Read-only follow-up: **30 October 2026, 00:54 UTC** (29 October in Denver).
+Initial read-only follow-up: **30 October 2026, 00:54 UTC** (29 October in Denver).
 Applies only to the existing synthetic Lightsail staging host and private bucket.
 No new resources, alarms, subscriptions, provider credentials or service changes
 were made during this audit.
@@ -65,10 +65,9 @@ induced. The owner subsequently confirmed receiving the separate test email on
 the earlier subscription confirmation; it is not a simulated server outage.
 [AWS test-alarm behavior](https://docs.aws.amazon.com/cli/latest/reference/lightsail/test-alarm.html).
 
-The bucket alarm is enabled but still `INSUFFICIENT_DATA`, awaiting its sparse
-daily metric. Its threshold and delivery configuration are verified; a completed
-metric evaluation is not. Do not report it as healthy or manufacture data to
-clear that state.
+At creation on 30 October, the bucket alarm was enabled but `INSUFFICIENT_DATA`,
+awaiting its sparse daily metric. Its first successful evaluation was verified
+on 31 October below; no metric data was manufactured to clear that state.
 
 The public staging checks were repeated on 30 October: trusted TLS, dashboard
 and `/api/health` return 200; unauthenticated `/api/auth/me` returns 401;
@@ -82,6 +81,34 @@ extra alarm charge or a forecast; the approved $13/month base is unchanged.
 [Notification setup](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-adding-editing-notification-contacts.html),
 [status alarm settings](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configure-status-check-alarms.html),
 [bucket alarms](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-adding-bucket-metric-alarms.html).
+
+## Read-only follow-up — 31 October, 19:41 UTC (13:41 Denver)
+
+| Check | Observed result |
+| --- | --- |
+| All three native alarms | Enabled and `OK`, including the bucket's first verified daily evaluation; thresholds unchanged |
+| Public HTTPS and routes | Trusted TLS; dashboard/health 200, unauthenticated auth 401, private voice/ARI paths 404 |
+| API / Caddy / backup timer | Active and enabled; API/Caddy restart counters remain zero |
+| Scheduled backup | Successful at 19:03:11 UTC, exit status 0; next timer trigger 20:04:12 UTC |
+| Encrypted off-host repository | 68 snapshot records; newest 19:03:10 UTC, about 39 minutes old at inspection |
+| Capacity | 53.51 GiB free root disk; 1,416 MiB available memory |
+| Caddy errors | Zero error records in the preceding 24 hours |
+| Natural TLS renewal | Initial certificate still served; expires 4 November 17:52:47 UTC, about 94 hours remaining |
+| Account allowance | Existing project reports $99 credits and 175 Free-plan days; base cost unchanged |
+
+Caddy's renewal-timing records point to 1 November. The recorded window is
+08:46–11:57 UTC (01:46–04:57 Denver, after the clock change), with a selected time
+of 09:34 UTC in the latest timing record. This is scheduling evidence, not proof
+of completed renewal. Recheck the public certificate after that window; require
+changed serial/validity dates and successful trust verification before closing
+the renewal gate. Scheduling can update; retain the less-than-48-hours escalation
+threshold below if renewal has not succeeded.
+
+The off-host check read snapshot metadata with restic's `--no-lock --no-cache`;
+it did not create a backup, restore data, prune snapshots or expose the key.
+No AWS settings, application code, services, provider configuration or databases
+were changed. Documentation checks passed; application tests/typechecks/build
+were not repeated for this read-only operational follow-up.
 
 ## Coverage limits and manual staging checks
 
@@ -109,9 +136,9 @@ checks below remain operator tasks until separately tested alerting exists.
 
 ## Separate release gates
 
-Natural renewal, the bucket's first metric evaluation and the remaining
-monitoring gaps must be explicit in any launch decision. Staging can continue
-synthetic testing.
+Natural renewal and the remaining monitoring gaps must be explicit in any
+launch decision. The initial native alarm evaluation and controlled email
+delivery gates are complete. Staging can continue synthetic testing.
 An owned business hostname, hosted OAuth return-state support, separately
 approved real Calendar authorization, authenticated hosted Voice Lab and a
 private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes

@@ -119,16 +119,20 @@ The focused suite and production build were rerun for this deployment checkpoint
   needed for this check.
 - **Natural certificate renewal:** issuance and persistence passed; observe the
   first renewal before the initial certificate expires on 4 November 2026 UTC.
+  Read-only follow-up on 31 October found the initial certificate still served
+  and renewal-timing records pointing to 1 November; actual renewal remains open.
 - **Operations:** monitor backup freshness, disk and 5 GB bucket growth. Retention,
   backup-failure/application-uptime alerting, immutable backups and high availability
   remain future work. No backup was pruned or optional billable service enabled.
   The [operations follow-up](AWS_STAGING_OPERATIONS.md) confirms recent encrypted
   snapshots and healthy services. On 30 October, explicit owner approval was
   followed by three included Lightsail alarms and a verified email contact.
-  CPU/status alarms are `OK`; bucket capacity remains `INSUFFICIENT_DATA` pending
-  its daily metric. One native test notification completed `Succeeded`; the owner
-  confirmed receiving that separate test email on 30 October. Public
-  HTTPS/auth/private-route checks pass again. No application code changed.
+  All three alarms are `OK` as of 31 October, including the bucket's first verified
+  daily evaluation. One native test notification completed `Succeeded`; the owner
+  confirmed receiving that separate test email on 30 October. The 31 October
+  read-only follow-up found 68 encrypted remote snapshot records, a successful
+  scheduled backup about 39 minutes old, and passing HTTPS/auth/private-route
+  checks. No application code or running configuration changed.
 - **Real providers:** hosted Google OAuth return-state validation, an owned
   business hostname, approved Calendar authorization, authenticated Voice Lab WSS
   and a reviewed private phone handover remain separate gates. DigitalOcean

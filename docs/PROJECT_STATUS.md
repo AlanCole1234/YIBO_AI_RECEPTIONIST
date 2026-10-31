@@ -3,6 +3,20 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: evaluación de alarmas verificada — 31 de octubre de 2026
+
+- Las tres alarmas incluidas están habilitadas y `OK`; primera evaluación diaria
+  del bucket verificada. Entrega del email de prueba ya confirmada por el owner.
+- HTTPS/health/auth/rutas privadas pasan. API/Caddy/timer activos y habilitados;
+  68 snapshots off-host legibles, último de hace ~39 minutos al revisar.
+  Backup programado exitoso, 53.51 GiB libres y cero errores Caddy en 24 horas.
+- Renovación TLS aún pendiente: certificado inicial válido hasta 4 de noviembre
+  17:52:47 UTC; logs de Caddy programan renovación para 1 de noviembre. Verificar
+  certificado nuevo después de esa ventana, sin forzar emisión ni reiniciar.
+- Console: $99 de crédito y 175 días de Free plan. Sólo auditoría read-only y
+  documentación; sin cambios de configuración, código, servicios, datos o main.
+- [Evidencia y siguiente comprobación](AWS_STAGING_OPERATIONS.md).
+
 ## AWS staging: revisión operativa y alertas — 30 de octubre de 2026
 
 - HTTPS/health/auth y rutas privadas pasan; API/Caddy/timer activos y habilitados.
