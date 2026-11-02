@@ -110,6 +110,27 @@ No AWS settings, application code, services, provider configuration or databases
 were changed. Documentation checks passed; application tests/typechecks/build
 were not repeated for this read-only operational follow-up.
 
+## Natural renewal and read-only follow-up — 2 November
+
+- The public endpoint serves a **new, trusted certificate**: serial
+  `06044506311F83C8A83FE9EC4FD3B953929C`, issued 1 November 08:29:34 UTC,
+  expiring **8 November 00:29:33 UTC**. Its serial and validity differ from the
+  initial certificate. About 129 hours remained at the 15:31 UTC check.
+  No renewal was forced and no certificate/service setting was changed.
+- Dashboard and health return 200; unauthenticated auth returns 401; public
+  voice/ARI remain 404. This is not a new authenticated owner-login test.
+- Running release is still `282f5c7`. API, Caddy and backup timer are active and
+  enabled; API/Caddy restart counters remain zero. The latest backup succeeded at
+  15:02:32 UTC with exit 0. Read-only remote metadata shows **112 snapshots**, latest
+  15:02:30 UTC, about 38 minutes old. Free root disk is **53.49 GiB**.
+- AWS project access refreshed through the existing signed-in account without new
+  IAM access. The console reports **$98 credits and 173 Free-plan days**; billing
+  is delayed and the approved $13/month base is unchanged. No new resources.
+- The first natural renewal gate is complete. The latest native alarm-state
+  inventory remains the 31 October observation above, not a new 2 November check.
+  [Release-update preparation](AWS_STAGING_RELEASE_UPDATE.md) is complete, but no
+  running release, environment, database, DNS or provider setting was changed.
+
 ## Coverage limits and manual staging checks
 
 Native alarms do **not** verify application login, HTTPS certificate expiry,
@@ -126,19 +147,19 @@ checks below remain operator tasks until separately tested alerting exists.
 - **Daily during this short staging trial:** inspect free disk and local backup
   growth, and the bucket's storage metric. At 80% use, investigate before
   approving more storage or a tested retention policy. Never silently prune.
-- **Certificate:** observe a later trusted certificate with a changed serial
-  and later validity dates. Investigate if less than 48 hours remain without
-  renewal. Initial expiry is **4 November 2026, 17:52:47 UTC**. No forced renewal
-  or certificate deletion was performed, and no background reminder was created.
+- **Certificate:** the first natural renewal is verified above. Continue checking
+  trust and later serial/validity dates; investigate if less than 48 hours remain
+  without the next renewal. Current observed expiry is **8 November 00:29:33 UTC**.
+  No forced renewal, certificate deletion or background reminder was created.
 - **Weekly:** review posted credits, transfer and bucket usage; the Free-plan
   deadline is separate from any later credit expiry. Do not upgrade the plan
   or add paid resources without approval.
 
 ## Separate release gates
 
-Natural renewal and the remaining monitoring gaps must be explicit in any
-launch decision. The initial native alarm evaluation and controlled email
-delivery gates are complete. Staging can continue synthetic testing.
+The first natural renewal, initial native alarm evaluation and controlled email
+delivery gates are complete. Remaining monitoring gaps must stay explicit in any
+launch decision. Staging can continue synthetic testing.
 An owned business hostname, hosted OAuth return-state support, separately
 approved real Calendar authorization, authenticated hosted Voice Lab and a
 private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes

@@ -48,11 +48,16 @@ tenant token storage, API authorization and Calendar event operations are unchan
   test convention. They use `:memory:` databases and a replacement fetch function;
   no request reaches Google. No real browser consent or live synchronization test
   is claimed.
+- **2 November follow-up:** the same 82 tests, both typechecks and production build
+  also pass on local Mac ARM64 with Node **22.23.4**, matching staging's Node version.
+  No code change was needed. The target Linux x64 release-validation step remains
+  in the [prepared update procedure](AWS_STAGING_RELEASE_UPDATE.md).
 
 ## Remaining deployment gates
 
-Natural TLS renewal remains pending; the existing IP dashboard still passes
-HTTPS/health/auth-boundary checks. Deploying this fix is a separate reviewed step.
+Natural TLS renewal was verified on 2 November: a new trusted certificate issued
+on 1 November is served, and HTTPS/health/auth-boundary checks pass. Deploying this
+fix remains a separate step; the exact artifact and rollback are prepared above.
 Before live Calendar consent, select an approved controlled DNS hostname and exact
 callback registration: Google prohibits raw-IP redirect hosts except localhost,
 so the current public IP URL cannot itself be the Google OAuth callback.

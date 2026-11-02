@@ -3,6 +3,23 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: renovación TLS y actualización preparada — 2 de noviembre de 2026
+
+- Primera renovación natural verificada desde HTTPS público: certificado nuevo
+  emitido 1 de noviembre, vence 8 de noviembre 00:29:33 UTC. Dashboard/health 200,
+  auth sin sesión 401, voice/ARI públicos 404; sin forzar renovación ni restart.
+- Servicios/timer activos y habilitados; backup automático exitoso, 112 snapshots
+  remotos, último de hace ~38 minutos; 53.49 GiB libres. Console: $98 de crédito,
+  173 días de Free plan; sin recursos nuevos ni aumento de base $13/mes.
+- Fix `f38de13`: **82 tests pasan en Node 22.23.4**, ambos typechecks y build pasan
+  en Mac ARM64. Mismo Node de staging; no se afirma ejecución nueva en Linux x64.
+  Archivo de 484 ficheros tracked preparado y comprobado, sin secretos/runtime DB.
+- [Procedimiento exacto de actualización y rollback](AWS_STAGING_RELEASE_UPDATE.md)
+  completado; **no aplicado**. Release activo sigue `282f5c7`, proveedores reales
+  apagados. Sin cambios de código, main, PBX/7001, Cloudflare ni Google live.
+- Owner solicita opciones de dominio/precio; selección, compra/DNS y activación
+  real necesitan decisión/aprobación separada. No dominio inventado ni comprado.
+
 ## AWS: retorno OAuth HTTPS corregido en rama — 31 de octubre de 2026
 
 - Reproducción local: estado firmado HTTPS rechazado (`null`/HTTP 400) antes de

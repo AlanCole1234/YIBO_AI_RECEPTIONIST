@@ -42,7 +42,8 @@ production database, customer data or AWS administrator key was copied.
    No trust-store changes, internal CA or insecure TLS flags were used.
 
 The installed correction is root-owned `/etc/caddy/yibo-staging.Caddyfile`,
-importing the immutable release's original AWS routes by absolute path. The
+importing the immutable release's original AWS routes by absolute path through
+`/opt/yibo/current/deploy/aws/Caddyfile.example`, confirmed read-only on 31 October. The
 staging Caddy service drop-in selects this file; its previous drop-in is preserved
 privately. Application release contents were not edited. The repository wrapper
 contains the equivalent fix for future releases.
@@ -120,7 +121,9 @@ The focused suite and production build were rerun for this deployment checkpoint
 - **Natural certificate renewal:** issuance and persistence passed; observe the
   first renewal before the initial certificate expires on 4 November 2026 UTC.
   Read-only follow-up on 31 October found the initial certificate still served
-  and renewal-timing records pointing to 1 November; actual renewal remains open.
+  and renewal-timing records pointing to 1 November. **Completed on 2 November:**
+  trusted public TLS serves a different certificate issued 1 November, valid
+  until 8 November 00:29:33 UTC. No forced renewal or restart was performed.
 - **Operations:** monitor backup freshness, disk and 5 GB bucket growth. Retention,
   backup-failure/application-uptime alerting, immutable backups and high availability
   remain future work. No backup was pruned or optional billable service enabled.
@@ -137,6 +140,9 @@ The focused suite and production build were rerun for this deployment checkpoint
   is tested on the launch branch but is not installed on this host. Its deployment,
   a controlled business hostname, approved Calendar authorization, authenticated
   Voice Lab WSS and a reviewed private phone handover remain separate gates.
+  The [release update procedure](AWS_STAGING_RELEASE_UPDATE.md) now fixes the
+  exact target/archive/rollback and records 82 passing Node 22.23.4 tests plus
+  both typechecks/build on Mac. It is preparation, not an applied Linux update.
   DigitalOcean Asterisk is unchanged. This is not a paying-customer launch.
 
 AWS Settings displayed **$100.00 credits and 178 Free-plan days** on 28 October,

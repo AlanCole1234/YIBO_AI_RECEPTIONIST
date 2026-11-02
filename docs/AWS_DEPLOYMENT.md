@@ -23,11 +23,12 @@ Live providers remain disabled. The separate DigitalOcean phone system is unchan
    in a locked Apple Note and closing the private handoff. The note/key were not
    inspected by the agent; recovery using that saved copy has not been separately
    tested. Do not send passwords, keys or tokens in chat.
-4. No domain purchase was needed for the initial IP certificate. Observe its first
-   natural renewal; review an owned business hostname before real-provider setup.
-   AWS still displayed $100 credits / 178 Free-plan days on October 28, with usage
-   potentially not yet posted. Monitor billing and storage; the plan deadline is
-   April 23, 2027. Do not assume permanent free operation.
+4. No domain purchase was needed for the initial IP certificate. Its first natural
+   renewal was verified on 2 November. The owner requested domain-name/price options
+   before real-provider setup; no domain or DNS change has been approved or made.
+   AWS displayed $98 credits / 173 Free-plan days on 2 November; billing can post
+   late. Monitor billing and storage; the plan deadline is April 23, 2027.
+   Do not assume permanent free operation.
 
 Current new-account rules provide $100 initial credits and opportunities to earn
 another $100. The Free plan lasts until six months or credit exhaustion, whichever
@@ -169,7 +170,9 @@ Before public business acceptance:
 3. The [hosted Google OAuth return fix](HOSTED_GOOGLE_OAUTH_RETURN.md) is validated
    on the launch branch as of 31 October, but not deployed. It uses the existing
    trusted HTTPS dashboard origin and preserves loopback development flows.
-   Plan its reviewed deployment before live authorization. A controlled DNS
+   Its [exact release/update/rollback procedure](AWS_STAGING_RELEASE_UPDATE.md)
+   and source archive are prepared; Node 22.23.4 local checks pass. Complete the
+   reviewed staging update before live authorization. A controlled DNS
    hostname and approved Google callback registration are still required; the
    current public IP is not an eligible Google redirect host. No live Google
    Cloud callback or token was changed.
@@ -178,9 +181,10 @@ Before public business acceptance:
    not deployment-ready merely because local protocol tests pass.
 5. Synthetic HTTPS login/logout, role/tenant restrictions, restart/reboot durability
    and encrypted off-host restore passed. The owner's browser login and
-   owner-confirmed recovery-key vault copy are complete. Observe natural TLS
-   renewal and establish operational monitoring before advancing to real
-   providers. A service reload/start is not a backup test.
+   owner-confirmed recovery-key vault copy are complete. First natural TLS
+   renewal was verified on 2 November, and native alarms/email delivery passed.
+   Continue the [remaining operational checks](AWS_STAGING_OPERATIONS.md) before
+   advancing to real providers. A service reload/start is not a backup test.
 6. After explicit provider/data approval, verify real Google create → retrieve →
    reschedule same event → cancel, then an actual phone conversation and clean
    hangup with private PBX media. Do not enable both Mac and AWS phone owners.
