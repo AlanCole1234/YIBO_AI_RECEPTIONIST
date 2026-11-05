@@ -131,6 +131,21 @@ were not repeated for this read-only operational follow-up.
   [Release-update preparation](AWS_STAGING_RELEASE_UPDATE.md) is complete, but no
   running release, environment, database, DNS or provider setting was changed.
 
+## Approved staging hostname — 5 November
+
+The owned hostname **https://staging.getyibo.com** now serves the existing AWS
+application, following explicit approval for the dedicated A record and staging
+HTTPS/origin configuration. The old HTTPS IP redirects there. DNS, trusted TLS,
+dashboard/health, unauthenticated auth, private routes, running origin and
+service boot enablement passed. The owner reported successful private login at
+the new hostname. Latest backup at follow-up succeeded at 16:02:12 UTC.
+
+The application release remains `282f5c7`, with real providers disabled. The
+hostname certificate expires **11 November 19:43:25 UTC**; its first natural
+renewal is still to be observed. The earlier IP renewal remains independently
+verified. [Configuration, rollback and focused validation](AWS_STAGING_DOMAIN.md)
+record the exact change. No additional AWS resource or provider activation.
+
 ## Coverage limits and manual staging checks
 
 Native alarms do **not** verify application login, HTTPS certificate expiry,
@@ -149,7 +164,7 @@ checks below remain operator tasks until separately tested alerting exists.
   approving more storage or a tested retention policy. Never silently prune.
 - **Certificate:** the first natural renewal is verified above. Continue checking
   trust and later serial/validity dates; investigate if less than 48 hours remain
-  without the next renewal. Current observed expiry is **8 November 00:29:33 UTC**.
+  without the next renewal. Current hostname expiry is **11 November 19:43:25 UTC**.
   No forced renewal, certificate deletion or background reminder was created.
 - **Weekly:** review posted credits, transfer and bucket usage; the Free-plan
   deadline is separate from any later credit expiry. Do not upgrade the plan
@@ -160,7 +175,7 @@ checks below remain operator tasks until separately tested alerting exists.
 The first natural renewal, initial native alarm evaluation and controlled email
 delivery gates are complete. Remaining monitoring gaps must stay explicit in any
 launch decision. Staging can continue synthetic testing.
-An owned business hostname, hosted OAuth return-state support, separately
-approved real Calendar authorization, authenticated hosted Voice Lab and a
-private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes
+The owned staging hostname gate is complete. Hosted OAuth return-state deployment,
+separately approved real Calendar authorization, authenticated hosted Voice Lab
+and a private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes
 or real-provider activation are authorized by this operations checkpoint.

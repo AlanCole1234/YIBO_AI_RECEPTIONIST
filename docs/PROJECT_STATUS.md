@@ -3,6 +3,26 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: dominio y HTTPS verificados — 5 de noviembre de 2026
+
+- URL: **https://staging.getyibo.com**. Owner compró `getyibo.com` y aprobó
+  únicamente A `staging` → `3.134.168.191`, TTL 600, backup y cambio de HTTPS/origin.
+  DNS root/email existente preservado; aplicación sigue alojada en AWS.
+- TLS válido, dashboard/health 200, auth sin sesión 401, voice/ARI 404. HTTP e IP
+  HTTPS anterior redirigen al hostname nuevo. Login privado exitoso reportado por
+  el owner; no se leyó la contraseña ni se afirma una nueva prueba autenticada
+  automatizada. Certificado hostname vence 11 de noviembre 19:43:25 UTC.
+- Guard sintético/Caddy pasan; API usa el nuevo origin. API/Caddy/timer activos y
+  habilitados; backup programado exitoso a las 16:02:12 UTC. Rollback preservado.
+- **10/10 tests focales** de staging pasan mediante Vitest ya instalado; pnpm
+  inicial bloqueado por fetch de firmas del registry. Sin reducir verificaciones
+  de dependencias. No cambios de código/build: no se repiten typechecks/build.
+- Release sigue `282f5c7`, proveedores reales apagados, base AWS $13/mes sin nuevos
+  recursos. Sin main, producción, PBX/7001, Cloudflare ni Google live.
+- [Evidencia, rollback y límites](AWS_STAGING_DOMAIN.md). Siguiente gate separado:
+  aprobación de actualización sintética `f38de13`, luego configuración/autorización
+  Google staging revisada. La aprobación del dominio no activa proveedores reales.
+
 ## AWS staging: renovación TLS y actualización preparada — 2 de noviembre de 2026
 
 - Primera renovación natural verificada desde HTTPS público: certificado nuevo

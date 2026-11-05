@@ -9,7 +9,7 @@ was read back on 2 November and remains unchanged.
 | Branch | `codex/launch-integration-reviewed` |
 | Current / rollback release | `282f5c777d5780a66d9cccd36a3f908468d21fe0` |
 | Prepared target release | `f38de1316a88f00a5d3f1f36557c3079a2169dc9` |
-| Existing website | `https://3.134.168.191` |
+| Existing website | `https://staging.getyibo.com` (hostname activated separately on 5 November; old IP redirects here) |
 | Release archive SHA-256 | `730ada6d1059625738c25fff237b947b885684056b626482ec96df9da822f7db` |
 | Archive size / contents | 722,995 bytes; 484 tracked files from the exact target commit |
 
@@ -103,18 +103,21 @@ providers are outside this procedure. This is not a production launch.
 
 ## Hostname and live-provider boundary
 
-The current IP remains suitable for synthetic HTTPS testing. Google requires an
+The owned staging hostname is now available for synthetic HTTPS testing. Google requires an
 eligible hostname for a hosted OAuth callback; raw-IP hosts are prohibited except
 localhost. [Google redirect URI rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation).
 
-The owner has no domain and has requested domain-name/price options. No hostname
-has been selected, registered or configured. A purchase is outside the approved
-$13/month AWS resource scope and needs separate approval of the name and cost.
-Use a registrar's included DNS to avoid an unnecessary paid hosted zone.
+Since this procedure was prepared, the owner purchased `getyibo.com` and approved
+the [separate hostname checkpoint](AWS_STAGING_DOMAIN.md). On 5 November,
+`staging.getyibo.com` was verified at the existing attached IP with matching
+Caddy/dashboard origin and trusted HTTPS. Registrar-included DNS avoids another
+paid hosted zone; the AWS resource base remains $13/month.
 
-After that decision and approval, the intended mapping is a dedicated staging
-hostname's A record to the **existing attached IP**. That hostname must be used
-consistently for Caddy, `YIBO_DASHBOARD_ORIGIN` and the exact Google callback path
-`/api/integrations/google/callback`. No DNS record, Google client/callback,
-credential or grant is changed by preparing this document. Authenticated hosted
-Voice Lab and private phone handover remain separate gates.
+The release update above is still **not applied**. Its Caddy import contract is
+unchanged by the hostname checkpoint; preserve the current host wrapper and IP
+redirect. A future, separately approved staging Google client would use exactly
+`https://staging.getyibo.com/api/integrations/google/callback`. No Google client,
+credential or grant has been changed. Real-provider activation must also have its
+own reviewed staging guard/environment procedure; it is not authorized by the
+domain or synthetic-release update. Authenticated hosted Voice Lab and private
+phone handover remain separate gates.
