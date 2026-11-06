@@ -3,6 +3,27 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: perfil Google de prueba preparado — 6 de noviembre de 2026
+
+- Preparado **sin desplegar**: `YIBO_STAGING_PROVIDER=google-calendar-test` permite
+  sólo los campos Google revisados, callback HTTPS exacto y calendario secundario.
+  El default sintético mantiene todas las prohibiciones actuales.
+- Exige SQLite separado `staging-google-us.sqlite` y el mismo lock del host;
+  conserva loopback, tenant/región, autenticación y bloqueo de voz/telefonía/email.
+  Ningún cambio de lógica, adapter Google, esquema, permisos o scope OAuth.
+- **20/20 tests** (10 existentes + 10 nuevos) pasan en Mac ARM64 con Node 22.23.4
+  y 26.7.0; ambos typechecks/build pasan en Node 26.7.0. Linux aún pendiente antes
+  de activar; no se repite suite completa para configuración de despliegue.
+- Template privado vacío, procedimiento de cuenta/calendario/client separado,
+  backup/rollback y custodia de claves documentados. No credenciales nuevas,
+  consentimiento, escrituras Google ni cambios de servicios/DB/config en AWS.
+- Sign-in de la cuenta Google de prueba aún sin verificar: sesión de alta vencida;
+  sólo cuenta original observada. Página de acceso nueva abierta para el owner.
+- Release activo continúa **`f38de13`** con proveedores reales apagados. Sin main,
+  PBX/7001, Cloudflare, Google live ni recursos/costos nuevos.
+  [Plan exacto y límites](AWS_STAGING_GOOGLE_ACCEPTANCE.md). Activación requiere
+  aprobación separada después de verificar cuenta, proyecto y calendario.
+
 ## AWS staging: release actualizado y login verificado — 6 de noviembre UTC / 5 Denver
 
 - Release activo **`f38de13`**, con retorno OAuth HTTPS corregido; rollback

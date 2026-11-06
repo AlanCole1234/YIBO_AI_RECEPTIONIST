@@ -7,6 +7,14 @@ completed owner login and encrypted backup, owner-confirmed recovery-key custody
 and remaining natural certificate renewal and operations checks. The proposal and
 observations below are retained as historical pre-provisioning context.
 
+**6 November preparation:** an opt-in `google-calendar-test` preflight and
+[private environment template](google-calendar-test.env.example) are prepared,
+not installed. The existing synthetic profile stays the default. Activation uses
+a fresh, separate SQLite file and requires a verified test-only Google account,
+reviewed credentials/calendar and explicit staging approval. Follow the
+[Google acceptance procedure](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md);
+do not add Google credentials to the running synthetic environment directly.
+
 Prepared October 25, 2026 on `codex/launch-integration-reviewed`. **Nothing in this
 directory provisions resources or runs during the application build.** No AWS
 resource, public certificate, IAM grant, DNS record or production change has been
