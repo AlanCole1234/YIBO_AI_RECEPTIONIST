@@ -3,6 +3,25 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: cuenta habitual y calendario aislado — 6 de noviembre de 2026
+
+- El owner eligió explícitamente su cuenta Google habitual tras dificultades con
+  el alta; sustituye la recomendación anterior de crear otra cuenta.
+- Creado **YIBO AWS STAGING TEST**, America/Chicago, privado y compartido sólo con
+  el owner. Calendario anterior **YIBO Test Appointments** y eventos existentes
+  preservados. Ningún evento nuevo ni consentimiento OAuth realizado.
+- Inventario Google Cloud: sólo **YIBO Development** visible. Formulario separado
+  **YIBO AWS Staging** preparado sin enviar; creación de proyecto/client pendiente
+  de aprobación. Sin billing ni cambios al proyecto existente.
+- Los scopes actuales permiten acceso a eventos de otros calendarios de la cuenta;
+  la selección de calendario en YIBO no restringe el permiso OAuth. Consentimiento
+  informado y mapping exacto antes de activar pruebas reales. Guard no es allowlist.
+- Sólo documentación/comentario del template actualizados; sin código ejecutable,
+  despliegue, credenciales, DB, PBX/7001, main ni producción modificados.
+  **20/20 tests** del guard pasan nuevamente; enlaces y campos secretos vacíos
+  verificados. Typechecks/build previos conservan validez; no repetidos para docs.
+  [Procedimiento y próximos pasos](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: perfil Google de prueba preparado — 6 de noviembre de 2026
 
 - Preparado **sin desplegar**: `YIBO_STAGING_PROVIDER=google-calendar-test` permite

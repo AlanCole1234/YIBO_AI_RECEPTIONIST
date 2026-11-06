@@ -3,13 +3,15 @@
 6 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
 OAuth return fix is active in release `f38de13`; staging still uses the synthetic
 provider. The owner login and 18 hosted synthetic checks are verified in
-[the release report](AWS_STAGING_RELEASE_UPDATE.md). No Google account, client,
-grant, calendar or server setting was changed during this preparation.
+[the release report](AWS_STAGING_RELEASE_UPDATE.md).
 
-The owner reports creating a test account, but the browser signup session expired
-and only the original account was verified signed in. A fresh sign-in page for
-the test account is open. Verify its identity before creating anything; do not
-substitute the original account or reuse its working OAuth client or tokens.
+**Account decision, 6 November:** after unsuccessful signup attempts, the owner
+explicitly chose the existing regular Google account. A new private secondary
+calendar, **YIBO AWS STAGING TEST**, was created in that verified signed-in account
+with timezone **America/Chicago**. Public access is off and only the owner appears
+in sharing. The older **YIBO Test Appointments** calendar and all existing events
+are preserved. No new OAuth client, grant, event or server configuration has been
+created. Do not resume test-account signup or reuse working OAuth clients/tokens.
 
 ## Isolation and the prepared deployment guard
 
@@ -41,28 +43,36 @@ same password works. Copy no customers, appointments, calls, grants or calendar
 mappings. This is a **proposed activation step**, not yet performed.
 
 Guard syntax checks cannot prove account/calendar ownership and are not a runtime
-calendar allowlist. Use a Google account containing only test data and no access
-to real business calendars; verify the new calendar in that account before consent.
-The existing scopes cover event editing and availability across calendars the
-authorizing account can access. [Google scope definitions](https://developers.google.com/workspace/calendar/api/auth).
+calendar allowlist. The owner's regular-account choice replaces the earlier
+test-only-account recommendation, but it does **not** limit Google's permissions
+to the test calendar: the existing scopes cover event editing and availability
+across calendars the authorizing account can access. Explain that scope before
+the owner grants consent. Verify the dedicated secondary-calendar ID and fresh
+database routing before any event write; tests must target only that calendar.
+Do not inspect or modify personal events. A separate OAuth client isolates the
+staging grant from working YIBO credentials, not from other calendars accessible
+to that Google account. [Google scope definitions](https://developers.google.com/workspace/calendar/api/auth).
 
-## Exact Google setup to approve after test-account sign-in
+## Exact Google setup — OAuth preparation awaiting approval
 
-1. In the verified test-only account, create one private secondary calendar named
-   **YIBO AWS STAGING TEST**, timezone **America/Chicago** to match the demo clinic.
-   Do not share real calendars with this account. Record the actual Calendar ID
-   privately from its settings; do not invent an ID or use `primary`.
-2. Inspect the test account's Google Cloud projects first. Reuse an exclusively
-   test project if suitable; otherwise propose **YIBO AWS Staging** as the display
-   name of a separate project. Record Google's actual generated project ID.
+1. **Calendar created and privacy checked:** **YIBO AWS STAGING TEST**,
+   **America/Chicago**, owner-only sharing and public access disabled. Record its
+   actual Calendar ID privately from settings; do not invent an ID, use `primary`
+   or substitute the older test calendar.
+2. **Project inventory checked:** the signed-in account's All-projects view shows
+   only **YIBO Development** (`yibo-development`). Preserve it. The separate
+   **YIBO AWS Staging** project form is prepared but has not been submitted;
+   project/client creation approval is pending. Record Google's actual project ID
+   after creation, rather than treating a form suggestion as an existing resource.
    Enable only Google Calendar API. Standard API usage is listed at no additional
    cost. Do not attach billing, start a paid trial, add Workspace or enable other
    services. If Google's current flow requires payment or an upgrade, stop before
    accepting it; no such spending is approved.
    [Calendar API quotas and pricing](https://developers.google.com/workspace/calendar/api/guides/quota).
-3. Configure a separate OAuth app in **External / Testing**, adding only the test
-   account as a test user. Use its address for contact/support. Keep the existing
-   YIBO production/development project's clients and grants unchanged. Any terms,
+3. Configure a separate OAuth app in **External / Testing**, adding only the
+   owner's approved regular account as a test user. Use its address for
+   contact/support. Keep the existing YIBO production/development project's clients
+   and grants unchanged. Any terms,
    MFA or account-ownership challenge must be completed privately by the owner.
 4. Create a **Web application** OAuth client for this staging app. Authorized
    redirect URI, with no trailing slash:
@@ -119,9 +129,10 @@ exact committed release and configuration diff for approval. Then:
 4. Validate the guard before starting the API. Verify loopback, public HTTPS,
    unauthenticated 401, voice/ARI 404, owner login, and new-release encrypted backup.
    Resume the existing backup timer and confirm enablement/next trigger.
-5. Use YIBO's existing Google Connect action. The owner selects the test account
-   and grants the two reviewed scopes privately. Confirm the dashboard reports
-   connected and the exact test mapping is accessible; no default-calendar guess.
+5. Use YIBO's existing Google Connect action. The owner selects the approved
+   regular account and grants the two reviewed scopes privately, understanding
+   that access is broader than the mapped test calendar. Confirm the dashboard
+   reports connected and the exact test mapping is accessible; no default-calendar guess.
 6. With a unique `[YIBO AWS STAGING TEST]` run label and synthetic contact data,
    book one appointment plus a neighboring test appointment. Verify actual Google
    ID, ownership metadata and exact clinic-local date/time. Move the first twice;
@@ -148,7 +159,13 @@ build passed on Node 26.7.0 with existing locked dependencies. No full suite rer
 application source is unchanged. Native Linux checks remain part of approval-time
 activation; this preparation is not installed on the host.
 
-Only synthetic credentials were used by automated checks. No Google Cloud settings,
-staging services, databases, credentials, production data or phone routing have
-changed. Real consent, event writes, Linux activation and key-custody handoff remain
-pending. This preparation does not claim real Google synchronization from AWS.
+Only synthetic credentials were used by automated checks. The new private test
+calendar is the only external change in this account-preparation step. Google
+Cloud settings, staging services, databases, credentials, production data and
+phone routing remain unchanged. Real consent, event writes, Linux activation and
+key-custody handoff remain pending. This preparation does not claim real Google
+synchronization from AWS. Documentation and template comments now reflect the
+owner's regular-account choice; no executable code changed for that decision.
+The 20 focused staging guard tests pass again after this documentation/template
+comment update; local documentation links and blank credential fields are checked.
+Typechecks and build are not repeated for this non-executable change.
