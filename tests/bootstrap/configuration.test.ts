@@ -11,6 +11,8 @@ describe("loadConfiguration", () => {
       openAiRealtimeModel: "gpt-realtime-2.1",
       conversationVoice: "marin",
       maxOutputTokens: 512,
+      callMaxDurationMs: 15 * 60_000,
+      callMaxTokens: 150_000,
       dashboardOrigin: "http://localhost:5173",
     });
   });
@@ -26,6 +28,8 @@ describe("loadConfiguration", () => {
       openAiRealtimeModel: "gpt-realtime-2.1",
       conversationVoice: "marin",
       maxOutputTokens: 512,
+      callMaxDurationMs: 15 * 60_000,
+      callMaxTokens: 150_000,
       dashboardOrigin: "http://localhost:5173",
     });
   });
@@ -65,6 +69,15 @@ describe("loadConfiguration", () => {
   it("rejects a missing key for the OpenAI runtime", () => {
     expect(() => loadConfiguration({ YIBO_RUNTIME: "openai-realtime" }))
       .toThrowError(new ConfigurationError("OPENAI_API_KEY is required when YIBO_RUNTIME=openai-realtime"));
+  });
+
+  it("rejects call recording and outbound dialing", () => {
+    expect(() => loadConfiguration({ YIBO_CALL_RECORDING: "on" }))
+      .toThrowError(/YIBO_CALL_RECORDING must stay off/);
+    expect(() => loadConfiguration({ YIBO_OUTBOUND_DIALING: "enabled" }))
+      .toThrowError(/YIBO_OUTBOUND_DIALING is not supported/);
+    expect(loadConfiguration({ YIBO_CALL_RECORDING: "off", YIBO_OUTBOUND_DIALING: "disabled" }).runtime)
+      .toBe("in-memory");
   });
 
   it("rejects unknown runtime names", () => {
