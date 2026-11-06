@@ -146,6 +146,24 @@ renewal is still to be observed. The earlier IP renewal remains independently
 verified. [Configuration, rollback and focused validation](AWS_STAGING_DOMAIN.md)
 record the exact change. No additional AWS resource or provider activation.
 
+## Synthetic release update — 6 November UTC / 5 November Denver
+
+Release **`f38de13`** is now active, with `282f5c7` retained for rollback. Native
+Linux validation passed 111 tests, both typechecks and production build; 18 hosted
+synthetic checks passed. The owner signed in privately after the API restart,
+and the browser displayed the authenticated schedule and available slots.
+
+Read-only closure verified the test appointment cancelled, temporary test operator
+disabled and owner active. API/Caddy/backup timer are active and enabled. Fresh
+encrypted backups bracketed the release switch; the next scheduled job succeeded
+at **6 November 01:03:11 UTC**, with a new-release manifest at 01:03:10.344 UTC,
+after the hosted smoke test. No additional reboot or restore was needed.
+[Exact changes, checks and rollback](AWS_STAGING_RELEASE_UPDATE.md).
+
+Real providers remain off. No extra resources, alarm/phone changes or new billing
+observation; the approved resource base is unchanged. Hostname certificate renewal
+and the monitoring coverage limits below remain operator checks.
+
 ## Coverage limits and manual staging checks
 
 Native alarms do **not** verify application login, HTTPS certificate expiry,
@@ -175,7 +193,7 @@ checks below remain operator tasks until separately tested alerting exists.
 The first natural renewal, initial native alarm evaluation and controlled email
 delivery gates are complete. Remaining monitoring gaps must stay explicit in any
 launch decision. Staging can continue synthetic testing.
-The owned staging hostname gate is complete. Hosted OAuth return-state deployment,
-separately approved real Calendar authorization, authenticated hosted Voice Lab
+The owned staging hostname and hosted OAuth return-state deployment gates are
+complete. Separately approved real Calendar authorization, authenticated hosted Voice Lab
 and a private phone handover remain separate. No DigitalOcean/Asterisk/7001 changes
 or real-provider activation are authorized by this operations checkpoint.

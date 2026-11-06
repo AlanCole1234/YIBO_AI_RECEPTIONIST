@@ -3,6 +3,29 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: release actualizado y login verificado — 6 de noviembre UTC / 5 Denver
+
+- Release activo **`f38de13`**, con retorno OAuth HTTPS corregido; rollback
+  `282f5c7` preservado. Archivo exacto verificado y release inmutable instalado.
+  Sólo restart de API y pausa temporal del timer; Caddy/origin/proveedores y
+  esquema sin cambios. Backup env cambia únicamente el SHA del release.
+- Linux x86-64, Node 22.23.4/pnpm 11.19.0: **111/111 tests, 13 archivos**, ambos
+  typechecks y build de producción pasan. Sin repetir la suite completa.
+- **18/18 checks HTTPS sintéticos** pasan: autenticación/roles/tenant/origin,
+  disponibilidad, booking/replay/doble reserva, dos reschedules con mismo event ID,
+  cancel/replay/historial y logout. Cuenta temporal desactivada y cita cancelada;
+  readback SQLite confirmado. **Calendar simulado, no Google real.**
+- Owner volvió a iniciar sesión privadamente tras el restart; agenda y slots
+  visibles en **https://staging.getyibo.com**. Contraseña preservada.
+- Backups cifrados antes/después del switch; siguiente backup programado exitoso
+  **01:03:11 UTC** después de los tests. API/Caddy/timer activos y habilitados.
+- Base AWS $13/mes sin nuevos recursos; crédito no releído. Sin main, producción,
+  PBX/7001, Cloudflare ni Google live. [Evidencia y rollback](AWS_STAGING_RELEASE_UPDATE.md).
+- Siguiente gate: procedimiento y aprobación de Google **staging** (guard/env,
+  credenciales/callback y consentimiento), luego prueba real de create/retrieve/
+  reschedule/cancel. Proveedores reales continúan apagados; Voice Lab y handover
+  telefónico siguen gates separados. Renovación natural del hostname pendiente.
+
 ## AWS staging: dominio y HTTPS verificados — 5 de noviembre de 2026
 
 - URL: **https://staging.getyibo.com**. Owner compró `getyibo.com` y aprobó

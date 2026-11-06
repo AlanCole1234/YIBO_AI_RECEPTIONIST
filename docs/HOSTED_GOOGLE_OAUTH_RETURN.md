@@ -1,6 +1,7 @@
 # Hosted Google OAuth dashboard return
 
-31 October 2026. Local launch-branch fix; **not deployed to staging or production**.
+Fix dated 31 October 2026; **deployed to synthetic staging on 6 November UTC**
+(5 November in Denver), release `f38de13`. Not deployed to production.
 No Google Cloud client, callback registration, token, real calendar or phone setting
 was changed. The AWS staging release remains synthetic with real providers off.
 
@@ -50,20 +51,27 @@ tenant token storage, API authorization and Calendar event operations are unchan
   is claimed.
 - **2 November follow-up:** the same 82 tests, both typechecks and production build
   also pass on local Mac ARM64 with Node **22.23.4**, matching staging's Node version.
-  No code change was needed. The target Linux x64 release-validation step remains
-  in the [prepared update procedure](AWS_STAGING_RELEASE_UPDATE.md).
+  No code change was needed.
+- **5–6 November deployment:** native staging Linux x86-64 / Node 22.23.4 passed
+  **111 tests** (the same 82 plus staging guards and regional backups), both
+  typechecks and production build. The exact reviewed release was activated;
+  **18 hosted synthetic checks** and subsequent private owner login passed.
+  [Deployment, rollback and evidence](AWS_STAGING_RELEASE_UPDATE.md).
 
 ## Remaining deployment gates
 
-Natural TLS renewal was verified on 2 November: a new trusted certificate issued
-on 1 November is served, and HTTPS/health/auth-boundary checks pass. Deploying this
-fix remains a separate step; the exact artifact and rollback are prepared above.
-Before live Calendar consent, select an approved controlled DNS hostname and exact
-callback registration: Google prohibits raw-IP redirect hosts except localhost,
-so the current public IP URL cannot itself be the Google OAuth callback.
+The separately approved hostname checkpoint is complete: trusted HTTPS at
+`https://staging.getyibo.com`, with the previous IP URL redirecting there. The
+hostname certificate's first natural renewal remains to be observed; the earlier
+IP certificate renewal was verified independently. The fix is now deployed, but
+real Google credentials and consent remain disabled. The exact future callback is
+`https://staging.getyibo.com/api/integrations/google/callback`; Google prohibits
+raw-IP redirect hosts except localhost.
 [Google redirect validation rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation).
 
-No domain purchase, DNS change, provider credentials or consent is authorized by
-this code checkpoint. Once approved and configured, verify Google create → retrieve
+Domain/DNS approval and the synthetic release update do not authorize real-provider
+activation. Before consent, review the staging guard/environment change and obtain
+approval for staging-only credentials/callback registration without altering the
+working Google integration. Once approved and configured, verify Google create → retrieve
 → reschedule the same event → cancel with a labeled test appointment. Hosted
 authenticated Voice Lab and private phone handover remain separate launch gates.

@@ -1,21 +1,21 @@
-# Synthetic staging release update — prepared, not applied
+# Synthetic staging release update — applied and verified
 
-2 November 2026. This is the reviewed procedure for the existing Lightsail host;
-it creates no resources and does not activate real providers. The running release
-was read back on 2 November and remains unchanged.
+Prepared 2 November 2026; applied **6 November 00:47 UTC** (5 November in Denver)
+to the existing Lightsail staging host. No resources were created and no real
+providers were activated. Owner login after the update is verified below.
 
 | Item | Exact value |
 | --- | --- |
 | Branch | `codex/launch-integration-reviewed` |
-| Current / rollback release | `282f5c777d5780a66d9cccd36a3f908468d21fe0` |
-| Prepared target release | `f38de1316a88f00a5d3f1f36557c3079a2169dc9` |
+| Preserved rollback release | `282f5c777d5780a66d9cccd36a3f908468d21fe0` |
+| Active verified release | `f38de1316a88f00a5d3f1f36557c3079a2169dc9` |
 | Existing website | `https://staging.getyibo.com` (hostname activated separately on 5 November; old IP redirects here) |
 | Release archive SHA-256 | `730ada6d1059625738c25fff237b947b885684056b626482ec96df9da822f7db` |
 | Archive size / contents | 722,995 bytes; 484 tracked files from the exact target commit |
 
 ## Reviewed scope and validation
 
-Only two application source files differ from the running release: configured
+Only two application source files differ from the previous release: configured
 application bootstrap and Google OAuth service. They implement the
 [trusted HTTPS dashboard return](HOSTED_GOOGLE_OAUTH_RETURN.md). The remaining
 delta is documentation, regression tests and the repository copy of the IP SNI
@@ -33,9 +33,56 @@ The source archive was built with `git archive` from the exact target commit,
 not the working directory. Runtime environment files, SQLite data, recordings,
 private-key files, AWS/SSH directories and dependencies are absent. A scan of
 all tracked files found no high-confidence private-key/provider-token patterns.
-The artifact is local only; nothing was uploaded or installed in this checkpoint.
+Preparation made no host changes. For activation, the public repository's exact
+target commit was fetched on staging and archived again; its SHA-256 matched the
+reviewed local artifact. All 484 tracked files were byte-compared after the build
+and before activation. No private files or Mac dependencies were transferred.
 
-## Existing host contract, inspected read-only
+## Completed deployment and acceptance
+
+- Native Ubuntu 24.04 x86-64, **Node 22.23.4 / pnpm 11.19.0**: frozen-lockfile
+  install, **111/111 tests across 13 files**, backend and frontend typechecks, and
+  Vite production build passed. This includes the 82 tests above, 10 staging
+  guards and 19 regional backup cases. Validation ran as the existing unprivileged
+  build user with synthetic fixtures and no provider credentials. No full suite
+  was repeated for this narrow, previously tested source delta.
+- New immutable release installed under `/opt/yibo/releases/<active SHA>`.
+  Existing staging guard passed. Root ownership, runtime write restrictions,
+  source identity and internal dependency symlinks were checked before activation.
+- Rollback copies, preserving permissions, are at
+  `/etc/yibo/rollback/release-f38de13-20261106T004735Z`. The previous release remains
+  intact. Fresh encrypted backups identify the old release at **00:47:36 UTC** and
+  new release at **00:47:40 UTC**. No rollback or database restore was needed.
+- Only the API was stopped/started for the switch. The backup timer was briefly
+  paused and restored; only `YIBO_RELEASE_SHA` changed in its private environment.
+  Backend/public environment and Caddy configuration were verified byte-for-byte
+  unchanged. No Caddy restart, schema migration, new unit or provider activation.
+- **18/18 hosted HTTPS synthetic checks passed**: health; unauthenticated boundary;
+  login and Secure/HttpOnly/SameSite cookie; identity; operator/admin separation;
+  tenant override rejection; untrusted-origin rejection; location/professional
+  availability; booking at the exact requested time; booking replay; double-booking
+  rejection; two reschedules preserving event identity; cancellation; cancellation
+  replay; no duplicate confirmed appointment; appointment history; session logout.
+- These hosted checks used a temporary synthetic operator and the in-memory
+  Calendar provider. The account was disabled, its session revoked and its test
+  appointment cancelled; test history was retained. A subsequent read-only SQLite
+  check confirmed cancellation, no active test operator and an active owner.
+  **This is not a live Google Calendar synchronization test.**
+- The API restart invalidated existing sessions but did not change the owner's
+  password. The owner signed in privately afterward; the browser visibly showed
+  the office schedule and open slots at `https://staging.getyibo.com`.
+- Final readback: API/Caddy/backup timer active and enabled, process working
+  directory and backup metadata select the new release. The next scheduled backup
+  completed at **01:03:11 UTC**, with new-release manifest **01:03:10.344 UTC**,
+  after the hosted test completed at 00:50:40 UTC. Next trigger: 02:03:12 UTC.
+  Public dashboard/health 200, unauthenticated auth 401, voice/ARI 404 passed.
+
+No additional AWS resources were created; the approved $13/month resource base
+is unchanged. Credits were not re-read for this checkpoint. Existing restart and
+restore evidence remains dated in [initial staging validation](AWS_STAGING_VALIDATION.md);
+no additional full-host reboot or restore was performed during this update.
+
+## Existing host contract reviewed before deployment
 
 - `/opt/yibo/current` selects the current immutable, root-owned 0755 release.
   Node is `/usr/bin/node`, version 22.23.4; the existing `yibo-build` user exists.
@@ -54,7 +101,7 @@ The artifact is local only; nothing was uploaded or installed in this checkpoint
 - Persistent synthetic DB, instance lock, private credentials and certificate
   storage remain outside releases. Keep one writer and all real providers off.
 
-## Execution order for the separate staging update
+## Reviewed execution and rollback procedure
 
 1. Recheck the exact current release, synthetic startup guard, service state,
    backup freshness and capacity. Stop if any no longer matches this procedure.
@@ -113,9 +160,9 @@ the [separate hostname checkpoint](AWS_STAGING_DOMAIN.md). On 5 November,
 Caddy/dashboard origin and trusted HTTPS. Registrar-included DNS avoids another
 paid hosted zone; the AWS resource base remains $13/month.
 
-The release update above is still **not applied**. Its Caddy import contract is
-unchanged by the hostname checkpoint; preserve the current host wrapper and IP
-redirect. A future, separately approved staging Google client would use exactly
+The release update above is now applied to **synthetic staging only**. Its Caddy
+import contract, host wrapper and IP redirect are preserved. A future, separately
+approved staging Google client would use exactly
 `https://staging.getyibo.com/api/integrations/google/callback`. No Google client,
 credential or grant has been changed. Real-provider activation must also have its
 own reviewed staging guard/environment procedure; it is not authorized by the
