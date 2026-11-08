@@ -1,8 +1,9 @@
-# AWS staging Google Calendar — prepared, not activated
+# AWS staging Google Calendar — activated, consent pending
 
 Updated 8 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
-OAuth return fix is active in release `f38de13`; staging still uses the synthetic
-provider. The owner login and 18 hosted synthetic checks are verified in
+OAuth return fix is preserved in the newly active release `0f55c44`. The approved
+Google-test profile now uses its own database; Google consent and real event
+acceptance remain pending. The earlier login and 18 hosted synthetic checks are in
 [the release report](AWS_STAGING_RELEASE_UPDATE.md).
 
 **Account decision, 6 November:** after unsuccessful signup attempts, the owner
@@ -38,13 +39,14 @@ them, validated against the new client/project/callback, and read back locally.
 The redundant temporary copy was removed after matching the persistent record.
 The dedicated calendar's actual ID was read from its named Google settings page
 and saved beside the client as private routing metadata; its name, secondary-ID
-format and America/Chicago timezone were checked. This mapping is not installed.
+format and America/Chicago timezone were checked. The exact mapping was subsequently
+installed and verified during the approved 8 November activation below.
 No secret was included in chat, screenshots, repository files or command arguments.
 
-**Not activated:** no Calendar consent, access/refresh token, Google event write,
-AWS credential transfer, service restart, database switch or token-key creation.
-Staging still runs its synthetic provider. Owner recovery custody and the separate
-AWS activation approval below remain required before real-provider acceptance.
+At the end of the 7 November Google setup, no AWS activation had occurred.
+The owner separately approved it on 8 November; completed work is recorded below.
+**Still pending:** private owner login after the restart, Google Calendar consent,
+access/refresh tokens, and real event create/reschedule/cancel acceptance.
 
 ## Read-only AWS preflight — 8 November 2026
 
@@ -60,22 +62,78 @@ without changing files, services, provider settings or data:
 | SQLite | Existing synthetic DB, read-only `quick_check` returns `ok`; proposed Google-test DB does not exist |
 | Backup configuration | DB path and release SHA match the running synthetic deployment |
 | Latest scheduled backup | Success, **8 November 19:04:22 UTC**; next timer trigger **20:04:27 UTC** at inspection |
-| Public HTTPS checks | **5/5 passed**: dashboard and `/health` 200; unauthenticated `/api/auth/me` 401; `/voice` and `/ari` 404 |
+| Public routes | Dashboard and `/health` 200; unauthenticated `/api/auth/me` 401; `/voice` and `/ari` 404. `/health` is a SPA fallback, not proof of API health; the actual `/api/health` JSON endpoint was separately verified before and after activation below. |
 | Automatic hostname TLS renewal | Caddy recorded successful renewal for `staging.getyibo.com` at **8 November 13:28:06 UTC**; publicly verified certificate expires **15 November 04:29:33 UTC** |
 
 This closes the earlier natural hostname-renewal check. No renewal was forced,
 and no restart was needed. This inspection does not constitute a new authenticated
 appointment test or a new billing/credit measurement. The existing Google setup
-can proceed to the separately approved activation below without rebuilding it.
+was reused for the separately approved activation below.
 
-## Isolation and the prepared deployment guard
+## Approved activation completed — 8 November 2026
+
+The owner explicitly approved privately transferring the new staging OAuth client
+and verified calendar ID to the existing AWS host, generating a token-encryption
+key, creating a separate DB while preserving login/original data, updating backup
+targets and restarting only the staging API. Calendar consent was excluded.
+
+| Item | Verified result |
+| --- | --- |
+| Active immutable release | `0f55c44c8cb50344a9bac38b22b75f5d564d728b` |
+| Preserved rollback release | `f38de1316a88f00a5d3f1f36557c3079a2169dc9` |
+| Source | Exact public Git commit; **488 tracked files** byte-compared after build; uncompressed archive SHA-256 `360dcd789a99e2da83adfcef76e22757a3ed843f6705c4ecf8817f93417e2a0e` |
+| Native validation | Ubuntu 24.04 x86-64, Node **22.23.4**, pnpm **11.19.0**; frozen-lockfile install, **114/114 tests across 13 files**, both typechecks and Vite production build passed |
+| Profile / DB | `google-calendar-test` / `/var/lib/yibo/staging-google-us.sqlite` |
+| Original synthetic DB | `/var/lib/yibo/staging-us.sqlite` preserved, with a fresh encrypted backup before the switch |
+| Owner | Exactly one existing active owner identity, password hash and roles copied within the host; equality and tenant/foreign-key checks passed; no password reset |
+| Calendar routing | Fresh default location maps to the privately verified **YIBO AWS STAGING TEST** secondary ID, **America/Chicago** |
+| Provider state | New client/token-encryption settings installed privately; **zero Google grants and zero appointments** at activation verification |
+| Backup | New DB path and exact release SHA installed together; encrypted post-switch DB backup passed; timer restored active/enabled |
+| Recovery | New Google client/routing/token-encryption material encrypted into the existing restic repository under tag `yibo-staging-google-recovery`; restored privately and byte-compared successfully |
+| Public verification | **5/5 pass**: dashboard 200, `/api/health` 200 with exactly `{"status":"ok"}`, unauthenticated `/api/auth/me` 401, `/voice` and `/ari` 404; trusted TLS retained |
+
+Build/install ran as the existing unprivileged `yibo-build` user with no provider
+credentials. Coverage includes staging guards, OAuth/hosted callback, Calendar
+event identity, stale compensation, SQLite concurrency, authentication and regional
+backup. Provider requests in these tests were mocked; no full suite was repeated
+for a deployment-only change. All tracked source files remained unchanged.
+
+The existing synthetic and new Google-test guards both passed before the switch.
+Source/dependencies are root-owned and not writable by runtime. The source release
+contains no private environment files, runtime DBs or credential records. Credentials
+were transferred through a verified no-echo SSH input session; clipboard/input were
+cleared afterward. They were not printed or embedded in command arguments/history.
+
+Rollback files with original permissions, candidates and a private result record
+are at `/etc/yibo/rollback/google-0f55c44-20261108`. The API process working directory
+and loaded Google-test environment matched the approved release and mapping.
+Public environment and Caddy configuration remained byte-for-byte unchanged;
+there was no Caddy restart or reload. Only the API was stopped/started, with the
+backup timer temporarily paused and resumed. No rollback was needed.
+
+The Google recovery backup uses the existing restic recovery password the owner
+already saved in a locked Apple Note. The new encryption key and client secret
+were restored and compared without exposing either. The private restored evidence
+remains inside the root-only rollback directory. Preserve that repository and the
+owner-held recovery password; future credential/key changes require a new encrypted
+recovery backup. This is separate from the routine database-only snapshots.
+
+No new resources or subscriptions were created; the approved AWS resource base
+remains $13/month, excluding existing usage/overage terms. Credits were not reread.
+Existing Google grants/events, personal events, main, production, phone services,
+PBX/7001 and Cloudflare were untouched. Google consent and the real Calendar test
+remain distinct gates. The sign-in page is prepared with `owner@example.test`;
+the owner must enter the existing password privately after session invalidation.
+
+## Isolation and the installed deployment guard
 
 `buildConfiguredApplication` selects the real Google adapter when all four OAuth
 settings exist. The runtime choice `in-memory` controls the AI runtime; it does
 **not** disable that Calendar adapter. Adding Google credentials to the current
-deployment is blocked by the existing staging preflight.
+synthetic profile is blocked by the staging preflight. Activation uses the explicit
+Google-test opt-in below.
 
-The prepared preflight adds one explicit, deployment-only setting:
+The installed preflight adds one explicit, deployment-only setting:
 
 | Setting | Default / accepted value | Consumer |
 | --- | --- | --- |
@@ -92,10 +150,11 @@ OAuth scopes or Calendar adapter code changes.
 
 The new database prevents old synthetic event IDs from being treated as real
 Google events. Preserve `staging-us.sqlite` and its encrypted backup unchanged.
-Initialize the new DB through existing migrations/US demo seeding, then copy only
-the existing staging owner's identity/role record privately on the host so the
-same password works. Copy no customers, appointments, calls, grants or calendar
-mappings. This is a **proposed activation step**, not yet performed.
+The new DB was initialized through existing migrations/US demo seeding, with only
+the staging owner's identity/role record copied privately on the host so the same
+password remains valid. No old customers, appointments, calls, grants or calendar
+mappings were copied. The new calendar mapping comes only from the verified
+staging configuration.
 
 The current schema stores identity, password hash and roles together in
 `admin_users` (migration 005). Copy exactly the active `owner@example.test` row
@@ -152,11 +211,11 @@ to that Google account. [Google scope definitions](https://developers.google.com
    during staging is expected. This is not a durable customer-launch authorization.
    [Google refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).
 
-## Private host configuration — proposed only
+## Private host configuration — installed 8 November
 
-Use [the prepared template](../deploy/aws/lightsail/google-calendar-test.env.example)
-as the reviewed complete environment, retaining existing systemd/Caddy/HTTPS setup.
-The completed file belongs at `/etc/yibo/backend.env`, root-owned mode 0600.
+The [template](../deploy/aws/lightsail/google-calendar-test.env.example) describes
+the installed profile, retaining existing systemd/Caddy/HTTPS setup. Completed
+values are only in `/etc/yibo/backend.env`, root-owned mode 0600.
 
 | Field | Source / behavior |
 | --- | --- |
@@ -169,15 +228,15 @@ The completed file belongs at `/etc/yibo/backend.env`, root-owned mode 0600.
 | `YIBO_DASHBOARD_ORIGIN` | Preserve `https://staging.getyibo.com` in `/etc/yibo/public.env`; API origin checks and trusted OAuth return |
 
 No secret value belongs in chat, screenshots, Git, shell arguments or command
-history. Use a private no-echo entry session. The new token encryption key and
-client secret also need owner-controlled recovery custody: database snapshots
-alone do not contain the key needed to decrypt restored Google grants. The restic
-recovery password is separate and is not changed.
+history. The private no-echo entry and encrypted recovery/restore check above are
+complete. Database snapshots alone do not contain the key needed to decrypt
+restored Google grants. The existing restic recovery password was not changed.
 
-## Activation, verification and rollback — approval still required
+## Approved procedure, remaining acceptance and rollback
 
-Before changing the running host, present the verified account/project/calendar,
-exact committed release and configuration diff for approval. Then:
+The exact committed release and configuration change were approved. Steps 1–4
+are complete except the owner's private post-restart login. Steps 5–6 remain
+pending; do not treat configured credentials as successful Calendar consent:
 
 1. Build the approved immutable source artifact as `yibo-build`, validate the
    preflight/tests/typechecks/build on Linux, and back up current private config.
@@ -218,15 +277,14 @@ calendar syntax, encryption keys, other provider rejection, retained isolation a
 an unconfigured template failing closed. These are the same twenty cases on two
 runtimes, not forty distinct tests. Backend/frontend typechecks and Vite production
 build passed on Node 26.7.0 with existing locked dependencies. No full suite rerun;
-application source is unchanged. Native Linux checks remain part of approval-time
-activation; this preparation is not installed on the host.
+application source is unchanged. Native Linux validation has now passed as
+recorded above, and the prepared guard is installed on staging.
 
-Only synthetic credentials were used by automated checks. The private calendar
-and separate Google project/API/OAuth configuration above are the external changes.
-AWS staging services/databases/configuration, existing Google credentials and
-events, production data and phone routing remain unchanged. Real consent, event
-writes, Linux activation and key-custody handoff remain pending. This preparation
-does not claim real Google synchronization from AWS.
+Only synthetic credentials were used by automated tests. The approved staging
+activation uses the new real client without a grant; it does not claim real Google
+synchronization from AWS. Existing Google credentials/events, production data and
+phone routing are unchanged. Real consent, event writes, and the owner's private
+login remain pending.
 
 The 20 focused staging guard tests passed again on 6 November after the
 documentation/template-comment update. On 7 November the Google UI configuration
@@ -236,5 +294,5 @@ tests/typechecks/build are not repeated for this documentation-only checkpoint.
 
 On 8 November the read-only host and public checks above passed. The remaining
 local work is documentation only; no application code, dependencies or schemas
-changed. The activation candidate includes the already tested deployment guard,
-which must still pass the native Linux checks before switching the running API.
+changed. The activation candidate included the already tested deployment guard;
+native Linux checks and activation subsequently passed as recorded above.

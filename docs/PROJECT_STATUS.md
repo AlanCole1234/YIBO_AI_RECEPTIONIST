@@ -3,6 +3,32 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: Google-test activado, consentimiento pendiente — 8 de noviembre de 2026
+
+- Activación explícitamente aprobada y completada en el host existente. Release
+  **`0f55c44c8cb50344a9bac38b22b75f5d564d728b`**; rollback **`f38de13`** preservado.
+  Sin cambios de código de aplicación, dependencias, esquema ni nuevos recursos.
+- Linux x86-64 / Node 22.23.4 / pnpm 11.19.0: install frozen-lockfile, **114/114
+  tests en 13 archivos**, ambos typechecks y build de producción pasan. 488
+  archivos tracked comparados con el commit exacto después del build.
+- Credenciales OAuth staging transferidas mediante entrada SSH sin eco; token key
+  nuevo, campos privados 0600 y ambos guards verificados. Perfil explícito
+  `google-calendar-test`, DB nueva `staging-google-us.sqlite`, mapping exacto al
+  calendario **YIBO AWS STAGING TEST**, America/Chicago. Sin grants ni citas aún.
+- Identidad/hash/roles de un solo owner copiados privadamente y verificados; misma
+  contraseña, DB sintética original preservada. Migrations/seed existentes usados;
+  no clientes, citas, llamadas, eventos ni grants anteriores copiados.
+- Backup cifrado del DB anterior y del nuevo pasan. Material de recuperación Google
+  cifrado en el repositorio existente y restaurado/comparado sin mostrar claves;
+  usa la contraseña restic ya guardada por el owner en su nota bloqueada.
+- Sólo API detenida/iniciada y timer de backup pausado/reanudado; timer activo y
+  habilitado. Origin/Caddy sin cambios de bytes ni reload. **5/5 checks públicos**
+  pasan, incluyendo `/api/health` con JSON esperado; voz/ARI siguen privados.
+- Main, producción, PBX/7001, OAuth/eventos Google existentes y Cloudflare intactos.
+  Base AWS $13/mes; no nueva lectura de crédito. Owner debe volver a iniciar sesión
+  privadamente y conceder Google por separado antes de la prueba real.
+  [Activación, validación, recuperación y gates restantes](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: preflight read-only y renovación verificados — 8 de noviembre de 2026
 
 - Release y proceso activo coinciden en **`f38de13`**; API/Caddy/timer activos y

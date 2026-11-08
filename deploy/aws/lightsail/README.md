@@ -1,4 +1,13 @@
-# YIBO synthetic Lightsail staging
+# YIBO Lightsail staging
+
+**8 November activation completed:** the owner approved Google-test activation on
+the existing staging server. Release **`0f55c44`** is active with a fresh, separate
+SQLite DB and the verified private test-calendar mapping. **114 Linux tests**,
+both typechecks, build, encrypted DB backups, encrypted Google recovery restore,
+and five public HTTPS checks pass. The old DB/release and owner password are
+preserved. **Google consent and real event acceptance remain pending.** See the
+[current activation record](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+The preparation notes below retain the original deployment history.
 
 **29 October update:** the owner approved this exact proposal and staging now
 exists. Do not provision duplicates. See the [actual deployment and validation
