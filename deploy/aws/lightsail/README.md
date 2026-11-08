@@ -16,6 +16,17 @@ its OAuth permissions extend beyond the test calendar and need informed consent.
 Follow the [Google acceptance procedure](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md);
 do not add Google credentials to the running synthetic environment directly.
 
+**7 November Google setup:** project `yibo-aws-staging`, Calendar API, External /
+Testing app, one test user and one web client with the exact staging callback are
+verified. No billing account is linked. Credentials are private on the owner's
+Mac; they have not been transferred to AWS. Calendar consent, separate-DB
+activation and real writes remain pending. Do not create duplicate clients.
+
+**8 November read-only preflight:** the synthetic release/process, DB integrity,
+backup path/SHA and scheduled backup are healthy. All five public HTTPS checks
+pass; automatic hostname TLS renewal is verified. No AWS configuration changed.
+The reviewed activation proposal preserves the original DB and owner password.
+
 Prepared October 25, 2026 on `codex/launch-integration-reviewed`. **Nothing in this
 directory provisions resources or runs during the application build.** No AWS
 resource, public certificate, IAM grant, DNS record or production change has been

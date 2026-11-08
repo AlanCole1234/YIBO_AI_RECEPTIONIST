@@ -3,6 +3,47 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: preflight read-only y renovación verificados — 8 de noviembre de 2026
+
+- Release y proceso activo coinciden en **`f38de13`**; API/Caddy/timer activos y
+  habilitados. Perfil sintético, runtime in-memory, loopback 3000 y origin correcto.
+  Credenciales Google/OpenAI/telefonía ausentes; no activación realizada.
+- SQLite sintético: `quick_check=ok`, DB Google propuesta aún inexistente. Backup
+  apunta al DB/SHA activos; ejecución automática exitosa **19:04:22 UTC**.
+- **5/5 checks HTTPS públicos pasan**: dashboard/health 200, auth anónimo 401,
+  voice/ARI 404. Renovación natural del hostname confirmada por Caddy
+  **13:28:06 UTC**; certificado público vence **15 noviembre 04:29:33 UTC**.
+  Gate anterior de renovación cerrado; sin forzar emisión ni restart.
+- Preparado procedimiento de DB nueva con una sola identidad/roles del owner,
+  preservando contraseña y DB anterior. Todo sigue pendiente de aprobación AWS.
+- Sólo documentación; sin servicios, datos, secretos, main, PBX ni costos nuevos.
+  Próximo paso: aprobación de instalación privada del client Google ya creado,
+  perfil/DB de staging separado y restart exclusivo de API; luego consentimiento
+  Calendar privado y prueba real. [Preflight y propuesta](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
+## AWS staging: OAuth Google separado configurado — 7 de noviembre de 2026
+
+- Proyecto **`yibo-aws-staging`** creado con aprobación; Calendar API **Enabled**.
+  Billing confirma **sin cuenta vinculada**. Sin trial ni hosting Google nuevo.
+- App **YIBO AWS Staging**, **External / Testing**, con sólo un test user: la
+  cuenta habitual aprobada del owner. Términos/política aceptados tras aprobación
+  explícita; no se publica la app ni se concede acceso a calendarios aún.
+- Un client **YIBO AWS Staging Web**, Enabled; callback persistido y leído de vuelta:
+  `https://staging.getyibo.com/api/integrations/google/callback`. Sin origins JS.
+  Sólo scopes existentes `calendar.events` y `calendar.events.freebusy` guardados.
+- Credenciales nuevas conservadas privadamente en el Mac, fuera de Git (0700/0600),
+  sin imprimir secretos. Schema/client/project/callback/lectura local verificados.
+  Descarga JSON sin confirmación: valores visibles preservados en registro privado;
+  copia temporal redundante eliminada tras comparar con la persistente.
+- Sin transferencia a AWS, cambio de DB/config, restart, token key, consentimiento
+  Calendar ni eventos reales. Proyecto/credenciales Google existentes, main,
+  producción, PBX/7001 y Cloudflare intactos. Release sintético sigue `f38de13`.
+- Sólo docs: revisión de diff/enlaces/secretos; **20/20 tests** previos del guard y
+  typechecks/build conservados, sin repetición innecesaria. Próximo gate: preparar
+  y aprobar activación AWS con DB separada, backup/rollback y custodia de claves;
+  después consentimiento privado y prueba Google real create/move/cancel.
+  [Evidencia y procedimiento](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: cuenta habitual y calendario aislado — 6 de noviembre de 2026
 
 - El owner eligió explícitamente su cuenta Google habitual tras dificultades con

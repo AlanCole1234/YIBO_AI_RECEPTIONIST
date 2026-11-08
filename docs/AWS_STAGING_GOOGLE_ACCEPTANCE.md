@@ -1,6 +1,6 @@
 # AWS staging Google Calendar — prepared, not activated
 
-6 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
+Updated 8 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
 OAuth return fix is active in release `f38de13`; staging still uses the synthetic
 provider. The owner login and 18 hosted synthetic checks are verified in
 [the release report](AWS_STAGING_RELEASE_UPDATE.md).
@@ -10,8 +10,63 @@ explicitly chose the existing regular Google account. A new private secondary
 calendar, **YIBO AWS STAGING TEST**, was created in that verified signed-in account
 with timezone **America/Chicago**. Public access is off and only the owner appears
 in sharing. The older **YIBO Test Appointments** calendar and all existing events
-are preserved. No new OAuth client, grant, event or server configuration has been
-created. Do not resume test-account signup or reuse working OAuth clients/tokens.
+are preserved. Do not resume test-account signup or reuse working OAuth clients/tokens.
+
+**Google setup completed, 7 November:** the owner approved the separate project,
+API and OAuth setup, then explicitly approved the Google APIs/Calendar terms and
+User Data Policy at the required agreement step. Project **`yibo-aws-staging`**
+exists; Calendar API is **Enabled**. The Billing page confirms **no billing
+account is linked**. No Google trial, hosting resource or paid service was added.
+The existing `yibo-development` project and its clients/grants are unchanged.
+
+| Verified Google configuration | Value |
+| --- | --- |
+| OAuth app | **YIBO AWS Staging** |
+| Audience / publishing status | **External / Testing**, not published |
+| Test users | Exactly one: the owner's approved regular account |
+| Web client | **YIBO AWS Staging Web**, one client listed, status **Enabled** |
+| Authorized redirect URI | `https://staging.getyibo.com/api/integrations/google/callback` (one entry, no trailing slash) |
+| Authorized JavaScript origins | None; YIBO uses the existing server-side OAuth flow |
+| Saved scopes | `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.events.freebusy` only |
+
+The generated client ID/secret were preserved privately on the owner's Mac,
+outside Git, in `~/Library/Application Support/YIBO/credentials/staging-google/`:
+directory mode **0700**, file mode **0600**. This is a local credential record,
+not a claim of encrypted/off-device recovery custody. The JSON download did not
+report completion; the displayed values were instead preserved without printing
+them, validated against the new client/project/callback, and read back locally.
+The redundant temporary copy was removed after matching the persistent record.
+The dedicated calendar's actual ID was read from its named Google settings page
+and saved beside the client as private routing metadata; its name, secondary-ID
+format and America/Chicago timezone were checked. This mapping is not installed.
+No secret was included in chat, screenshots, repository files or command arguments.
+
+**Not activated:** no Calendar consent, access/refresh token, Google event write,
+AWS credential transfer, service restart, database switch or token-key creation.
+Staging still runs its synthetic provider. Owner recovery custody and the separate
+AWS activation approval below remain required before real-provider acceptance.
+
+## Read-only AWS preflight — 8 November 2026
+
+The existing AWS browser session was restored and the staging host inspected
+without changing files, services, provider settings or data:
+
+| Check | Verified result |
+| --- | --- |
+| Immutable release / running process | Both `f38de1316a88f00a5d3f1f36557c3079a2169dc9` |
+| API, Caddy and backup timer | All active and enabled |
+| Runtime / provider profile | `in-memory` / `synthetic`; Google, OpenAI and phone credentials absent from the backend environment |
+| Bind / dashboard origin | `127.0.0.1:3000` / `https://staging.getyibo.com` |
+| SQLite | Existing synthetic DB, read-only `quick_check` returns `ok`; proposed Google-test DB does not exist |
+| Backup configuration | DB path and release SHA match the running synthetic deployment |
+| Latest scheduled backup | Success, **8 November 19:04:22 UTC**; next timer trigger **20:04:27 UTC** at inspection |
+| Public HTTPS checks | **5/5 passed**: dashboard and `/health` 200; unauthenticated `/api/auth/me` 401; `/voice` and `/ari` 404 |
+| Automatic hostname TLS renewal | Caddy recorded successful renewal for `staging.getyibo.com` at **8 November 13:28:06 UTC**; publicly verified certificate expires **15 November 04:29:33 UTC** |
+
+This closes the earlier natural hostname-renewal check. No renewal was forced,
+and no restart was needed. This inspection does not constitute a new authenticated
+appointment test or a new billing/credit measurement. The existing Google setup
+can proceed to the separately approved activation below without rebuilding it.
 
 ## Isolation and the prepared deployment guard
 
@@ -42,6 +97,16 @@ the existing staging owner's identity/role record privately on the host so the
 same password works. Copy no customers, appointments, calls, grants or calendar
 mappings. This is a **proposed activation step**, not yet performed.
 
+The current schema stores identity, password hash and roles together in
+`admin_users` (migration 005). Copy exactly the active `owner@example.test` row
+for region `US` and tenant `tenant-yibo-demo-us`, with all its existing columns,
+into the newly migrated/seeded DB in a transaction. Require exactly one source
+row and no destination identity conflict; otherwise stop. Read the old DB only,
+use bound parameters, and never print the row, password hash or session key.
+Verify the tenant foreign key, roles, active flag and row count privately.
+No password reset or broader user import is needed. API restart invalidates
+in-memory sessions, so the owner must sign in again afterward.
+
 Guard syntax checks cannot prove account/calendar ownership and are not a runtime
 calendar allowlist. The owner's regular-account choice replaces the earlier
 test-only-account recommendation, but it does **not** limit Google's permissions
@@ -53,37 +118,34 @@ Do not inspect or modify personal events. A separate OAuth client isolates the
 staging grant from working YIBO credentials, not from other calendars accessible
 to that Google account. [Google scope definitions](https://developers.google.com/workspace/calendar/api/auth).
 
-## Exact Google setup — OAuth preparation awaiting approval
+## Google setup procedure — completed, do not duplicate
 
 1. **Calendar created and privacy checked:** **YIBO AWS STAGING TEST**,
-   **America/Chicago**, owner-only sharing and public access disabled. Record its
-   actual Calendar ID privately from settings; do not invent an ID, use `primary`
-   or substitute the older test calendar.
-2. **Project inventory checked:** the signed-in account's All-projects view shows
-   only **YIBO Development** (`yibo-development`). Preserve it. The separate
-   **YIBO AWS Staging** project form is prepared but has not been submitted;
-   project/client creation approval is pending. Record Google's actual project ID
-   after creation, rather than treating a form suggestion as an existing resource.
-   Enable only Google Calendar API. Standard API usage is listed at no additional
-   cost. Do not attach billing, start a paid trial, add Workspace or enable other
-   services. If Google's current flow requires payment or an upgrade, stop before
-   accepting it; no such spending is approved.
+   **America/Chicago**, owner-only sharing and public access disabled. Its
+   actual Calendar ID is now recorded privately from settings. Do not invent an
+   ID, use `primary` or substitute the older test calendar.
+2. **Project created:** inventory initially contained only **YIBO Development**;
+   the approved separate project is now **YIBO AWS Staging** (`yibo-aws-staging`).
+   Only Calendar API was explicitly enabled for this setup. Google-provided
+   default project services were not modified. Standard Calendar API usage is
+   listed at no additional cost. Do not attach billing, start a paid trial, add
+   Workspace or enable other services. If a future flow requires payment or an
+   upgrade, stop before accepting it; no such spending is approved.
    [Calendar API quotas and pricing](https://developers.google.com/workspace/calendar/api/guides/quota).
-3. Configure a separate OAuth app in **External / Testing**, adding only the
-   owner's approved regular account as a test user. Use its address for
-   contact/support. Keep the existing YIBO production/development project's clients
-   and grants unchanged. Any terms,
-   MFA or account-ownership challenge must be completed privately by the owner.
-4. Create a **Web application** OAuth client for this staging app. Authorized
-   redirect URI, with no trailing slash:
+3. **Audience saved and verified:** **External / Testing**, with only the owner's
+   approved regular account as a test user and contact/support address. The owner
+   explicitly approved the required agreements. Any later MFA or account-ownership
+   challenge must be completed privately by the owner.
+4. **Web application client created and read back:** **YIBO AWS Staging Web**.
+   Authorized redirect URI, with no trailing slash:
 
    `https://staging.getyibo.com/api/integrations/google/callback`
 
    No browser JavaScript client is used by YIBO's server-side flow. Preserve the
-   private client download outside Git; the secret may only be shown at creation.
+   private credential record outside Git; Google shows the secret only at creation.
    If Google requests domain verification, review that separate action before
    modifying DNS. [Google web-server OAuth requirements](https://developers.google.com/identity/protocols/oauth2/web-server).
-5. Request only the application's existing scopes:
+5. **Data Access saved:** only the application's existing scopes:
    `https://www.googleapis.com/auth/calendar.events` and
    `https://www.googleapis.com/auth/calendar.events.freebusy`.
    Testing-mode Calendar refresh tokens expire after seven days; reauthorization
@@ -159,13 +221,20 @@ build passed on Node 26.7.0 with existing locked dependencies. No full suite rer
 application source is unchanged. Native Linux checks remain part of approval-time
 activation; this preparation is not installed on the host.
 
-Only synthetic credentials were used by automated checks. The new private test
-calendar is the only external change in this account-preparation step. Google
-Cloud settings, staging services, databases, credentials, production data and
-phone routing remain unchanged. Real consent, event writes, Linux activation and
-key-custody handoff remain pending. This preparation does not claim real Google
-synchronization from AWS. Documentation and template comments now reflect the
-owner's regular-account choice; no executable code changed for that decision.
-The 20 focused staging guard tests pass again after this documentation/template
-comment update; local documentation links and blank credential fields are checked.
-Typechecks and build are not repeated for this non-executable change.
+Only synthetic credentials were used by automated checks. The private calendar
+and separate Google project/API/OAuth configuration above are the external changes.
+AWS staging services/databases/configuration, existing Google credentials and
+events, production data and phone routing remain unchanged. Real consent, event
+writes, Linux activation and key-custody handoff remain pending. This preparation
+does not claim real Google synchronization from AWS.
+
+The 20 focused staging guard tests passed again on 6 November after the
+documentation/template-comment update. On 7 November the Google UI configuration
+was verified directly, along with local credential schema/callback/permissions,
+documentation links and secret-free repository changes. No executable code changed;
+tests/typechecks/build are not repeated for this documentation-only checkpoint.
+
+On 8 November the read-only host and public checks above passed. The remaining
+local work is documentation only; no application code, dependencies or schemas
+changed. The activation candidate includes the already tested deployment guard,
+which must still pass the native Linux checks before switching the running API.
