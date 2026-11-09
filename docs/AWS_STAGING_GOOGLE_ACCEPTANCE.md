@@ -1,11 +1,12 @@
 # AWS staging Google Calendar — real event acceptance passed
 
 Updated 9 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
-OAuth return fix is preserved in the newly active release `0f55c44`. The approved
+OAuth return fix is preserved in active UI follow-up release `eb9af24`. The approved
 Google-test profile uses its own database. The owner separately approved Calendar
 consent, and **five real-provider acceptance checkpoints passed**: creation,
 two reschedules and two cancellations, with both test events cleaned up. Two
-dashboard issues remain documented below; this is not full launch acceptance.
+dashboard issues found during acceptance are fixed in that release; this is not
+full launch acceptance.
 The earlier login and 18 hosted synthetic checks are in
 [the release report](AWS_STAGING_RELEASE_UPDATE.md).
 
@@ -134,7 +135,7 @@ The existing **114/114 Linux tests**, both typechecks and production build remai
 the validation for deployed `0f55c44`; they were not rerun for documentation-only
 changes. This record does not claim that all dashboard UX or real voice is ready.
 
-### Narrow UI fixes prepared locally — 9 November, not deployed
+### Narrow UI fixes prepared locally — 9 November, before activation
 
 Both findings were reproduced against the actual compiled Vue setup handlers
 before editing them. The Connect handler called `window.location.assign` while
@@ -173,7 +174,7 @@ destination without the leave prompt. The temporary server and tab were closed.
 These validate the UI fixes; the real Google acceptance above ran on unchanged
 `0f55c44`, not this new candidate.
 
-**Activation still requires approval.** Prepare the exact committed candidate on
+**Reviewed proposal, subsequently approved and executed below.** Prepare the exact committed candidate on
 the existing host as `yibo-build`, rerun the focused Linux tests, both typechecks
 and build before any switch, then take an encrypted backup. Preserve `0f55c44`,
 the existing Google-test DB, owner login, grant and all provider settings. If green,
@@ -183,6 +184,46 @@ backup. No new resources, new OAuth grant, schema migration, Caddy/routing chang
 production data or phone service is part of this proposal. Owner re-login may be
 needed because API restart invalidates in-memory sessions. Rollback restores the
 previous code release and backup SHA without overwriting the DB.
+
+## Approved UI release activated — 9 November 2026
+
+The owner explicitly approved updating staging to
+**`eb9af245124f0e4c151655da06a3f729fb413202`** with native checks, encrypted backups,
+existing DB/login/grant preservation and an API-only restart. The existing AWS
+browser SSH session reconnected; no new credentials, IAM access or resources
+were created. Read-only preflight confirmed `0f55c44`, Google-test DB/profile,
+healthy services and a successful scheduled backup at **20:04:22 UTC**.
+
+| Verification | Result |
+| --- | --- |
+| Native build | Ubuntu 24.04 x86-64, Node **22.23.4**, pnpm **11.19.0**, frozen lockfile; existing unprivileged `yibo-build` user without provider credentials |
+| Focused tests | **77/77 across seven files**: eight new UI regressions; unsaved changes, customer service, office integration, hosted callback, 20 staging guard cases and 19 regional backup/restore cases |
+| Typechecks / build | Backend TypeScript, frontend Vue and Vite production build all passed; no dependency/lockfile change |
+| Source identity | Exact public Git SHA; archive SHA-256 **`8397530e9994898de37cbe7672d07c41d53087a286c5f6ca4c274b40bed530a5`**; **489 tracked files** byte-compared after build |
+| Scope | Only the six reviewed UI/test/documentation paths differ from the old deployed source; all other tracked files byte-identical |
+| Pre-switch backup | Encrypted backup for `0f55c44`, **20:14:46.343 UTC** |
+| Preservation | Both SQLite databases passed read-only quick checks; schema and every table's sorted row-content hashes matched across API restart, including owner, encrypted Google grant and appointment history |
+| Configuration | Backend/public/Caddy files unchanged; only backup `YIBO_RELEASE_SHA` updated; Caddy PID unchanged |
+| Active release | Symlink and running API working directory both resolve to **`eb9af245124f0e4c151655da06a3f729fb413202`** |
+| Post-switch backup | Encrypted backup with the new release SHA, **20:14:51.182 UTC** |
+| Automatic operation | API, Caddy and backup timer active/enabled; timer restored, next scheduled trigger **21:04:03 UTC** at verification |
+| Public HTTPS | **6/6 checks pass** from the Mac: dashboard 200, API health exactly `{"status":"ok"}`, unauthenticated identity 401, `/voice` and `/ari` 404, and served JS bytes identical to the validated build (`index-DpseOhBQ.js`) |
+
+The immutable prior `0f55c44` release remains intact. Private rollback configuration
+and database fingerprints are at
+`/etc/yibo/rollback/release-eb9af24-20261109T201446Z` (0700). The one-time activation
+procedure/log are `/var/tmp/yibo-ui-eb9af24-activate.py` and `.log` (0600). The
+procedure would restore only the old code link and backup SHA on failure, without
+overwriting either DB; rollback was not needed. No Caddy reload, schema migration,
+provider activation, new consent, phone change or production change occurred.
+
+**Remaining browser acceptance:** the new release loads the sign-in screen without
+an authentication-unavailable error. The API restart invalidated in-memory
+sessions; the owner has been asked to enter the unchanged password privately.
+Fresh authenticated UI and Calendar-access readback are pending that sign-in.
+Preservation of the encrypted grant is verified, but this deployment report does
+not claim a new Google request or repeat the already completed real event writes.
+The existing $13/month resource base is unchanged; AWS credits were not reread.
 
 ## Read-only AWS preflight — 8 November 2026
 

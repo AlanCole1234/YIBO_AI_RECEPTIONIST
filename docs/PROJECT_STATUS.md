@@ -3,6 +3,23 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: release UI activado con aprobación — 9 de noviembre de 2026
+
+- Activo **`eb9af245124f0e4c151655da06a3f729fb413202`**; rollback `0f55c44`
+  conservado. Fuente exacta: 489 archivos verificados, sin secretos ni cambios
+  adicionales a los seis archivos revisados.
+- Linux x86-64 / Node 22.23.4: **77/77 tests**, ambos typechecks y build pasan.
+  **6/6 checks HTTPS públicos** pasan; JS servido coincide con el build validado.
+- Backups cifrados anterior/posterior pasan (20:14:46 / 20:14:51 UTC). Esquemas y
+  contenido de ambas DB, owner, grant Google e historial idénticos tras el restart.
+  Config backend/public/Caddy intacta; sólo SHA de backup actualizado, restart API.
+- API/Caddy/timer activos y habilitados; siguiente backup programado 21:04:03 UTC
+  al verificar. Sin recursos nuevos, PBX/7001, main ni datos de producción.
+- Pendiente: owner vuelve a iniciar sesión con la contraseña existente; después
+  lectura autenticada UI/Calendar. No se repiten escrituras Google ya verificadas.
+  Base $13/mes sin cambios; créditos no releídos.
+  [Evidencia y rollback](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: dos correcciones UI verificadas localmente — 9 de noviembre de 2026
 
 - Connect intentaba navegar con `busy=true`; el guard real `beforeunload` bloqueaba
