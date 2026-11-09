@@ -1,11 +1,19 @@
 # YIBO Lightsail staging
 
+**9 November acceptance completed:** separately approved Google consent and five
+real-provider checks pass: create two test appointments, move one twice with the
+same event ID and untouched neighbor, then cancel both. No active test events
+remain; SQLite history and encrypted post-test backup are verified. Optional-email
+handling and Connect-button navigation need focused UI follow-up; voice/phone
+acceptance remains pending. See the
+[current acceptance record](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 **8 November activation completed:** the owner approved Google-test activation on
 the existing staging server. Release **`0f55c44`** is active with a fresh, separate
 SQLite DB and the verified private test-calendar mapping. **114 Linux tests**,
 both typechecks, build, encrypted DB backups, encrypted Google recovery restore,
 and five public HTTPS checks pass. The old DB/release and owner password are
-preserved. **Google consent and real event acceptance remain pending.** See the
+preserved. Google consent and real event acceptance subsequently passed above. See the
 [current activation record](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md).
 The preparation notes below retain the original deployment history.
 

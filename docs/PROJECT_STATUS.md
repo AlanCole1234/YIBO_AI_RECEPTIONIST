@@ -3,6 +3,33 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: Google real verificado y limpio — 9 de noviembre de 2026
+
+- Owner autenticado; consentimiento Google concedido tras aprobación explícita
+  separada de ambos permisos. Callback HTTPS correcto y dashboard **Connected**.
+  Default y ambos profesionales comparados con el ID privado verificado de
+  **YIBO AWS STAGING TEST**, America/Chicago; todos **Access verified**.
+- **5/5 checkpoints con Google real** pasan, seis mutaciones por Office schedule:
+  dos citas sintéticas el 9/nov (09:00 y 10:30 CST), A movida a 09:30 y luego 10:00,
+  cancelación de A y después B. IDs originales conservados, vecino/ETag sin cambios
+  hasta su cancelación intencional, sin duplicados y **cero eventos activos de prueba**.
+- Verificación independiente Google GET + SQLite read-only después de cada paso:
+  identidad/ownership, timezone/instantes/duración, conjunto exacto de eventos e
+  historial. Notificaciones **SKIPPED**, opt-in desactivado; datos sólo sintéticos.
+  Historial cancelado preservado, sin inspección/cambio de calendarios personales.
+- Backup cifrado posterior pasa **9/nov 05:53:17 UTC**; API/Caddy/timer activos.
+  Nueva lectura de historial/mappings **9/nov ~14:25 UTC** confirma persistencia y
+  acceso sin nuevo consentimiento. No restart, deployment ni recursos nuevos.
+- Pendientes UI: email opcional vacío se envía como `""` y falla silenciosamente;
+  Connect no navegó en el navegador integrado, aunque la URL del endpoint existente
+  completó OAuth en otra pestaña. Causa exacta de navegación aún no demostrada.
+  Corregir/verificar sólo esos flujos antes de aceptación de voz alojada.
+- Release sigue **`0f55c44`**, con **114/114 tests Linux**, ambos typechecks/build
+  previos; no repetidos para docs. Main, PBX/7001, OAuth original, Cloudflare y
+  producción intactos; $13/mes base, crédito no releído. Testing OAuth de siete días
+  y aceptación real de voz/teléfono siguen pendientes. No listo para clientes aún.
+  [Evidencia, límites y siguientes correcciones](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: Google-test activado, consentimiento pendiente — 8 de noviembre de 2026
 
 - Activación explícitamente aprobada y completada en el host existente. Release

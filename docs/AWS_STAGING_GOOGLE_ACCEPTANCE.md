@@ -1,9 +1,12 @@
-# AWS staging Google Calendar — activated, consent pending
+# AWS staging Google Calendar — real event acceptance passed
 
-Updated 8 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
+Updated 9 November 2026. Existing hostname: **https://staging.getyibo.com**. The hosted
 OAuth return fix is preserved in the newly active release `0f55c44`. The approved
-Google-test profile now uses its own database; Google consent and real event
-acceptance remain pending. The earlier login and 18 hosted synthetic checks are in
+Google-test profile uses its own database. The owner separately approved Calendar
+consent, and **five real-provider acceptance checkpoints passed**: creation,
+two reschedules and two cancellations, with both test events cleaned up. Two
+dashboard issues remain documented below; this is not full launch acceptance.
+The earlier login and 18 hosted synthetic checks are in
 [the release report](AWS_STAGING_RELEASE_UPDATE.md).
 
 **Account decision, 6 November:** after unsuccessful signup attempts, the owner
@@ -45,8 +48,91 @@ No secret was included in chat, screenshots, repository files or command argumen
 
 At the end of the 7 November Google setup, no AWS activation had occurred.
 The owner separately approved it on 8 November; completed work is recorded below.
-**Still pending:** private owner login after the restart, Google Calendar consent,
-access/refresh tokens, and real event create/reschedule/cancel acceptance.
+At activation completion, private owner login, Calendar consent and real event
+acceptance were pending. They subsequently completed as recorded below.
+
+## Real Google acceptance — 9 November UTC / 8 November Denver
+
+The owner signed in with the existing staging password and explicitly approved
+granting the separate staging app both Calendar permissions after reviewing their
+account-wide scope. Only those two permissions were selected. Google returned to
+the exact hosted callback and then `/?calendar=connected`; YIBO displayed
+**Connected**. No original OAuth client or grant was changed.
+
+Before writing any event, the dashboard's saved default mapping and both
+professionals' effective mappings were compared privately with the previously
+verified **YIBO AWS STAGING TEST** ID. All matched, all reported **Access verified**,
+and the clinic timezone was **America/Chicago**. No mapping was edited.
+
+All six event mutations below were performed through the deployed **Office
+schedule** UI and existing YIBO APIs. The two synthetic customers were named
+`[YIBO AWS STAGING TEST] 20261108 A` and `… B`, with reserved fictional phone
+numbers and `example.test` email addresses. Email opt-in was disabled; all
+notification records were **SKIPPED**, with no email sent. Both appointments were
+30-minute Consultation visits with Dr. Alex on **9 November 2026**.
+
+| Provider checkpoint | Clinic-local result | Independent Google / SQLite result |
+| --- | --- | --- |
+| Create A and neighboring B | A **09:00–09:30 CST**; B **10:30–11:00 CST** | Both confirmed; actual Google GET matches ID, appointment/tenant/operation ownership, label, UTC instant, duration and America/Chicago timezone; exactly two active test events |
+| Reschedule A once | **09:30–10:00 CST** | Original appointment and Google event IDs retained; exactly two active events; B's ETag unchanged |
+| Reschedule A again | **10:00–10:30 CST** | Same original IDs retained; no duplicate; B's original ID, time and ETag unchanged |
+| Cancel A after both moves | A cancelled; B still **10:30–11:00 CST** | A cancelled/absent in Google; B still confirmed with unchanged ETag; exactly one active test event |
+| Cancel B for cleanup | Both cancelled | Both Google events cancelled/absent; zero active events for the staging tenant in the dedicated calendar; original event IDs remain associated with both cancelled appointment records |
+
+Read-only verification ran on the staging host after each checkpoint. It opened
+only the Google-test SQLite DB in read-only mode, decrypted the existing grant in
+memory, and made Google **GET** requests only against the configured secondary
+calendar. Listing was filtered to the synthetic tenant; no personal calendar or
+unrelated event was inspected. Tokens, keys and calendar IDs were not printed.
+It compared both appointments against the preserved initial identity/ETag baseline,
+checked no compensation flag was set, and compared the exact active-event ID set
+to SQLite after every step. It did not create, reschedule or delete events itself.
+
+**5/5 provider checkpoints passed**, covering six UI-driven mutations. A's history
+is `CREATED → RESCHEDULED → RESCHEDULED → CANCELLED`; B's is `CREATED → CANCELLED`.
+Freed time slots reappeared. The private verification script and evidence record
+are `/var/tmp/yibo-google-acceptance-20261108.mjs` and `.json` on staging (0600),
+outside the immutable application release. They contain no exported OAuth tokens.
+Preserve the cancelled test records as audit evidence; no bulk deletion was used.
+
+A fresh encrypted backup through the existing service completed successfully at
+**9 November 05:53:17 UTC** (**8 November 22:53:17 Denver**), after consent and
+cleanup. `Result=success`, `ExecMainStatus=0`; API, Caddy and the backup timer were
+active. The existing encrypted Google recovery material and owner-held restic
+password remain necessary for recovery. No new resources, restart or deployment
+was needed for these tests. The approved $13/month resource base is unchanged;
+credits were not reread.
+
+On **9 November around 14:25 UTC**, a fresh dashboard read still showed both
+cancelled records and A's complete history. A fresh saved-mapping verification
+again reported access for the default and both professionals without new consent.
+This confirms continued access after the overnight interval; the refresh HTTP
+exchange itself was not separately traced. Seven-day Testing-mode reauthorization
+and real hosted voice/phone acceptance remain separate gates.
+
+### UI findings retained for the next focused fix
+
+- **Confirmed optional-email defect:** Quick booking with a valid synthetic name
+  and phone but blank email produced `VALIDATION_ERROR` in the console with no
+  visible form error. `OfficeWorkspace.vue` spreads `customerDraft` (including
+  `email: ""`) before its conditional email spread, so the empty field is still
+  sent and the existing customer validator correctly rejects it. Supplying the
+  reserved test email with opt-in off succeeded. Fix the UI payload/error handling;
+  preserve backend validation and the teammate's customer/notification domain.
+- **Connect navigation investigation remains open:** the Home button became busy
+  then idle without navigation or a visible error in the in-app browser. The
+  authenticated existing Connect endpoint returned a valid authorization URL;
+  opening that returned URL in a fresh tab reached Google and completed consent.
+  No URL, OAuth state or token was fabricated. This validates the backend/client/
+  callback, but does not prove the button works. Investigate its interaction with
+  the busy/unsaved-changes navigation guard locally before changing code; the
+  precise navigation-blocking mechanism is not yet proven.
+
+No application source, schema, provider configuration, main, live phone route,
+PBX/7001, Cloudflare or production database changed in this acceptance checkpoint.
+The existing **114/114 Linux tests**, both typechecks and production build remain
+the validation for deployed `0f55c44`; they were not rerun for documentation-only
+changes. This record does not claim that all dashboard UX or real voice is ready.
 
 ## Read-only AWS preflight — 8 November 2026
 
@@ -122,8 +208,8 @@ No new resources or subscriptions were created; the approved AWS resource base
 remains $13/month, excluding existing usage/overage terms. Credits were not reread.
 Existing Google grants/events, personal events, main, production, phone services,
 PBX/7001 and Cloudflare were untouched. Google consent and the real Calendar test
-remain distinct gates. The sign-in page is prepared with `owner@example.test`;
-the owner must enter the existing password privately after session invalidation.
+were distinct gates at activation. The owner's subsequent login, separately
+approved consent and real event results are recorded above.
 
 ## Isolation and the installed deployment guard
 
@@ -234,9 +320,10 @@ restored Google grants. The existing restic recovery password was not changed.
 
 ## Approved procedure, remaining acceptance and rollback
 
-The exact committed release and configuration change were approved. Steps 1–4
-are complete except the owner's private post-restart login. Steps 5–6 remain
-pending; do not treat configured credentials as successful Calendar consent:
+The exact committed release and configuration change were approved. Steps 1–6
+have now completed, with separate consent approval and real-provider evidence
+above. Retain this procedure for future controlled acceptance; do not repeat
+completed mutations or treat merely configured credentials as successful consent:
 
 1. Build the approved immutable source artifact as `yibo-build`, validate the
    preflight/tests/typechecks/build on Linux, and back up current private config.
@@ -281,10 +368,10 @@ application source is unchanged. Native Linux validation has now passed as
 recorded above, and the prepared guard is installed on staging.
 
 Only synthetic credentials were used by automated tests. The approved staging
-activation uses the new real client without a grant; it does not claim real Google
-synchronization from AWS. Existing Google credentials/events, production data and
-phone routing are unchanged. Real consent, event writes, and the owner's private
-login remain pending.
+activation initially used the new real client without a grant. Subsequent approved
+consent and real Google synchronization from AWS passed as recorded above.
+Existing Google credentials/events outside the dedicated staging test, production
+data and phone routing are unchanged.
 
 The 20 focused staging guard tests passed again on 6 November after the
 documentation/template-comment update. On 7 November the Google UI configuration
