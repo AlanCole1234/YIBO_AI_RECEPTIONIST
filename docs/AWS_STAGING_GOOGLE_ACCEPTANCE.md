@@ -217,13 +217,40 @@ procedure would restore only the old code link and backup SHA on failure, withou
 overwriting either DB; rollback was not needed. No Caddy reload, schema migration,
 provider activation, new consent, phone change or production change occurred.
 
-**Remaining browser acceptance:** the new release loads the sign-in screen without
-an authentication-unavailable error. The API restart invalidated in-memory
-sessions; the owner has been asked to enter the unchanged password privately.
-Fresh authenticated UI and Calendar-access readback are pending that sign-in.
-Preservation of the encrypted grant is verified, but this deployment report does
-not claim a new Google request or repeat the already completed real event writes.
-The existing $13/month resource base is unchanged; AWS credits were not reread.
+### Authenticated browser acceptance completed — 9 November 2026
+
+The owner entered the unchanged password privately and confirmed successful
+sign-in. Browser inspection verified the authenticated Office schedule, retained
+cancelled appointments and available slots. A fresh **Verify saved mappings**
+request completed without error: the unchanged version-2 location default and
+both professionals reported **Access verified**. Home showed **Google Calendar:
+Connected**. No new consent, mapping edit or Calendar event mutation was made.
+
+The deployed Quick booking fix passed using only synthetic data:
+
+- Invalid phone input displayed the new validation alert; no customer was created
+  by that rejected request.
+- With email left blank and appointment emails unchecked, the form selected
+  **`[YIBO AWS STAGING TEST] UI 20261109`**, phone **`+12025550183`**.
+- After a full page reload, search found the stored record; selecting it restored
+  the normalized phone, blank email and unchecked email opt-in. It has no new
+  appointment. This synthetic record remains as acceptance evidence.
+- The existing session survived that page reload. No password, token, notification
+  delivery or personal data was exposed. The corrected Connect navigation remains
+  covered by the real-handler regressions and isolated browser test; an already
+  valid grant was not replaced merely to exercise another consent flow.
+
+A further encrypted backup containing the completed browser acceptance passed at
+**20:27:04.480 UTC**, with release `eb9af24`; API, Caddy and backup timer remained
+active. No additional restart or application change was needed. The **77 Linux
+tests**, both typechecks and build remain the validation for this unchanged code;
+only this acceptance documentation changed afterward.
+
+The Home readiness screen correctly still identifies unconfigured Realtime,
+telephony and email providers. Next gate: prepare authenticated hosted Voice Lab
+and controlled real voice acceptance, with separate approval before provider
+activation or phone handover. Google External/Testing reauthorization remains a
+known limitation. The $13/month resource base is unchanged; credits were not reread.
 
 ## Read-only AWS preflight — 8 November 2026
 

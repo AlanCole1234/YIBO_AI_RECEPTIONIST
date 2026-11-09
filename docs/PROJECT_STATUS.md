@@ -15,9 +15,15 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
   Config backend/public/Caddy intacta; sólo SHA de backup actualizado, restart API.
 - API/Caddy/timer activos y habilitados; siguiente backup programado 21:04:03 UTC
   al verificar. Sin recursos nuevos, PBX/7001, main ni datos de producción.
-- Pendiente: owner vuelve a iniciar sesión con la contraseña existente; después
-  lectura autenticada UI/Calendar. No se repiten escrituras Google ya verificadas.
-  Base $13/mes sin cambios; créditos no releídos.
+- Browser autenticado completado: owner entra con la misma contraseña; lectura
+  fresca verifica Calendar para default y ambos profesionales, Home Connected.
+  Quick booking acepta email vacío, muestra validación y conserva teléfono
+  normalizado/opt-out tras reload. Sólo un cliente sintético nuevo, sin cita,
+  evento Google ni email. Historial cancelado previo conservado.
+- Backup cifrado post-browser pasa **20:27:04 UTC**. Sin restart/código adicional;
+  siguiente gate: Voice Lab hosted autenticado y aceptación real de voz, con
+  aprobación separada para proveedores/handover. Base $13/mes sin cambios;
+  créditos no releídos. No se repiten escrituras Google ya verificadas.
   [Evidencia y rollback](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
 
 ## AWS staging: dos correcciones UI verificadas localmente — 9 de noviembre de 2026

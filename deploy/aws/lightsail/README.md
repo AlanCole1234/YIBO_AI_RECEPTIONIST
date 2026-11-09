@@ -4,8 +4,10 @@
 active. **77 native Linux tests**, both typechecks, production build, pre/post
 switch encrypted backups and **six public HTTPS checks** pass. Both databases,
 owner/Google grant and provider configuration were preserved; only the API
-restarted. Owner re-login and fresh authenticated Calendar readback remain pending.
-The prior `0f55c44` release is retained for rollback. See the
+restarted. Owner re-login, fresh Calendar access for all mappings, blank-email
+customer selection, validation errors and reload persistence now pass. A final
+post-browser encrypted backup passed at **20:27:04 UTC**. The prior `0f55c44`
+release is retained for rollback; real hosted voice remains a separate gate. See the
 [activation evidence](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md).
 
 **9 November acceptance completed:** separately approved Google consent and five
