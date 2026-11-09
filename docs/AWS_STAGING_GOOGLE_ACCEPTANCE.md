@@ -110,7 +110,7 @@ This confirms continued access after the overnight interval; the refresh HTTP
 exchange itself was not separately traced. Seven-day Testing-mode reauthorization
 and real hosted voice/phone acceptance remain separate gates.
 
-### UI findings retained for the next focused fix
+### UI findings on deployed release `0f55c44`
 
 - **Confirmed optional-email defect:** Quick booking with a valid synthetic name
   and phone but blank email produced `VALIDATION_ERROR` in the console with no
@@ -133,6 +133,56 @@ PBX/7001, Cloudflare or production database changed in this acceptance checkpoin
 The existing **114/114 Linux tests**, both typechecks and production build remain
 the validation for deployed `0f55c44`; they were not rerun for documentation-only
 changes. This record does not claim that all dashboard UX or real voice is ready.
+
+### Narrow UI fixes prepared locally — 9 November, not deployed
+
+Both findings were reproduced against the actual compiled Vue setup handlers
+before editing them. The Connect handler called `window.location.assign` while
+the shared `run` wrapper still held `busy=true`. At that moment the existing
+`beforeunload` guard prevented leaving, even though the authorization request had
+succeeded. The regression test invokes the real guard at the navigation boundary;
+the original code fails it. Blank and whitespace-only email submissions failed
+the existing customer service, and rejection escaped the form without an alert.
+
+The small fix changes only two frontend handlers:
+
+- `dashboard/src/App.vue`: finish the Connect request and clear its busy state
+  before assigning the returned URL. Existing dirty-editor confirmation, pending
+  request protection, duplicate-click prevention and error reporting remain intact.
+- `dashboard/src/components/OfficeWorkspace.vue`: omit a blank optional email
+  instead of spreading `email: ""`; trim a supplied email, retain language/opt-in,
+  and show customer-selection errors through the existing alert. No backend
+  customer validation, identity, duplicate prevention, history or notification
+  behavior changed.
+
+**38/38 focused tests across five files passed**, including **eight new regression
+cases** in `tests/dashboard/staging-ui-regressions.test.ts`. The new tests compile
+the real SFC scripts, exercise the existing leave guard/customer validator, and
+control only lifecycle and external I/O; they do not copy the handlers. Four
+failure cases were observed before the fix; all eight cases passed afterward.
+Existing unsaved-change, customer, launch-office integration and hosted OAuth
+callback tests also pass. Backend and frontend typechecks and Vite production
+build pass on local Mac ARM64 / Node **26.7.0**, using installed locked dependencies.
+No dependency or lockfile changed and no full suite was repeated.
+
+Safe browser checks used the actual modified dashboard on **127.0.0.1:5398** with
+only synthetic API responses and no proxy/provider credentials: an empty-email
+customer was selected, the request omitted email and retained opt-out, invalid
+input displayed an alert, and Connect navigated to the fixture's local OAuth
+destination without the leave prompt. The temporary server and tab were closed.
+These validate the UI fixes; the real Google acceptance above ran on unchanged
+`0f55c44`, not this new candidate.
+
+**Activation still requires approval.** Prepare the exact committed candidate on
+the existing host as `yibo-build`, rerun the focused Linux tests, both typechecks
+and build before any switch, then take an encrypted backup. Preserve `0f55c44`,
+the existing Google-test DB, owner login, grant and all provider settings. If green,
+switch only the immutable staging release and backup release-SHA metadata, restart
+only the staging API, and verify HTTPS/login/Calendar status and a post-switch
+backup. No new resources, new OAuth grant, schema migration, Caddy/routing change,
+production data or phone service is part of this proposal. Owner re-login may be
+needed because API restart invalidates in-memory sessions. Rollback restores the
+previous code release and backup SHA without overwriting the DB.
 
 ## Read-only AWS preflight — 8 November 2026
 

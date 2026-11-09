@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { appointmentErrorMessage } from "../services/appointment-editor";
-import { api, type Appointment, type AppointmentEvent, type AppointmentLocation, type Customer,
+import { api, ApiError, type Appointment, type AppointmentEvent, type AppointmentLocation, type Customer,
   type NotificationDelivery, type Slot } from "../services/api";
 
 const props = defineProps<{ readOnly?: boolean }>();
@@ -57,10 +57,18 @@ async function load() {
 function locationChanged() { serviceId.value = location.value?.services[0]?.id ?? ""; employeeId.value = ""; void load(); }
 async function search() { customers.value = (await api.searchCustomers(query.value)).customers; }
 async function saveCustomer() {
-  customer.value = await api.findOrCreateCustomer({ ...customerDraft.value,
-    ...(customerDraft.value.email ? { email: customerDraft.value.email } : {}) });
-  query.value = customer.value.name ?? customer.value.phone; customers.value = [customer.value];
-  customerHistory.value = (await api.customerHistory(customer.value.id)).appointments;
+  error.value = "";
+  try {
+    const { email, ...identity } = customerDraft.value;
+    customer.value = await api.findOrCreateCustomer({ ...identity,
+      ...(email.trim() ? { email: email.trim() } : {}) });
+    query.value = customer.value.name ?? customer.value.phone; customers.value = [customer.value];
+    customerHistory.value = (await api.customerHistory(customer.value.id)).appointments;
+  } catch (caught) {
+    error.value = caught instanceof ApiError && caught.code === "VALIDATION_ERROR"
+      ? "Check the customer’s phone number and email, then try again. Email is optional."
+      : "Could not finish selecting the customer. Check your access and try again.";
+  }
 }
 async function selectCustomer(value: Customer) { customer.value = value; customerDraft.value = {
   name: value.name ?? "", phone: value.phone, email: value.email ?? "", preferredLanguage: value.preferredLanguage ?? "en",

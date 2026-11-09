@@ -3,6 +3,23 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS staging: dos correcciones UI verificadas localmente — 9 de noviembre de 2026
+
+- Connect intentaba navegar con `busy=true`; el guard real `beforeunload` bloqueaba
+  la salida. Se termina la petición antes de navegar, conservando el guard.
+- Quick booking omite email opcional vacío, conserva idioma/opt-out y muestra
+  errores de selección. Sólo dos handlers Vue; dominio/backend de clientes y
+  notificaciones, APIs, esquema y dependencias sin cambios.
+- Ocho regresiones nuevas ejecutan los handlers SFC reales; cuatro casos fallaban
+  antes del fix. **38/38 tests focalizados**, ambos typechecks y build pasan en Mac
+  ARM64 / Node 26.7.0. Browser sintético local confirma email vacío, error visible
+  y navegación OAuth sin bloqueo; servidor temporal cerrado.
+- Commit separado preparado para revisión/activación aprobada. **No desplegado**:
+  staging sigue `0f55c44` con Google real ya verificado. Antes del switch: checks
+  Linux y backup; preservar DB/grant/config, sólo restart API y SHA de backup.
+  No main, PBX/7001, producción ni recursos/costos nuevos.
+  [Causa, validación y propuesta de activación](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
+
 ## AWS staging: Google real verificado y limpio — 9 de noviembre de 2026
 
 - Owner autenticado; consentimiento Google concedido tras aprobación explícita

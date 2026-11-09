@@ -100,7 +100,12 @@ function chooseSection(value: Section, locationId = ""): void {
 
 async function connectGoogleCalendar(): Promise<void> {
   if (!leaveGuard.allowLeave()) return;
-  await run(async () => { window.location.assign((await api.googleCalendarConnect(window.location.origin)).url); });
+  let destination: string | undefined;
+  await run(async () => { destination = (await api.googleCalendarConnect(window.location.origin)).url; });
+  // Finish the request before beforeunload checks the busy/unsaved-change guard.
+  if (destination) {
+    try { window.location.assign(destination); } catch (error) { globalError.value = messageFor(error); }
+  }
 }
 
 function selectDirectoryCustomer(value: Customer): void { customer.value = value; }

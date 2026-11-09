@@ -1,5 +1,11 @@
 # YIBO Lightsail staging
 
+**9 November UI follow-up, not deployed:** two small frontend fixes for Connect
+navigation and optional email pass **38 focused tests**, both typechecks, build
+and synthetic local browser checks. Staging remains on `0f55c44`; the
+[reviewed activation procedure](../../../docs/AWS_STAGING_GOOGLE_ACCEPTANCE.md)
+requires approval, native Linux validation and backup before switching releases.
+
 **9 November acceptance completed:** separately approved Google consent and five
 real-provider checks pass: create two test appointments, move one twice with the
 same event ID and untouched neighbor, then cancel both. No active test events
