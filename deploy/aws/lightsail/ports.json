@@ -1,0 +1,26 @@
+[
+  {
+    "fromPort": 22,
+    "toPort": 22,
+    "protocol": "tcp",
+    "cidrs": [],
+    "ipv6Cidrs": [],
+    "cidrListAliases": ["lightsail-connect"]
+  },
+  {
+    "fromPort": 80,
+    "toPort": 80,
+    "protocol": "tcp",
+    "cidrs": ["0.0.0.0/0"],
+    "ipv6Cidrs": [],
+    "cidrListAliases": []
+  },
+  {
+    "fromPort": 443,
+    "toPort": 443,
+    "protocol": "tcp",
+    "cidrs": ["0.0.0.0/0"],
+    "ipv6Cidrs": [],
+    "cidrListAliases": []
+  }
+]

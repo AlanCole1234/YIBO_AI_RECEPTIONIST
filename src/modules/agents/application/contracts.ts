@@ -64,7 +64,10 @@ export interface ToolExecutor {
   execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult>;
 }
 
-export interface PrepareAgentDefinitionCommand extends TrustedCallContext {}
+export interface PrepareAgentDefinitionCommand extends TrustedCallContext {
+  /** Set by the server's transport, never by caller/tool arguments. */
+  channel?: AgentChannel;
+}
 
 export interface AgentDefinition {
   instructions: string;
@@ -92,6 +95,9 @@ export interface AgentConversationConfiguration {
 }
 
 export interface AgentBehaviorConfiguration {
+  /** Missing in older documents means true. Applies only to caller-facing AI output. */
+  allowPriceDisclosure?: boolean;
+  phoneReadback?: "natural_grouped" | "digit_by_digit";
   greeting:
     | { mode: "wait_for_caller" }
     | { mode: "automatic"; message: string };

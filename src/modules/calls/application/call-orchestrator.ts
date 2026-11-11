@@ -1,4 +1,5 @@
 import { operationalLog } from "../../../shared/observability/operational-log.js";
+import { markCallEnded } from "./call-liveness.js";
 import type { BusinessDirectory } from "../../business/index.js";
 import type { AgentDefinitionFactory } from "../../agents/index.js";
 import type {
@@ -28,6 +29,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     private readonly conversations: ConversationServiceContract,
     private readonly calls: CallRepository,
     private readonly developerTestModeAuthorized = false,
+    private readonly voiceLabTenantId?: string,
   ) {}
 
   async handleTelephonyEvent(event: TelephonyEvent): Promise<void> {
@@ -54,7 +56,7 @@ export class CallOrchestratorService implements CallOrchestrator {
     if (await this.calls.findByCallId(event.callId)) return;
 
     const location = await this.businessDirectory.resolveLocationByCalledNumber(event.to);
-    if (!location.ok) {
+    if (!location.ok || (this.voiceLabTenantId && location.value.tenantId !== this.voiceLabTenantId)) {
       await this.telephony.hangup(event.callId);
       return;
     }
@@ -86,6 +88,7 @@ export class CallOrchestratorService implements CallOrchestrator {
       tenantId: record.tenantId,
       locationId: record.locationId,
       customerId: customer.value.id,
+      ...(this.voiceLabTenantId ? { channel: "voice_lab" as const } : {}),
       ...(this.developerTestModeAuthorized ? { developerTestModeAuthorized: true as const } : {}),
     });
     if (!agent.ok) return this.fail(record.callId, event.occurredAt);
@@ -124,6 +127,7 @@ export class CallOrchestratorService implements CallOrchestrator {
   }
 
   private async shutdown(callId: string, occurredAt: string): Promise<void> {
+    markCallEnded(callId);
     const record = await this.calls.findByCallId(callId);
     if (!record) return;
     operationalLog("call.hangup", {}, record);

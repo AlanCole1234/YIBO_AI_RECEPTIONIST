@@ -1,5 +1,9 @@
+import { SqliteAppointmentConcurrencyGuard } from "../infrastructure/database/sqlite-appointment-concurrency-guard.js";
+import { SqliteCallLivenessStore } from "../infrastructure/database/sqlite-call-liveness-store.js";
+import { configureCallLiveness } from "../modules/calls/application/call-liveness.js";
 import { buildAsteriskIntegration } from "./asterisk-integration.js";
 import { randomUUID } from "node:crypto";
+import { loadConfiguration } from "./configuration.js";
 import {
   defaultDatabasePath,
   migrateDatabase,
@@ -49,6 +53,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   const path = environment[`YIBO_DATABASE_${tenant.region}`]?.trim() || defaultDatabasePath(tenant.region);
   const database = openRegionalDatabase(tenant.region, path);
   migrateDatabase(database);
+  configureCallLiveness({ store: new SqliteCallLivenessStore(database) });
   seedBusiness(database, tenant);
   const businessRepository = new SqliteBusinessRepository(database, tenant.region);
   await importLegacyDefaultCalendar(environment, tenantId, businessRepository);
@@ -91,7 +96,8 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     if (migrated) await configurationService.update(tenantId, migrated);
   }
 
-  const google = buildGoogleIntegration(environment, tenant, database, businessRepository);
+  const config = options.config ?? loadConfiguration(environment);
+  const google = buildGoogleIntegration(environment, tenant, database, businessRepository, config.dashboardOrigin);
   const notifications = new NotificationService(new SqliteNotificationRepository(database, tenant.region),
     customerRepository, new BusinessDirectoryService(businessRepository),
     environment.RESEND_API_KEY?.trim() && environment.YIBO_EMAIL_FROM?.trim()
@@ -101,6 +107,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
   const application = buildApplication({
     ...options,
     environment,
+    config,
     businesses,
     businessRepository,
     tenantId,
@@ -109,6 +116,7 @@ export async function buildConfiguredApplication(options: BuildApplicationOption
     callRepository,
     customerRepository,
     appointmentRepository,
+    appointmentConcurrencyGuard: options.appointmentConcurrencyGuard ?? new SqliteAppointmentConcurrencyGuard(database, tenant.region),
     appointmentNotifications: notifications,
     providerReadiness: { email: Boolean(environment.RESEND_API_KEY?.trim() && environment.YIBO_EMAIL_FROM?.trim()),
       telephony: Boolean(asterisk), calendar: Boolean(google), realtime: applicationRuntimeConfigured(environment) },
@@ -133,6 +141,7 @@ function buildGoogleIntegration(
   tenant: BusinessConfigurationV2,
   database: ReturnType<typeof openRegionalDatabase>,
   businesses: SqliteBusinessRepository,
+  dashboardOrigin: string,
 ): { oauth: GoogleOAuthService; calendar: GoogleCalendarAdapter } | undefined {
   const clientId = environment.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = environment.GOOGLE_CLIENT_SECRET?.trim();
@@ -140,7 +149,7 @@ function buildGoogleIntegration(
   const stateSigningKey = environment.YIBO_TOKEN_ENCRYPTION_KEY?.trim();
   if (!clientId || !clientSecret || !redirectUri || !stateSigningKey) return undefined;
   const oauth = new GoogleOAuthService(
-    { clientId, clientSecret, redirectUri, stateSigningKey },
+    { clientId, clientSecret, redirectUri, stateSigningKey, dashboardOrigin },
     new SqliteGoogleTokenStore(database, tenant.region, stateSigningKey),
   );
   return {

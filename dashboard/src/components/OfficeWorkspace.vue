@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { api, type Appointment, type AppointmentEvent, type AppointmentLocation, type Customer,
+import { appointmentErrorMessage } from "../services/appointment-editor";
+import { api, ApiError, type Appointment, type AppointmentEvent, type AppointmentLocation, type Customer,
   type NotificationDelivery, type Slot } from "../services/api";
 
 const props = defineProps<{ readOnly?: boolean }>();
@@ -14,6 +15,7 @@ const query = ref(""); const customers = ref<Customer[]>([]); const customer = r
 const customerHistory = ref<Appointment[]>([]);
 const customerDraft = ref({ name: "", phone: "", email: "", preferredLanguage: "en", emailOptIn: true });
 const selectedSlot = ref<Slot>(); const rescheduling = ref(false);
+const mutationBusy = ref(false);
 
 const location = computed(() => locations.value.find(({ id }) => id === locationId.value));
 const services = computed(() => location.value?.services ?? []);
@@ -45,16 +47,28 @@ async function load() {
       ...(serviceId.value ? { serviceId: serviceId.value } : {}), ...(employeeId.value ? { employeeId: employeeId.value } : {}),
       ...(status.value ? { status: status.value } : {}) });
     appointments.value = result.appointments; slots.value = result.slots;
+    if (selected.value) {
+      const fresh = appointments.value.find(item => item.id === selected.value?.id);
+      if (fresh) await chooseAppointment(fresh); else selected.value = undefined;
+    }
   } catch (caught) { error.value = caught instanceof Error ? caught.message : "Could not load the office schedule."; }
   finally { busy.value = false; }
 }
 function locationChanged() { serviceId.value = location.value?.services[0]?.id ?? ""; employeeId.value = ""; void load(); }
 async function search() { customers.value = (await api.searchCustomers(query.value)).customers; }
 async function saveCustomer() {
-  customer.value = await api.findOrCreateCustomer({ ...customerDraft.value,
-    ...(customerDraft.value.email ? { email: customerDraft.value.email } : {}) });
-  query.value = customer.value.name ?? customer.value.phone; customers.value = [customer.value];
-  customerHistory.value = (await api.customerHistory(customer.value.id)).appointments;
+  error.value = "";
+  try {
+    const { email, ...identity } = customerDraft.value;
+    customer.value = await api.findOrCreateCustomer({ ...identity,
+      ...(email.trim() ? { email: email.trim() } : {}) });
+    query.value = customer.value.name ?? customer.value.phone; customers.value = [customer.value];
+    customerHistory.value = (await api.customerHistory(customer.value.id)).appointments;
+  } catch (caught) {
+    error.value = caught instanceof ApiError && caught.code === "VALIDATION_ERROR"
+      ? "Check the customer’s phone number and email, then try again. Email is optional."
+      : "Could not finish selecting the customer. Check your access and try again.";
+  }
 }
 async function selectCustomer(value: Customer) { customer.value = value; customerDraft.value = {
   name: value.name ?? "", phone: value.phone, email: value.email ?? "", preferredLanguage: value.preferredLanguage ?? "en",
@@ -65,18 +79,43 @@ async function chooseAppointment(item: Appointment) {
   customer.value = await api.customer(item.customerId);
   events.value = timeline.events; notifications.value = timeline.notifications;
 }
+async function mutate(operation: () => Promise<void>) {
+  if (mutationBusy.value || busy.value || props.readOnly) return;
+  mutationBusy.value = true; error.value = "";
+  try { await operation(); }
+  catch (caught) { error.value = appointmentErrorMessage(caught); rescheduling.value = false; }
+  finally { mutationBusy.value = false; }
+}
 async function book(slot: Slot) {
   if (!customer.value || !serviceId.value || props.readOnly) { selectedSlot.value = slot; return; }
-  await api.createAppointment({ locationId: locationId.value, customerId: customer.value.id,
-    serviceId: serviceId.value, employeeId: slot.employeeId, startAt: slot.startAt });
-  selectedSlot.value = undefined; await load();
+  const idempotencyKey = crypto.randomUUID();
+  return mutate(async () => {
+    await api.createAppointment({ locationId: locationId.value, customerId: customer.value!.id,
+      serviceId: serviceId.value, employeeId: slot.employeeId, startAt: slot.startAt, idempotencyKey });
+    selectedSlot.value = undefined; await load();
+  });
 }
-async function cancel() { if (!selected.value || props.readOnly) return; await api.cancelAppointment(locationId.value, selected.value.id); await load(); selected.value = undefined; }
-async function mark(outcome: "COMPLETED" | "NO_SHOW") { if (!selected.value || props.readOnly) return;
-  selected.value = await api.markAppointmentOutcome(locationId.value, selected.value.id, outcome); await chooseAppointment(selected.value); await load(); }
-async function reschedule(slot: Slot) { if (!selected.value || props.readOnly) return;
-  selected.value = await api.rescheduleAppointment(locationId.value, selected.value.id, slot.startAt);
-  rescheduling.value = false; await chooseAppointment(selected.value); await load(); }
+async function cancel() {
+  const appointment = selected.value; if (!appointment) return;
+  return mutate(async () => {
+    await api.cancelAppointment(appointment.locationId, appointment.id, appointment.version ?? 1, crypto.randomUUID());
+    selected.value = undefined; await load();
+  });
+}
+async function mark(outcome: "COMPLETED" | "NO_SHOW") {
+  const appointment = selected.value; if (!appointment) return;
+  return mutate(async () => {
+    selected.value = await api.markAppointmentOutcome(appointment.locationId, appointment.id, outcome, appointment.version ?? 1);
+    await load();
+  });
+}
+async function reschedule(slot: Slot) {
+  const appointment = selected.value; if (!appointment) return;
+  return mutate(async () => {
+    selected.value = await api.rescheduleAppointment(appointment.locationId, appointment.id, slot.startAt, appointment.version ?? 1, crypto.randomUUID());
+    rescheduling.value = false; await load();
+  });
+}
 const time = (value: string) => new Intl.DateTimeFormat("en", { timeZone: location.value?.timezone ?? "UTC", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 onMounted(load);
 
@@ -98,31 +137,32 @@ function zonedStart(day: string, timezone: string) {
 
 <template>
   <section class="office-workspace">
-    <header class="office-heading"><div><p class="eyebrow">Office workspace</p><h1>Schedule & availability</h1><p>Appointments and open slots use the same rules and calendars as the phone agent.</p></div><button :disabled="busy" @click="load">Refresh</button></header>
+    <header class="office-heading"><div><p class="eyebrow">Office workspace</p><h1>Schedule & availability</h1><p>Appointments and open slots use the same rules and calendars as the phone agent.</p></div><button :disabled="busy || mutationBusy" @click="load">Refresh</button></header>
     <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="mutationBusy" role="status">Saving appointment…</p>
     <div class="office-controls">
-      <label>View<select v-model="view" @change="load"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option><option value="agenda">Agenda</option></select></label>
-      <label>Date<input v-model="date" type="date" @change="load"></label>
-      <label>Location<select v-model="locationId" @change="locationChanged"><option v-for="item in locations" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-      <label>Service<select v-model="serviceId" @change="employeeId=''; load()"><option value="">All services</option><option v-for="item in services" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-      <label>Professional<select v-model="employeeId" @change="load"><option value="">Any professional</option><option v-for="item in professionals" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-      <label>Status<select v-model="status" @change="load"><option value="">All statuses</option><option v-for="item in ['CONFIRMED','CANCELLED','COMPLETED','NO_SHOW','FAILED']" :key="item">{{ item }}</option></select></label>
+      <label>View<select v-model="view" :disabled="mutationBusy" @change="load"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option><option value="agenda">Agenda</option></select></label>
+      <label>Date<input v-model="date" :disabled="mutationBusy" type="date" @change="load"></label>
+      <label>Location<select v-model="locationId" :disabled="mutationBusy" @change="locationChanged"><option v-for="item in locations" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+      <label>Service<select v-model="serviceId" :disabled="mutationBusy" @change="employeeId=''; load()"><option value="">All services</option><option v-for="item in services" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+      <label>Professional<select v-model="employeeId" :disabled="mutationBusy" @change="load"><option value="">Any professional</option><option v-for="item in professionals" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+      <label>Status<select v-model="status" :disabled="mutationBusy" @change="load"><option value="">All statuses</option><option v-for="item in ['CONFIRMED','CANCELLED','COMPLETED','NO_SHOW','FAILED']" :key="item">{{ item }}</option></select></label>
     </div>
     <div class="office-layout">
       <div class="calendar-board" :class="`view-${view}`">
         <article v-for="item in days" :key="item.day" class="calendar-day"><h2>{{ item.day }}</h2>
-          <button v-for="appointment in item.appointments" :key="appointment.id" class="appointment-chip" @click="chooseAppointment(appointment)"><strong>{{ time(appointment.startAt) }}</strong> {{ appointment.serviceNameSnapshot }}<small>{{ appointment.outcomeStatus ?? appointment.status }}</small></button>
-          <button v-for="slot in item.slots" :key="`${slot.employeeId}-${slot.startAt}`" class="slot-chip" :disabled="readOnly" @click="rescheduling ? reschedule(slot) : book(slot)">+ {{ time(slot.startAt) }} open</button>
+          <button v-for="appointment in item.appointments" :key="appointment.id" class="appointment-chip" :disabled="busy || mutationBusy" @click="chooseAppointment(appointment)"><strong>{{ time(appointment.startAt) }}</strong> {{ appointment.serviceNameSnapshot }}<small>{{ appointment.outcomeStatus ?? appointment.status }}</small></button>
+          <button v-for="slot in item.slots" :key="`${slot.employeeId}-${slot.startAt}`" class="slot-chip" :disabled="readOnly || busy || mutationBusy" @click="rescheduling ? reschedule(slot) : book(slot)">+ {{ time(slot.startAt) }} open</button>
           <p v-if="!item.appointments.length && !item.slots.length">No activity</p>
         </article>
         <p v-if="!days.length && !busy" class="empty">No appointments or open slots in this range.</p>
       </div>
       <aside class="office-panel">
           <template v-if="selected"><h2>{{ selected.serviceNameSnapshot }}</h2><p>{{ time(selected.startAt) }} · {{ selected.outcomeStatus ?? selected.status }}</p><p>Customer: {{ customer?.name || customer?.phone || selected.customerId }}</p>
-          <div v-if="!readOnly" class="actions"><button v-if="selected.status==='CONFIRMED'" @click="rescheduling=!rescheduling">Reschedule</button><button v-if="selected.status==='CONFIRMED' && location?.cancellationAllowed" @click="cancel">Cancel</button><button @click="mark('COMPLETED')">Complete</button><button @click="mark('NO_SHOW')">No-show</button></div>
+          <div v-if="!readOnly && selected.status==='CONFIRMED'" class="actions"><button v-if="location?.reschedulingAllowed !== false" :disabled="busy || mutationBusy" @click="rescheduling=!rescheduling">Reschedule</button><button v-if="location?.cancellationAllowed !== false" :disabled="busy || mutationBusy" @click="cancel">Cancel</button><button :disabled="busy || mutationBusy" @click="mark('COMPLETED')">Complete</button><button :disabled="busy || mutationBusy" @click="mark('NO_SHOW')">No-show</button></div>
           <h3>History</h3><ol><li v-for="event in events" :key="event.id">{{ event.type }} · {{ new Date(event.occurredAt).toLocaleString() }}</li></ol>
           <h3>Notifications</h3><ul><li v-for="item in notifications" :key="item.id">{{ item.kind }} · {{ item.status }} · {{ item.destinationMasked }}</li><li v-if="!notifications.length">No notifications recorded.</li></ul>
-          <button @click="selected=undefined">Close details</button></template>
+          <button :disabled="mutationBusy" @click="selected=undefined">Close details</button></template>
         <template v-else><h2>Quick booking</h2><form @submit.prevent="search"><label>Find customer<input v-model="query" placeholder="Name, phone or email"></label><button>Search</button></form>
           <button v-for="item in customers" :key="item.id" class="customer-result" @click="selectCustomer(item)">{{ item.name || 'Unnamed customer' }}<small>{{ item.phone }} · {{ item.email || 'no email' }}</small></button>
           <form v-if="!readOnly" class="customer-form" @submit.prevent="saveCustomer"><h3>New customer</h3><label>Name<input v-model="customerDraft.name"></label><label>Phone<input v-model="customerDraft.phone" required></label><label>Email<input v-model="customerDraft.email" type="email"></label><label>Language<input v-model="customerDraft.preferredLanguage"></label><label class="check"><input v-model="customerDraft.emailOptIn" type="checkbox">Appointment emails</label><button>Create/select customer</button></form>

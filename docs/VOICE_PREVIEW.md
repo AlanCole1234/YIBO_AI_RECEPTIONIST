@@ -1,5 +1,12 @@
 # Saved-settings voice preview
 
+**Hosted preparation (10 November 2026):** production builds now use the opt-in,
+authenticated same-origin API endpoint. The standalone 4317 harness below remains
+local-only; it is not exposed on AWS. See [implementation, validation and the
+separate activation gate](HOSTED_VOICE_LAB_ACCEPTANCE.md). AWS provider activation
+and actual listening are still pending. Existing local development behavior is
+preserved.
+
 The configuration panel opens the existing Voice Lab. Browser speech synthesis
 is removed because it does not reproduce the selected OpenAI voice. Save edits
 first: the preview deliberately uses the server's saved configuration, and does
@@ -35,3 +42,29 @@ Validation: 14 focused dashboard tests passed (8 new preview-readiness cases),
 backend and dashboard typechecks passed, and production build passed. Saved
 settings, existing capability validation, and the Voice Lab audio transport are
 otherwise unchanged. Live listening requires the configured provider credentials.
+
+## Product/UX Checkpoint B — repeatable tests
+
+The Test screen and standalone Voice Lab share a browser session controller. Completed
+and interrupted tests release their temporary media/connection resources and allow a
+new test without a page reload. Every new connection checks saved tenant/runtime metadata
+again; business settings survive. The dashboard retains activity across tests within
+the mounted screen, in a bounded scrollable list with optional following of latest events.
+
+Natural completion uses the existing `end_call` capability when the configured tool
+policy allows it. Browser playback drain is acknowledged before automatic closure.
+Manual End remains a fallback; ordinary response/tool completion never ends the test.
+See [Checkpoint B](PRODUCT_UX_CHECKPOINT_B.md) for lifecycle, exact checks, synthetic
+browser fixture and outstanding real microphone/model acceptance. Historical UI-008
+validation above is unchanged; no working service was restarted for this checkpoint.
+
+
+## Launch candidate integration
+
+The shared Product/UX session controller remains responsible for microphone,
+playback drain, socket cleanup, Recent Activity and repeatable starts. Operations
+usage/cost reporting observes that lifecycle: `test.started` resets usage; one
+`conversation.opened` starts timing; completion is idempotent and late usage after
+completion is ignored. Provider/model rates are taken from the capability registry.
+No browser speech synthesis or second session controller was introduced. Real
+listening and microphone acceptance on the merged candidate remain a release gate.

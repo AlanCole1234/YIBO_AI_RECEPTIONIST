@@ -14,6 +14,7 @@ import {
 import {
   AppointmentServiceImpl,
   InMemoryAppointmentConcurrencyGuard,
+  type AppointmentConcurrencyGuard,
   InMemoryAppointmentRepository,
   type AppointmentService,
   type AppointmentCalendarPort,
@@ -107,6 +108,8 @@ export interface YiboApplication {
   conversations: ConversationServiceContract;
   calls: CallOrchestrator;
   callHistory: CallHistoryReader;
+  /** Present only for an explicitly enabled preview with virtual phone/media gateways. */
+  voiceLab?: { callReader: Pick<CallRepository, "findByCallId"> };
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
   calendar: ApplicationCalendar;
@@ -127,7 +130,7 @@ export interface YiboApplication {
   adminAudit: AdminAuditService;
   notifications?: AppointmentNotificationService;
   providerReadiness: { email: boolean; telephony: boolean; calendar: boolean; realtime: boolean };
-  registerCallMedia(callId: string, transport: ConversationTransport): void;
+  registerCallMedia(callId: string, transport: ConversationTransport): () => void;
 }
 
 export interface BuildApplicationOptions {
@@ -138,6 +141,7 @@ export interface BuildApplicationOptions {
   businessRepository?: BusinessRepository;
   customerRepository?: CustomerRepository;
   appointmentRepository?: ApplicationAppointmentRepository;
+  appointmentConcurrencyGuard?: AppointmentConcurrencyGuard;
   clock?: Clock;
   ids?: IdGenerator;
   runtime?: ConversationRuntimePort;
@@ -236,7 +240,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     business,
     scheduling,
     calendar,
-    new InMemoryAppointmentConcurrencyGuard(),
+    options.appointmentConcurrencyGuard ?? new InMemoryAppointmentConcurrencyGuard(),
     () => ids.generate("appointment"),
     clock,
     options.appointmentNotifications,
@@ -311,10 +315,12 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   const agentDefinitions = new AgentDefinitionService(configurationRepository, tools, business);
   const conversations = new ConversationService({
     runtime,
+    spendLimit: { maxDurationMs: config.callMaxDurationMs, maxTokens: config.callMaxTokens },
     ...(options.usageRecorder ? { usageRecorder: options.usageRecorder } : {}),
   });
   const registeredVoice = new ScriptedVoiceMediaGateway();
   const voice = options.voiceGateway ?? registeredVoice;
+  const hostedVoiceLab = config.hostedVoiceLabEnabled && !options.telephonyGateway && !options.voiceGateway;
   const calls = new CallOrchestratorService(
     business,
     customers,
@@ -324,6 +330,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     conversations,
     callRepository,
     options.developerTestModeAuthorized ?? false,
+    hostedVoiceLab ? tenantId : undefined,
   );
   telephony.onEvent((event) => calls.handleTelephonyEvent(event));
 
@@ -341,6 +348,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     conversations,
     calls,
     callHistory: callRepository,
+    ...(hostedVoiceLab ? { voiceLab: { callReader: callRepository } } : {}),
     runtime,
     voice,
     calendar,

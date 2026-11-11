@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TemporaryAuditFromVerifiedProjectOwnerRole",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::<PROJECT_ACCOUNT_ID>:role/managed/AccountFullAccessRole"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "DateLessThan": {
+          "aws:CurrentTime": "<AUDIT_TRUST_EXPIRES_AT_UTC>"
+        },
+        "StringLike": {
+          "sts:RoleSessionName": "yibo-audit-*"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# /etc/systemd/system/yibo-api.service.d/20-staging.conf
+# Drop-in for the existing deploy/node/yibo-api.service.example, on the NEW host only.
+[Service]
+EnvironmentFile=/etc/yibo/public.env
+ExecStartPre=/usr/bin/node /opt/yibo/current/deploy/aws/lightsail/check-staging.mjs

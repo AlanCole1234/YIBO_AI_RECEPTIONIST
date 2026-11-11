@@ -1,0 +1,26 @@
+# Template only: no resource, DNS record, certificate or service is created by builds.
+# Supply the approved bare hostname to the Caddy service before installation.
+# Do not set this to the old Cloudflare workers.dev hostname.
+{$YIBO_PUBLIC_HOSTNAME:yibo.invalid} {
+	encode zstd gzip
+
+	# Preserve /api, cookies and Origin. API errors must never fall back to SPA HTML.
+	@api path /api /api/*
+	handle @api {
+		header Cache-Control "private, no-store"
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# No route to the private development voice harness or ARI.
+	@private path /voice /voice/* /ari /ari/*
+	handle @private {
+		respond 404
+	}
+
+	handle {
+		# Serve only built public assets, never the checkout, secrets or SQLite files.
+		root * /opt/yibo/current/dashboard/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

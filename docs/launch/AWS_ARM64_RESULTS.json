@@ -1,0 +1,103 @@
+{
+  "sourceCommit": "2232ade31c16ade7c6db77b8aab14f0275375c81",
+  "validation": [
+    {
+      "check": "full-tests",
+      "exitCode": 0,
+      "durationSeconds": 28.03,
+      "numTotalTests": 774,
+      "numPassedTests": 773,
+      "numFailedTests": 0,
+      "numPendingTests": 1,
+      "success": true
+    },
+    {
+      "check": "backend-typecheck",
+      "exitCode": 0,
+      "durationSeconds": 3.92
+    },
+    {
+      "check": "frontend-typecheck",
+      "exitCode": 0,
+      "durationSeconds": 5.77
+    },
+    {
+      "check": "production-build",
+      "exitCode": 0,
+      "durationSeconds": 10.62
+    },
+    {
+      "check": "asterisk-template-validator",
+      "exitCode": 0,
+      "durationSeconds": 0.37
+    },
+    {
+      "check": "cost-model",
+      "exitCode": 0,
+      "durationSeconds": 0.37
+    }
+  ],
+  "runtime": {
+    "architecture": "arm64",
+    "platform": "linux",
+    "node": "v22.23.4",
+    "checks": [
+      "production Fastify health through Caddy",
+      "production Vue dashboard, hashed assets and SPA navigation",
+      "private routes blocked and unauthenticated API denied",
+      "untrusted Origin rejected",
+      "persisted owner login and production cookie protections",
+      "availability resolves location, service and professional",
+      "manual booking and replay retain one appointment",
+      "overlapping booking rejected",
+      "reschedule retains the original synthetic provider event ID",
+      "cancellation and persistent appointment history",
+      "synthetic mode honestly reports live providers unconfigured",
+      "clean systemd restart revokes process-local sessions; fresh login and SQLite appointment survive",
+      "online SQLite backup, verification and isolated restore retain appointment",
+      "restart-on-failure and stale process-lock recovery preserve SQLite data"
+    ]
+  },
+  "voice": {
+    "platform": "linux",
+    "architecture": "arm64",
+    "checks": [
+      "actual Linux Voice Lab server and browser modules load",
+      "real WebSocket session 1: start, synthetic PCM, one completion, disconnect",
+      "real WebSocket session 2: start, synthetic PCM, one completion, disconnect",
+      "fresh-session identity, completed call history and usage endpoint persist",
+      "Voice Lab process and listening socket cleanly released"
+    ]
+  },
+  "reboot": {
+    "checks": [
+      "VM boot identity changed",
+      "systemd automatically starts API and Caddy",
+      "stored owner login works after reboot",
+      "cancelled appointment and history persist after reboot"
+    ]
+  },
+  "testedDates": [
+    "2026-10-24",
+    "2026-10-25"
+  ],
+  "environment": {
+    "os": "Ubuntu 24.04.5 LTS",
+    "architecture": "Linux ARM64",
+    "virtualization": "Lima 2.2.1 VZ on Apple Silicon",
+    "vcpus": 2,
+    "ramGiB": 2,
+    "swapGiB": 0,
+    "diskGiB": 20,
+    "pnpm": "11.19.0",
+    "caddy": "2.11.7",
+    "providers": "synthetic/mocked only",
+    "awsResourcesCreated": false
+  },
+  "limits": [
+    "No AWS Graviton performance or concurrency load test",
+    "No live Google/OpenAI/phone calls",
+    "No public DNS/TLS or remote backup restore",
+    "Browser login screen rendered; authentication and appointment mutations tested through HTTP"
+  ]
+}

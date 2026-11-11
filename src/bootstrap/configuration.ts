@@ -5,7 +5,13 @@ export interface ApplicationConfiguration {
   openAiRealtimeModel: string;
   conversationVoice: string;
   maxOutputTokens: number;
+  /** Hard cap on one OpenAI call, in milliseconds. */
+  callMaxDurationMs: number;
+  /** Hard cap on input plus output tokens for one OpenAI call. */
+  callMaxTokens: number;
   dashboardOrigin: string;
+  /** Explicitly opt in to the authenticated, same-origin browser preview. */
+  hostedVoiceLabEnabled?: boolean;
   openAiApiKey?: string;
   openAiAdminKey?: string;
   vadThreshold?: number;
@@ -21,6 +27,7 @@ export class ConfigurationError extends Error {
 }
 
 export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env): ApplicationConfiguration {
+  assertLaunchSafety(environment);
   const runtime = environment.YIBO_RUNTIME?.trim() || "in-memory";
   if (runtime !== "openai-realtime" && runtime !== "in-memory") {
     throw new ConfigurationError("YIBO_RUNTIME must be openai-realtime or in-memory");
@@ -34,7 +41,23 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     1,
     4096,
   ) ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  const callMaxMinutes = optionalIntegerInRange(
+    environment.YIBO_CALL_MAX_MINUTES,
+    "YIBO_CALL_MAX_MINUTES",
+    1,
+    120,
+  ) ?? DEFAULT_CALL_MAX_MINUTES;
+  const callMaxTokens = optionalIntegerInRange(
+    environment.YIBO_CALL_MAX_TOKENS,
+    "YIBO_CALL_MAX_TOKENS",
+    1_000,
+    5_000_000,
+  ) ?? DEFAULT_CALL_MAX_TOKENS;
   const dashboardOrigin = validOrigin(environment.YIBO_DASHBOARD_ORIGIN?.trim() || "http://localhost:5173");
+  const hostedVoiceLab = environment.YIBO_HOSTED_VOICE_LAB?.trim() || "0";
+  if (!["0", "1"].includes(hostedVoiceLab)) {
+    throw new ConfigurationError("YIBO_HOSTED_VOICE_LAB must be 0 or 1");
+  }
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
   const openAiAdminKey = environment.OPENAI_ADMIN_KEY?.trim();
   const vadThreshold = optionalNumber(environment.YIBO_VAD_THRESHOLD, "YIBO_VAD_THRESHOLD", 0, 1);
@@ -49,13 +72,29 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     openAiRealtimeModel,
     conversationVoice,
     maxOutputTokens,
+    callMaxDurationMs: callMaxMinutes * 60_000,
+    callMaxTokens,
     dashboardOrigin,
+    ...(hostedVoiceLab === "1" ? { hostedVoiceLabEnabled: true } : {}),
     ...(openAiApiKey ? { openAiApiKey } : {}),
     ...(openAiAdminKey ? { openAiAdminKey } : {}),
     ...(vadThreshold === undefined ? {} : { vadThreshold }),
     ...(vadPrefixPaddingMs === undefined ? {} : { vadPrefixPaddingMs }),
     ...(vadSilenceDurationMs === undefined ? {} : { vadSilenceDurationMs }),
   };
+}
+
+const disabledValues = new Set(["", "0", "false", "off", "disabled", "no"]);
+
+function assertLaunchSafety(environment: NodeJS.ProcessEnv): void {
+  const recording = environment.YIBO_CALL_RECORDING?.trim().toLowerCase() ?? "";
+  if (!disabledValues.has(recording)) {
+    throw new ConfigurationError("YIBO_CALL_RECORDING must stay off. This build does not record calls.");
+  }
+  const outbound = environment.YIBO_OUTBOUND_DIALING?.trim().toLowerCase() ?? "";
+  if (!disabledValues.has(outbound)) {
+    throw new ConfigurationError("YIBO_OUTBOUND_DIALING is not supported. YIBO is inbound-only.");
+  }
 }
 
 function validOrigin(value: string): string {
@@ -100,3 +139,6 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_REALTIME_MODEL,
 } from "../modules/agents/index.js";
+
+const DEFAULT_CALL_MAX_MINUTES = 15;
+const DEFAULT_CALL_MAX_TOKENS = 150_000;
