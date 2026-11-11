@@ -1,11 +1,16 @@
 # YIBO Lightsail staging
 
-**10 November Voice Lab preparation (not deployed):** the authenticated API
-preview and an explicit `voice-lab-test` guard profile are ready for review.
-Existing synthetic/Google-only profiles remain closed to OpenAI. Activation
-requires separate approval and a private project key, reuses the same Google-test
-DB/grant and HTTPS proxy, and restarts only the API after Linux checks/backup.
-No new resource or phone route. See [exact procedure and remaining manual
+**11 November Voice Lab activated with approval:** staging runs **`d5eb70e`**;
+the prior `eb9af24` release and private configuration are retained for rollback.
+**154 native Linux tests**, both typechecks/build, **12 public HTTPS/WSS checks**,
+pre/post encrypted DB backups and an isolated **3/3-file runtime recovery
+restore** pass. Both databases, owner login and Google grant are preserved. Only
+the API restarted; public/Caddy configuration is unchanged. The authenticated
+browser shows the saved model/voice, Ready and Calendar connected, with zero AI
+calls/tokens. **The owner must start the real microphone test**; provider access,
+audio and conversation are not yet verified. Existing synthetic/Google-only
+profiles still reject OpenAI. No new resource or phone route. See [evidence,
+exact procedure and remaining manual
 acceptance](../../../docs/HOSTED_VOICE_LAB_ACCEPTANCE.md).
 
 **9 November UI update activated:** the owner-approved **`eb9af24`** release is

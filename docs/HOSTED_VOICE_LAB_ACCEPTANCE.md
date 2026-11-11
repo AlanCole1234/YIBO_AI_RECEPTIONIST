@@ -1,10 +1,17 @@
-# Authenticated hosted Voice Lab — preparation, 10 November 2026
+# Authenticated hosted Voice Lab — activated, 11 November 2026
 
-**Prepared locally; not activated on AWS.** Staging still runs approved release
-`eb9af245124f0e4c151655da06a3f729fb413202`. Its real Google test-calendar acceptance
-and owner login remain complete. This checkpoint addresses the next launch gate:
-browser voice on the persistent host before any phone handover. No AWS resources,
-provider requests, secrets, live configuration or production data changed.
+**Activated on the existing AWS staging host with the owner's approval.**
+https://staging.getyibo.com runs reviewed release
+`d5eb70ef0f707f62c51da2ebb982d7d5b09e1606`. Owner login, authenticated public WSS
+preview readiness and encrypted recovery restore pass. The microphone remains
+off; **no real AI session has started**. The owner must perform the voice test
+below before conversational/provider acceptance can be marked complete.
+
+The existing Google-test database, owner password and Google grant were preserved.
+The prior `eb9af245124f0e4c151655da06a3f729fb413202` release remains available for
+rollback. No AWS resources, phone services, production data or application code
+were changed during activation. The four approved staging environment changes
+are recorded below; OpenAI credentials remain private on the server.
 
 ## Implementation and boundaries
 
@@ -51,11 +58,12 @@ Provider credentials remain server-side, consistent with the
 No Realtime model, protocol, Calendar integration, booking/confirmation policy,
 customer/email subsystem, or phone service was redesigned.
 
-## Prepared AWS activation — approval required before execution
+## Approved AWS activation procedure — completed
 
 The startup guard now recognizes a **separate** `voice-lab-test` profile. Existing
 `synthetic` and `google-calendar-test` profiles still reject OpenAI credentials
-and hosted voice activation. On the existing staging host only, after approval:
+and hosted voice activation. The following procedure was approved and completed
+on the existing staging host; future deployments still require authorization:
 
 1. Verify the reviewed commit and run native Linux focused tests, both typechecks
    and build in a new release directory before switching. Check there is no
@@ -84,7 +92,8 @@ and hosted voice activation. On the existing staging host only, after approval:
    API, and verify HTTPS, login, Calendar status, DB preservation and encrypted
    backup. An API restart ends active admin sessions, so owner re-login is expected.
 6. Privately log in and open AI agent → Open saved-settings Voice Lab. Verify
-   readiness, then obtain microphone permission and perform the manual test below.
+   readiness. The owner separately starts the microphone test below; this step
+   does not authorize an automated real AI session.
    Roll back release and private environment to the prior reviewed profile if
    startup/health/access fails; preserve the database and test evidence.
 
@@ -92,7 +101,7 @@ This document is a reviewable procedure, not authorization to activate providers
 Do not change the DigitalOcean PBX, 7001, Stasis ownership, live Google application,
 main, production data or any Cloudflare configuration.
 
-## Validation and remaining acceptance
+## Validation before deployment
 
 **135/135 focused tests in 14 files passed** on Mac ARM64 / Node 26.7.0 (38 new
 cases). Backend typecheck, dashboard typecheck and the production Vite build pass.
@@ -114,16 +123,80 @@ Disabled mode explains activation and disables microphone/WAV starts. No browser
 console errors/warnings were observed. At 390 px, document width equals viewport
 width; controls stack without horizontal overflow. No real microphone was used.
 
-**Still manual / not claimed complete:** native Linux checks for this new commit,
-approved AWS activation and WSS through its public proxy, real model audio,
-microphone echo/interruptions, natural conversational rules, spoken confirmation,
-provider-reported costs, and a fresh conversation after logout/re-login. Later,
-separately approve phone handover and a real full call; browser voice is not PBX
-acceptance.
+## AWS activation and verification evidence
 
-For the controlled voice test, use only the dedicated staging calendar and
-synthetic contact details. Ask for a service and price, request an available time,
-book one clearly labeled test appointment, verify its actual event, reschedule
-that same appointment, cancel it, and say goodbye. Check one confirmation per
-successful operation and cleanup, then start a second test. Do not call this a
-paying-customer launch until the remaining launch-PDF gates are complete.
+- Native Ubuntu 24.04 x86-64 / Node **22.23.4** / pnpm **11.19.0**:
+  frozen-lockfile installation, **154/154 tests in 15 files**, backend typecheck,
+  dashboard typecheck and production build passed before the switch. These are
+  the 135 focused cases above plus 19 regional-backup cases. Checks ran as the
+  unprivileged build user without provider credentials. No unrelated full suite
+  was repeated.
+- The GitHub source archive and all **492 tracked source files** matched the
+  reviewed commit. No dependency, schema or runtime-code edits were made on AWS.
+- Activation completed at approximately **02:23 UTC on 11 November**. Encrypted
+  DB backups passed before and after switching at **02:23:12.788** and
+  **02:23:17.127 UTC**. Both the original synthetic and Google-test database
+  schemas/content matched their pre-restart hashes, preserving owner, grant and
+  appointment history. Only the staging API restarted; Caddy's PID, public env,
+  service configuration and reverse proxy stayed unchanged. The backup release
+  SHA was updated and its timer restored.
+- Only `YIBO_STAGING_PROVIDER=voice-lab-test`, `YIBO_RUNTIME=openai-realtime`,
+  `YIBO_HOSTED_VOICE_LAB=1` and the privately entered `OPENAI_API_KEY` changed in
+  the backend environment. No model override was added. Rollback files and
+  evidence are root-only under
+  `/etc/yibo/rollback/voice-d5eb70e-20261111T021920Z`.
+- At **18:33 UTC**, encrypted off-host runtime recovery backup and isolated
+  restore passed. The backend env, public env and release metadata were restored
+  into a separate directory and byte-compared: **3/3 files identical**. Nothing
+  was restored over the live database/configuration. This uses the existing
+  private backup repository and the owner's previously saved recovery key.
+- **12/12 external HTTPS/WSS checks passed**: dashboard/health, exact JS/CSS
+  hashes from the validated build, HTTP → canonical HTTPS, unauthenticated
+  identity/status/upgrade denial, foreign-Origin and client-tenant-selector
+  rejection, and `/voice`/`/ari` remaining unavailable. No provider calls were
+  made. The temporary external probe was closed after results were saved.
+- The owner confirmed re-login with the existing password. Authenticated hosted
+  browser checks show **Ready when you are**, microphone off, the saved
+  `gpt-realtime-2.1` / `marin` configuration, Calendar tools available, Google
+  connected and America/Chicago. The unused preview closed once at 120 seconds;
+  Recent Activity recorded closure and a fresh preview connected after returning
+  to AI agent. Cost remained **$0.0000 / zero tokens / zero tools**. No browser
+  warnings/errors; at the current 582 px viewport, no horizontal overflow.
+- Final read-only verification: API, Caddy and backup timer active/enabled;
+  scheduled DB backup at **18:02:30.742 UTC** targets the active release;
+  **zero call records** after preview checks. No microphone or WAV was started.
+  Home correctly still reports phone/email setup pending.
+
+Base AWS hosting remains **$13/month**; no additional resources were created.
+Current credits were not refreshed during this checkpoint. OpenAI usage is
+separate from AWS credits and starts only when the owner starts a voice test.
+Configured-key readiness does not prove provider authentication, model access or
+billing; those require the first real test. Revoke any superseded OpenAI key
+privately; revocation was not independently inspected.
+
+## Remaining manual acceptance
+
+**Not claimed complete:** real model audio, microphone echo/interruptions,
+natural conversational rules, spoken confirmation, provider-reported costs, and
+a fresh conversation after logout/re-login. The previous real Google
+create/reschedule/cancel checks remain valid evidence; they were not repeated
+during this voice activation. The separate External/Testing Google grant's
+seven-day lifetime remains a pre-pilot limitation.
+
+1. At https://staging.getyibo.com, sign in and open **AI agent**.
+2. Click **Start Voice Test** and grant microphone access when the browser asks.
+   If the unused preview has closed, starting a test reconnects it. Only the
+   owner performs this step; real OpenAI usage may incur charges.
+3. Use synthetic contact details and only **YIBO AWS STAGING TEST**. Begin with
+   “I'd like to book a consultation. What times are available?” Choose a date
+   and time that YIBO offers, then ask to label the appointment as a staging test.
+4. Confirm the actual Calendar event, reschedule that same appointment, then
+   cancel it. Expect one clear confirmation after each successful operation,
+   no duplicate event or repeated question, and the correct clinic-local time.
+5. Say goodbye; check completion, released microphone, retained Recent Activity
+   and usage/cost. Start a second short test, then end it. Report any failure
+   before changing provider settings or phone routing.
+
+Later, separately approve phone handover and a real full call; browser voice is
+not PBX acceptance. Production funding, OAuth readiness and the remaining launch
+PDF gates must pass before a paying-customer launch.

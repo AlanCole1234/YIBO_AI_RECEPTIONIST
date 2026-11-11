@@ -3,7 +3,7 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
-## AWS Voice Lab autenticado: preparado localmente — 10 de noviembre de 2026
+## AWS Voice Lab autenticado: activado con aprobación — 11 de noviembre de 2026
 
 - Opt-in `YIBO_HOSTED_VOICE_LAB=1`; dashboard de producción usa WSS same-origin
   `/api/voice-lab/stream`, cookie/roles/tenant/Origin existentes y revocación.
@@ -12,17 +12,28 @@ son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 - Una preview simultánea, buffers limitados, cierre por logout/desconexión/stop,
   goodbye tras playback drain. Estado desactivado visible; configuración por
   defecto conservada. Gateway telefónico instalado bloquea la preview hosted.
-- Perfil staging `voice-lab-test` preparado: misma DB Google-test/grant, OpenAI
+- Perfil staging `voice-lab-test` activo: misma DB Google-test/grant, OpenAI
   server-only, sin email/PBX. Perfiles previos siguen rechazando OpenAI/preview.
-- Validación sintética local y browser de build con WAV silencioso; sin micrófono,
-  proveedor real ni datos persistentes. Documentación y procedimiento concreto en
+- Validación sintética local y browser de build con WAV silencioso. No se inició
+  ninguna sesión OpenAI real durante la activación. Evidencia y prueba manual en
   [HOSTED_VOICE_LAB_ACCEPTANCE.md](HOSTED_VOICE_LAB_ACCEPTANCE.md).
-- **135/135 tests focales (14 archivos, 38 casos nuevos)**, ambos typechecks y
-  build pasan en Mac ARM64 / Node 26.7.0. Linux para este commit pendiente antes
-  del switch; no se repitió la suite completa sin necesidad.
-- **NO activado/desplegado**. AWS sigue `eb9af24`; Google real/login/backup ya
-  verificados. Siguiente paso requiere aprobación de release/proveedor y entrada
-  privada de clave OpenAI, luego voz real. Main/PBX/7001/Cloudflare intactos.
+- **135/135 tests focales locales**, más **154/154 tests Linux en 15 archivos**
+  (incluyen 19 de backup), ambos typechecks y build pasan. Node 22.23.4 x86-64 en
+  AWS; 492 archivos fuente coinciden. No se repitió la suite completa sin necesidad.
+- Activo **`d5eb70ef0f707f62c51da2ebb982d7d5b09e1606`**, rollback `eb9af24`
+  retenido. Backups cifrados pre/post switch pasan; ambas DB, owner/grant/historial
+  preservados. Sólo restart API; Caddy/config pública intactos y timer restaurado.
+- **12/12 checks HTTPS/WSS públicos** pasan. Owner reingresa; browser autenticado
+  muestra Ready, modelo/voz guardados y Calendar conectado. Preview idle cierra a
+  120s, nueva preview conecta; 0 tokens/tools/costo/calls. Sin errores de consola
+  ni overflow a 582 px. No se inició micrófono/WAV ni se repitieron writes Google.
+- Recovery privado cifrado/restaurado **3/3 archivos idénticos** a las 18:33 UTC;
+  backup programado de DB 18:02:30 UTC con SHA activo. API/Caddy/timer habilitados.
+- **Pendiente voz real iniciada por el owner**: credencial/modelo/billing OpenAI,
+  conversación, confirmaciones, costo y cleanup. Luego handover telefónico con
+  aprobación separada; todavía no es lanzamiento a clientes. Base AWS $13/mes sin
+  recursos nuevos; OpenAI separado, créditos no releídos. Main/PBX/7001/Cloudflare
+  y OAuth original intactos.
 
 ## AWS staging: release UI activado con aprobación — 9 de noviembre de 2026
 

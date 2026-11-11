@@ -1,6 +1,6 @@
 # AWS deployment and remaining launch gates
 
-10 November 2026. **Approved AWS staging is deployed at https://staging.getyibo.com.** Reuse the
+11 November 2026. **Approved AWS staging is deployed at https://staging.getyibo.com.** Reuse the
 existing Happy Path project in Ohio and its one staging host, attached static IP
 and private backup bucket; do not provision duplicates. Base cost is **$13/month**.
 The approved hostname serves the dashboard and API with a trusted HTTPS certificate.
@@ -10,9 +10,14 @@ steps](AWS_STAGING_VALIDATION.md), [staging configuration](../deploy/aws/lightsa
 [cost review](AWS_ACCESS_AND_COST_REVIEW.md) and [ARM64 evidence](AWS_ARM64_VALIDATION.md).
 The separate staging Google app/test calendar now passes real create, same-event
 reschedule and cancellation checks; owner login and the approved UI update also
-pass. See [current evidence](AWS_STAGING_GOOGLE_ACCEPTANCE.md). OpenAI/phone/email
-remain disabled. Authenticated hosted Voice Lab is prepared locally, not deployed;
-see [its activation and acceptance gate](HOSTED_VOICE_LAB_ACCEPTANCE.md).
+pass. See [Google evidence](AWS_STAGING_GOOGLE_ACCEPTANCE.md). The approved
+`d5eb70e` release now enables authenticated hosted Voice Lab with a private
+server-side OpenAI key. **154 Linux tests**, both typechecks/build, **12 public
+HTTPS/WSS checks**, owner re-login, preview readiness and encrypted runtime
+recovery restore pass. No real AI session has started; provider authentication,
+audio and conversational acceptance still require the owner to start a test.
+Phone/email remain disabled; see [activation evidence and the manual voice
+gate](HOSTED_VOICE_LAB_ACCEPTANCE.md).
 The separate DigitalOcean phone system is unchanged.
 
 ## Account action for the owner
