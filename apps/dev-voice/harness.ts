@@ -19,19 +19,29 @@ interface HarnessOptions {
   calledNumber: string;
   transcriptEnabled: boolean;
   audioDebug: boolean;
+  /** Hosted mode rechecks the existing admin session and bounds browser input. */
+  hosted?: { authorize: () => Promise<boolean> };
 }
 
-export function attachHarness(socket: WebSocket, options: HarnessOptions): void {
+export interface VoiceHarness {
+  close(reason?: string): Promise<void>;
+  readonly completed: Promise<void>;
+  readonly started: boolean;
+}
+
+export function attachHarness(socket: WebSocket, options: HarnessOptions): VoiceHarness {
   const { app, callRepository, calledNumber, transcriptEnabled, audioDebug } = options;
+  let complete!: () => void;
+  const completed = new Promise<void>(resolve => { complete = resolve; });
   void app.agentConfiguration.get(app.tenantId).then((configuration) => {
-    if (socket.readyState !== socket.OPEN) return;
+    if (ended || socket.readyState !== socket.OPEN) return;
     socket.send(JSON.stringify({ type: "voice.lab.ready", callId, tenantId: app.tenantId,
       runtime: app.config.runtime, model: configuration?.conversation.model,
       voice: configuration?.audio.voice, configurationSource: "saved",
     }));
   }).catch(() => { if (socket.readyState === socket.OPEN) socket.close(1011, "Configuration unavailable"); });
   const callId = app.ids.generate("call");
-  const inbound = new AudioQueue();
+  const inbound = new AudioQueue(options.hosted ? 240_000 : Infinity);
   let conversationStarted = false;
   let ended = false;
   let runtimeFailed = false;
@@ -43,6 +53,9 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
   let inputSampleRate = 48_000;
   let inputChannels = 1;
   let nextBinaryIsWav = false;
+  let inputConfigured = false;
+  let fixturePlaying = false;
+  let pendingMessages = 0;
   let inboundFrames = 0;
   let outboundFrames = 0;
   let lastAssistantTurnId: string | undefined;
@@ -50,6 +63,7 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
   const playbackAcks = new Map<string, (position: PlaybackPosition | undefined) => void>();
 
   const log = (event: string, metadata: Record<string, unknown> = {}) => {
+    if (options.hosted && "error" in metadata) metadata = { ...metadata, error: "Voice test failed. Please end the test and try again." };
     const record = { callId, timestamp: new Date().toISOString(), event, ...metadata };
     console.log(JSON.stringify(record));
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(record));
@@ -97,6 +111,10 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
       outboundAudio: {
         write: async (frame, assistantTurnId) => {
           if (ended) return;
+          if (options.hosted && socket.bufferedAmount > 1_048_576) {
+            void finalize("slow_connection_failed");
+            return;
+          }
           pendingDrain = undefined;
           outboundFrames += 1;
           lastAssistantTurnId = assistantTurnId;
@@ -143,8 +161,14 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
 
   const onMessage = (raw: RawData, binary: boolean) => {
     if (ended) return;
+    if (options.hosted && pendingMessages >= 256) { void finalize("input_overflow_failed"); return; }
+    pendingMessages += 1;
     void (async () => {
       try {
+        if (options.hosted) {
+          if (!await options.hosted.authorize()) { void finalize("authorization_failed"); return; }
+          if (ended) return;
+        }
         if (!binary) {
           const message = JSON.parse(raw.toString()) as Record<string, unknown>;
           if (message.type === "playback.cleared") {
@@ -164,14 +188,19 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
           } else if (message.type === "mic.start") {
             inputSampleRate = positiveNumber(message.sampleRate, "sampleRate");
             inputChannels = positiveNumber(message.channels, "channels");
+            if (options.hosted && (!Number.isInteger(inputSampleRate) || inputSampleRate < 8_000 || inputSampleRate > 96_000
+              || ![1, 2].includes(inputChannels))) throw new Error("Unsupported microphone format");
+            inputConfigured = true;
             await ensureConversation();
             if (ended) return;
             log("microphone.started", { sampleRate: inputSampleRate, channels: inputChannels });
           } else if (message.type === "fixture.next") {
+            if (options.hosted && fixturePlaying) throw new Error("A fixture is already playing");
+            inputConfigured = true;
             nextBinaryIsWav = true;
             await ensureConversation();
             if (ended) return;
-            log("fixture.ready", { name: typeof message.name === "string" ? message.name : "fixture.wav" });
+            log("fixture.ready", { name: !options.hosted && typeof message.name === "string" ? message.name : "fixture.wav" });
           } else if (message.type === "interrupt") {
             if (!conversationStarted) return;
             const position = await interruptLocalPlayback();
@@ -183,6 +212,7 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
           }
           return;
         }
+        if (options.hosted && (!inputConfigured || fixturePlaying)) throw new Error("Audio input is not ready");
         await ensureConversation();
         if (ended) return;
         const bytes = raw instanceof ArrayBuffer
@@ -193,7 +223,10 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
         if (nextBinaryIsWav) {
           nextBinaryIsWav = false;
           const decoded = decodeWav(bytes);
+          if (options.hosted && (!Number.isInteger(decoded.sampleRate) || decoded.sampleRate < 8_000 || decoded.sampleRate > 96_000
+            || ![1, 2].includes(decoded.channels))) throw new Error("Unsupported WAV format");
           const frames = splitRealtimeFrame(floatAudioToRealtimeFrame(decoded));
+          fixturePlaying = true;
           log("fixture.decoded", {
             bytes: bytes.byteLength,
             frames: frames.length,
@@ -205,7 +238,9 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
             pushInbound(frame);
             await delay(20, undefined, { signal: abort.signal });
           }
+          fixturePlaying = false;
         } else {
+          if (options.hosted && bytes.byteLength > 262_144) throw new Error("Microphone frame is too large");
           const copy = bytes.slice();
           if (copy.byteLength % 4 !== 0) throw new Error("Microphone frame is not Float32 audio");
           const frame = floatAudioToRealtimeFrame({
@@ -219,6 +254,8 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
         if (ended) return;
         log("error", { error: errorMessage(error) });
         finalize("harness_failed");
+      } finally {
+        pendingMessages -= 1;
       }
     })();
   };
@@ -230,8 +267,8 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
     console.log(JSON.stringify({ callId, timestamp: new Date().toISOString(), event: "harness.disconnected" }));
   });
 
-  function finalize(reason: string, notifyCall = true): void {
-    if (ended) return;
+  function finalize(reason: string, notifyCall = true): Promise<void> {
+    if (ended) return completed;
     ended = true;
     abort.abort();
     inbound.end();
@@ -247,9 +284,11 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
     if (socket.readyState === socket.OPEN) socket.close(1000, "Test completed");
     // The orchestrator waits for a pending INCOMING_CALL before shutting it down.
     // Always notify it on disconnect, even if startup has not returned yet.
-    if (notifyCall) void app.calls.handleTelephonyEvent({
+    const cleanup = notifyCall ? app.calls.handleTelephonyEvent({
       type: "CALL_HUNG_UP", callId, occurredAt: new Date().toISOString(),
-    }).catch(error => log("cleanup.failed", { error: errorMessage(error) }));
+    }).catch(error => log("cleanup.failed", { error: errorMessage(error) })) : Promise.resolve();
+    void cleanup.finally(complete);
+    return completed;
   }
 
   function pushInbound(frame: AudioFrame): void {
@@ -260,6 +299,8 @@ export function attachHarness(socket: WebSocket, options: HarnessOptions): void 
     }
     inbound.push(frame);
   }
+  return { close: (reason = "server_shutdown") => finalize(reason), completed,
+    get started() { return conversationStarted || starting !== undefined; } };
 }
 
 function observeRuntimeEvent(
@@ -294,18 +335,26 @@ class AudioQueue implements AsyncIterable<AudioFrame> {
   private readonly values: AudioFrame[] = [];
   private readonly readers: Array<(value: IteratorResult<AudioFrame>) => void> = [];
   private ended = false;
+  private bufferedBytes = 0;
+
+  constructor(private readonly maximumBytes = Infinity) {}
 
   push(frame: AudioFrame): void {
     if (this.ended) return;
     const reader = this.readers.shift();
     if (reader) reader({ value: frame, done: false });
-    else this.values.push(frame);
+    else {
+      if (this.bufferedBytes + frame.data.byteLength > this.maximumBytes) throw new Error("Audio input queue is full");
+      this.values.push(frame);
+      this.bufferedBytes += frame.data.byteLength;
+    }
   }
 
   end(): void {
     if (this.ended) return;
     this.ended = true;
     this.values.length = 0;
+    this.bufferedBytes = 0;
     for (const reader of this.readers.splice(0)) reader({ value: undefined, done: true });
   }
 
@@ -313,7 +362,10 @@ class AudioQueue implements AsyncIterable<AudioFrame> {
     return {
       next: () => {
         const value = this.values.shift();
-        if (value) return Promise.resolve({ value, done: false });
+        if (value) {
+          this.bufferedBytes -= value.data.byteLength;
+          return Promise.resolve({ value, done: false });
+        }
         if (this.ended) return Promise.resolve({ value: undefined, done: true });
         return new Promise((resolve) => this.readers.push(resolve));
       },

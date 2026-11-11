@@ -64,7 +64,10 @@ export interface ToolExecutor {
   execute(context: ToolExecutionContext, call: AgentToolCall): Promise<AgentToolResult>;
 }
 
-export interface PrepareAgentDefinitionCommand extends TrustedCallContext {}
+export interface PrepareAgentDefinitionCommand extends TrustedCallContext {
+  /** Set by the server's transport, never by caller/tool arguments. */
+  channel?: AgentChannel;
+}
 
 export interface AgentDefinition {
   instructions: string;

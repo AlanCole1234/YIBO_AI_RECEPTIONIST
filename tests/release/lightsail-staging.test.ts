@@ -89,6 +89,39 @@ const googleTest = {
   YIBO_TOKEN_ENCRYPTION_KEY: "1".repeat(64),
 };
 
+describe("prepared authenticated Voice Lab staging profile", () => {
+  const voice = { ...googleTest, YIBO_STAGING_PROVIDER: "voice-lab-test", YIBO_RUNTIME: "openai-realtime",
+    YIBO_HOSTED_VOICE_LAB: "1", OPENAI_API_KEY: "synthetic-voice-key-not-a-real-provider-key" };
+  it("accepts only explicit voice activation while keeping the verified Google test database", () => {
+    expect(check(voice).status).toBe(0);
+    rejects({ ...voice, YIBO_DATABASE_US: "/var/lib/yibo/us.sqlite" });
+    rejects({ ...voice, YIBO_DATABASE_US: "/var/lib/yibo/staging-us.sqlite" });
+    rejects({ ...voice, YIBO_RUNTIME: "in-memory" });
+    rejects({ ...voice, YIBO_HOSTED_VOICE_LAB: "0" });
+    rejects({ ...voice, YIBO_LOCAL_DEVELOPER_TEST_MODE: "1" });
+  });
+  it("keeps existing profiles closed to OpenAI and hosted preview activation", () => {
+    rejects({ YIBO_HOSTED_VOICE_LAB: "1" });
+    rejects({ ...googleTest, YIBO_HOSTED_VOICE_LAB: "1" });
+    rejects({ ...voice, YIBO_STAGING_PROVIDER: "google-calendar-test" });
+    rejects({ ...voice, YIBO_STAGING_PROVIDER: "synthetic" });
+  });
+  it("requires private OpenAI credentials and never prints them", () => {
+    for (const value of ["", "short", "invalid-key-with\nnewline"]) rejects({ ...voice, OPENAI_API_KEY: value });
+    expect(check(voice).stdout).not.toContain(voice.OPENAI_API_KEY);
+    const result = check({ ...voice, OPENAI_ADMIN_KEY: "synthetic-admin-key-must-remain-absent" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain("synthetic-admin-key");
+  });
+  it("still forbids phone, mail, cloud credentials and an incomplete Google grant configuration", () => {
+    for (const key of ["ASTERISK_ARI_PASSWORD", "TELNYX_API_KEY", "RESEND_API_KEY", "AWS_ACCESS_KEY_ID"]) {
+      rejects({ ...voice, [key]: "synthetic-sensitive-marker" });
+    }
+    rejects({ ...voice, GOOGLE_CLIENT_SECRET: "" });
+    rejects({ ...voice, GOOGLE_REDIRECT_URI: "https://elsewhere.example.test/api/integrations/google/callback" });
+  });
+});
+
 describe("prepared Lightsail Google Calendar test profile", () => {
   it("accepts the explicit profile with a separate test DB and complete configuration", () => {
     const result = check(googleTest);

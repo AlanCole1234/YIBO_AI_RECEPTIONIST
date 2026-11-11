@@ -7,8 +7,9 @@ let code;
 // Opt-in only after separate account/calendar and host activation approval.
 // The default remains the original synthetic profile with every provider off.
 const provider = env.YIBO_STAGING_PROVIDER ?? "synthetic";
-const googleTest = provider === "google-calendar-test";
-if (!["synthetic", "google-calendar-test"].includes(provider)) {
+const voiceTest = provider === "voice-lab-test";
+const googleTest = provider === "google-calendar-test" || voiceTest;
+if (!["synthetic", "google-calendar-test", "voice-lab-test"].includes(provider)) {
   code = "STAGING_PROVIDER_PROFILE_INVALID";
 }
 const required = {
@@ -16,7 +17,7 @@ const required = {
   HOST: "127.0.0.1",
   PORT: "3000",
   DOTENV_CONFIG_PATH: "/dev/null",
-  YIBO_RUNTIME: "in-memory",
+  YIBO_RUNTIME: voiceTest ? "openai-realtime" : "in-memory",
   YIBO_TENANT_ID: "tenant-yibo-demo-us",
   YIBO_REGION: "US",
   YIBO_DATABASE_US: googleTest
@@ -36,8 +37,15 @@ const googleKeys = new Set([
   "GOOGLE_CALENDAR_ID", "YIBO_TOKEN_ENCRYPTION_KEY",
 ]);
 if (Object.entries(env).some(([key, value]) => forbidden.test(key) && value?.trim()
-  && !(googleTest && googleKeys.has(key)))) {
+  && !(googleTest && googleKeys.has(key))
+  && !(voiceTest && ["OPENAI_API_KEY", "OPENAI_REALTIME_MODEL"].includes(key)))) {
   code = "STAGING_PROVIDER_CREDENTIALS_FORBIDDEN";
+}
+if (voiceTest ? (env.YIBO_HOSTED_VOICE_LAB !== "1"
+    || (env.OPENAI_API_KEY?.trim().length ?? 0) < 16 || /[\r\n]/.test(env.OPENAI_API_KEY ?? "")
+    || Boolean(env.YIBO_LOCAL_DEVELOPER_TEST_MODE?.trim()))
+  : ![undefined, "", "0"].includes(env.YIBO_HOSTED_VOICE_LAB)) {
+  code = "STAGING_VOICE_TEST_CONFIGURATION_REQUIRED";
 }
 
 const hostname = env.YIBO_PUBLIC_HOSTNAME ?? "";

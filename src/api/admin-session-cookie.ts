@@ -2,7 +2,7 @@ import type { FastifyRequest } from "fastify";
 
 const COOKIE_NAME = "yibo_admin_session";
 
-export const adminSessionToken = (request: FastifyRequest): string | undefined => {
+export const adminSessionToken = (request: Pick<FastifyRequest, "headers">): string | undefined => {
   const cookie = request.headers.cookie;
   if (!cookie) return undefined;
   for (const part of cookie.split(";")) {

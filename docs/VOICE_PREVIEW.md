@@ -1,5 +1,12 @@
 # Saved-settings voice preview
 
+**Hosted preparation (10 November 2026):** production builds now use the opt-in,
+authenticated same-origin API endpoint. The standalone 4317 harness below remains
+local-only; it is not exposed on AWS. See [implementation, validation and the
+separate activation gate](HOSTED_VOICE_LAB_ACCEPTANCE.md). AWS provider activation
+and actual listening are still pending. Existing local development behavior is
+preserved.
+
 The configuration panel opens the existing Voice Lab. Browser speech synthesis
 is removed because it does not reproduce the selected OpenAI voice. Save edits
 first: the preview deliberately uses the server's saved configuration, and does

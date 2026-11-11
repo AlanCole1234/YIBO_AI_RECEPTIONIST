@@ -15,6 +15,7 @@ import { registerGoogleCalendarRoutes } from "./routes/google-calendar.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerReadinessRoutes } from "./routes/readiness.js";
 import { registerDemoRoutes } from "./routes/demo.js";
+import { registerVoiceLabRoutes } from "./routes/voice-lab.js";
 
 export async function createApiServer(app: YiboApplication): Promise<FastifyInstance> {
   const server = Fastify({ logger: false });
@@ -33,5 +34,6 @@ export async function createApiServer(app: YiboApplication): Promise<FastifyInst
   await registerAvailabilityRoutes(server, app);
   await registerAppointmentRoutes(server, app);
   await registerGoogleCalendarRoutes(server, app);
+  await registerVoiceLabRoutes(server, app);
   return server;
 }

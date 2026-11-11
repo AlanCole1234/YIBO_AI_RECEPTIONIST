@@ -225,6 +225,7 @@ export const api = {
   me: () => request<{ principal: AdminPrincipal }>("/api/auth/me"),
   health: () => request<{ status: string }>("/api/health"),
   readiness: () => request<Readiness>("/api/admin/readiness"),
+  voiceLabStatus: () => request<{ enabled: boolean; reason?: string }>("/api/voice-lab/status"),
   business: () => request<Business>("/api/business"),
   locationCalendars: (id: string) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendars`),
   updateLocationCalendar: (id: string, calendarId: string | null, version: number) => request<VerifiedCalendarSnapshot>(`/api/admin/locations/${encodeURIComponent(id)}/calendar`, {

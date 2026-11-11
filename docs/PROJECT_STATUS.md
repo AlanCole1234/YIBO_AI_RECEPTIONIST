@@ -3,6 +3,27 @@
 Este archivo es la fuente de verdad viva del avance. Los documentos `BASELINE_*`
 son históricos y los ADR registran decisiones; ninguno sustituye este tablero.
 
+## AWS Voice Lab autenticado: preparado localmente — 10 de noviembre de 2026
+
+- Opt-in `YIBO_HOSTED_VOICE_LAB=1`; dashboard de producción usa WSS same-origin
+  `/api/voice-lab/stream`, cookie/roles/tenant/Origin existentes y revocación.
+  Harness, runtime, DB y lifecycle compartidos; ningún puerto nuevo ni segundo
+  proceso. Canal `voice_lab` explícito sin tools de developer; phone no cambia.
+- Una preview simultánea, buffers limitados, cierre por logout/desconexión/stop,
+  goodbye tras playback drain. Estado desactivado visible; configuración por
+  defecto conservada. Gateway telefónico instalado bloquea la preview hosted.
+- Perfil staging `voice-lab-test` preparado: misma DB Google-test/grant, OpenAI
+  server-only, sin email/PBX. Perfiles previos siguen rechazando OpenAI/preview.
+- Validación sintética local y browser de build con WAV silencioso; sin micrófono,
+  proveedor real ni datos persistentes. Documentación y procedimiento concreto en
+  [HOSTED_VOICE_LAB_ACCEPTANCE.md](HOSTED_VOICE_LAB_ACCEPTANCE.md).
+- **135/135 tests focales (14 archivos, 38 casos nuevos)**, ambos typechecks y
+  build pasan en Mac ARM64 / Node 26.7.0. Linux para este commit pendiente antes
+  del switch; no se repitió la suite completa sin necesidad.
+- **NO activado/desplegado**. AWS sigue `eb9af24`; Google real/login/backup ya
+  verificados. Siguiente paso requiere aprobación de release/proveedor y entrada
+  privada de clave OpenAI, luego voz real. Main/PBX/7001/Cloudflare intactos.
+
 ## AWS staging: release UI activado con aprobación — 9 de noviembre de 2026
 
 - Activo **`eb9af245124f0e4c151655da06a3f729fb413202`**; rollback `0f55c44`

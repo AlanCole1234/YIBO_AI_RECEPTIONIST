@@ -10,6 +10,8 @@ export interface ApplicationConfiguration {
   /** Hard cap on input plus output tokens for one OpenAI call. */
   callMaxTokens: number;
   dashboardOrigin: string;
+  /** Explicitly opt in to the authenticated, same-origin browser preview. */
+  hostedVoiceLabEnabled?: boolean;
   openAiApiKey?: string;
   openAiAdminKey?: string;
   vadThreshold?: number;
@@ -52,6 +54,10 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     5_000_000,
   ) ?? DEFAULT_CALL_MAX_TOKENS;
   const dashboardOrigin = validOrigin(environment.YIBO_DASHBOARD_ORIGIN?.trim() || "http://localhost:5173");
+  const hostedVoiceLab = environment.YIBO_HOSTED_VOICE_LAB?.trim() || "0";
+  if (!["0", "1"].includes(hostedVoiceLab)) {
+    throw new ConfigurationError("YIBO_HOSTED_VOICE_LAB must be 0 or 1");
+  }
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
   const openAiAdminKey = environment.OPENAI_ADMIN_KEY?.trim();
   const vadThreshold = optionalNumber(environment.YIBO_VAD_THRESHOLD, "YIBO_VAD_THRESHOLD", 0, 1);
@@ -69,6 +75,7 @@ export function loadConfiguration(environment: NodeJS.ProcessEnv = process.env):
     callMaxDurationMs: callMaxMinutes * 60_000,
     callMaxTokens,
     dashboardOrigin,
+    ...(hostedVoiceLab === "1" ? { hostedVoiceLabEnabled: true } : {}),
     ...(openAiApiKey ? { openAiApiKey } : {}),
     ...(openAiAdminKey ? { openAiAdminKey } : {}),
     ...(vadThreshold === undefined ? {} : { vadThreshold }),

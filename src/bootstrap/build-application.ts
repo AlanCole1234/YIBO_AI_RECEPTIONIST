@@ -108,6 +108,8 @@ export interface YiboApplication {
   conversations: ConversationServiceContract;
   calls: CallOrchestrator;
   callHistory: CallHistoryReader;
+  /** Present only for an explicitly enabled preview with virtual phone/media gateways. */
+  voiceLab?: { callReader: Pick<CallRepository, "findByCallId"> };
   runtime: ConversationRuntimePort;
   voice: VoiceMediaGateway;
   calendar: ApplicationCalendar;
@@ -318,6 +320,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
   });
   const registeredVoice = new ScriptedVoiceMediaGateway();
   const voice = options.voiceGateway ?? registeredVoice;
+  const hostedVoiceLab = config.hostedVoiceLabEnabled && !options.telephonyGateway && !options.voiceGateway;
   const calls = new CallOrchestratorService(
     business,
     customers,
@@ -327,6 +330,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     conversations,
     callRepository,
     options.developerTestModeAuthorized ?? false,
+    hostedVoiceLab ? tenantId : undefined,
   );
   telephony.onEvent((event) => calls.handleTelephonyEvent(event));
 
@@ -344,6 +348,7 @@ export function buildApplication(options: BuildApplicationOptions = {}): YiboApp
     conversations,
     calls,
     callHistory: callRepository,
+    ...(hostedVoiceLab ? { voiceLab: { callReader: callRepository } } : {}),
     runtime,
     voice,
     calendar,

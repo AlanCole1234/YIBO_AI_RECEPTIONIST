@@ -31,7 +31,7 @@ export class AgentDefinitionService implements AgentDefinitionFactory {
     const location = await this.businesses.getLocation(command.tenantId, command.locationId);
     if (!location.ok) return failure<AgentDefinitionError>({ code: "BUSINESS_CONTEXT_NOT_FOUND" });
 
-    const channel = command.developerTestModeAuthorized ? "voice_lab" : "phone";
+    const channel = command.channel ?? (command.developerTestModeAuthorized ? "voice_lab" : "phone");
     if (channel === "phone" && configuration.audio.turnDetection.type === "manual") {
       return failure<AgentDefinitionError>({ code: "CHANNEL_CONFIGURATION_INCOMPATIBLE" });
     }

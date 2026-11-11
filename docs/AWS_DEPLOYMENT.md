@@ -1,14 +1,19 @@
 # AWS deployment and remaining launch gates
 
-29 October 2026. **Approved synthetic Lightsail staging is deployed.** Reuse the
+10 November 2026. **Approved AWS staging is deployed at https://staging.getyibo.com.** Reuse the
 existing Happy Path project in Ohio and its one staging host, attached static IP
 and private backup bucket; do not provision duplicates. Base cost is **$13/month**.
-The assigned IP serves the dashboard and API with a trusted HTTPS certificate.
+The approved hostname serves the dashboard and API with a trusted HTTPS certificate.
 Login/appointments, encrypted off-host restore and automatic restart/reboot checks
 passed with synthetic data. See [actual results and remaining manual
 steps](AWS_STAGING_VALIDATION.md), [staging configuration](../deploy/aws/lightsail/README.md),
 [cost review](AWS_ACCESS_AND_COST_REVIEW.md) and [ARM64 evidence](AWS_ARM64_VALIDATION.md).
-Live providers remain disabled. The separate DigitalOcean phone system is unchanged.
+The separate staging Google app/test calendar now passes real create, same-event
+reschedule and cancellation checks; owner login and the approved UI update also
+pass. See [current evidence](AWS_STAGING_GOOGLE_ACCEPTANCE.md). OpenAI/phone/email
+remain disabled. Authenticated hosted Voice Lab is prepared locally, not deployed;
+see [its activation and acceptance gate](HOSTED_VOICE_LAB_ACCEPTANCE.md).
+The separate DigitalOcean phone system is unchanged.
 
 ## Account action for the owner
 
@@ -23,9 +28,10 @@ Live providers remain disabled. The separate DigitalOcean phone system is unchan
    in a locked Apple Note and closing the private handoff. The note/key were not
    inspected by the agent; recovery using that saved copy has not been separately
    tested. Do not send passwords, keys or tokens in chat.
-4. No domain purchase was needed for the initial IP certificate. Its first natural
-   renewal was verified on 2 November. The owner requested domain-name/price options
-   before real-provider setup; no domain or DNS change has been approved or made.
+4. The owner subsequently purchased `getyibo.com` and approved only its staging
+   A record, HTTPS and matching dashboard origin. That setup and owner login pass.
+   Root-domain/email DNS were not changed. The initial IP certificate's first
+   natural renewal was verified on 2 November.
    AWS displayed $98 credits / 173 Free-plan days on 2 November; billing can post
    late. Monitor billing and storage; the plan deadline is April 23, 2027.
    Do not assume permanent free operation.
@@ -167,27 +173,27 @@ Completed staging provisioning (historical approval boundary):
 
 Before public business acceptance:
 
-3. The [hosted Google OAuth return fix](HOSTED_GOOGLE_OAUTH_RETURN.md) is validated
-   on the launch branch as of 31 October, but not deployed. It uses the existing
-   trusted HTTPS dashboard origin and preserves loopback development flows.
-   Its [exact release/update/rollback procedure](AWS_STAGING_RELEASE_UPDATE.md)
-   and source archive are prepared; Node 22.23.4 local checks pass. Complete the
-   reviewed staging update before live authorization. A controlled DNS
-   hostname and approved Google callback registration are still required; the
-   current public IP is not an eligible Google redirect host. No live Google
-   Cloud callback or token was changed.
+3. Hosted OAuth return, approved hostname/callback, separate staging OAuth app,
+   consent, test-calendar mapping and real Google mutations now pass on AWS.
+   The approved `eb9af24` UI release is active; previous releases remain available
+   for rollback. Existing live Google configuration was preserved. Do not repeat
+   this setup or real writes unnecessarily; External/Testing authorization may
+   require renewal. See [current results](AWS_STAGING_GOOGLE_ACCEPTANCE.md).
 4. Do not publish the unauthenticated development Voice Lab on port 4317. Its
-   hosted authenticated WSS design is separate; the dashboard's voice test is
-   not deployment-ready merely because local protocol tests pass.
+   hosted authenticated WSS implementation is prepared locally and off by default.
+   Apply the [separate activation procedure](HOSTED_VOICE_LAB_ACCEPTANCE.md) only
+   with approval, then verify the public proxy and actual audio. Local synthetic
+   tests do not prove a real provider conversation.
 5. Synthetic HTTPS login/logout, role/tenant restrictions, restart/reboot durability
    and encrypted off-host restore passed. The owner's browser login and
    owner-confirmed recovery-key vault copy are complete. First natural TLS
    renewal was verified on 2 November, and native alarms/email delivery passed.
    Continue the [remaining operational checks](AWS_STAGING_OPERATIONS.md) before
    advancing to real providers. A service reload/start is not a backup test.
-6. After explicit provider/data approval, verify real Google create → retrieve →
-   reschedule same event → cancel, then an actual phone conversation and clean
-   hangup with private PBX media. Do not enable both Mac and AWS phone owners.
+6. Real Google create → retrieve → two same-event reschedules → cancel already
+   passed with dedicated test data. Next: approved hosted voice acceptance, then
+   an actual phone conversation and clean hangup with private PBX media. Do not
+   enable both Mac and AWS phone owners; handover needs explicit approval.
 7. Run the existing release preflight for the fully configured launch. It checks
    phone/provider requirements too; an HTTP-only synthetic installation is not
    expected to pass that live gate. Do not weaken it for a green result.

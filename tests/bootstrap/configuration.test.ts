@@ -5,6 +5,12 @@ import {
 } from "../../src/bootstrap/index.js";
 
 describe("loadConfiguration", () => {
+  it("requires an explicit valid opt-in for hosted Voice Lab", () => {
+    expect(loadConfiguration({}).hostedVoiceLabEnabled).toBeUndefined();
+    expect(loadConfiguration({ YIBO_HOSTED_VOICE_LAB: "0" }).hostedVoiceLabEnabled).toBeUndefined();
+    expect(loadConfiguration({ YIBO_HOSTED_VOICE_LAB: "1" }).hostedVoiceLabEnabled).toBe(true);
+    expect(() => loadConfiguration({ YIBO_HOSTED_VOICE_LAB: "true" })).toThrow("must be 0 or 1");
+  });
   it("defaults to the in-memory runtime and the approved realtime model", () => {
     expect(loadConfiguration({})).toEqual({
       runtime: "in-memory",

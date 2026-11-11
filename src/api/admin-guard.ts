@@ -46,7 +46,7 @@ export const adminPrincipalFor = (request: FastifyRequest): AdminPrincipal => {
   return principal;
 };
 
-export const isAllowedLoginOrigin = (request: FastifyRequest, app: YiboApplication): boolean =>
+export const isAllowedLoginOrigin = (request: Pick<FastifyRequest, "headers">, app: YiboApplication): boolean =>
   isAllowedDashboardOrigin(request.headers.origin, app.config.dashboardOrigin);
 
 const isAllowedDashboardOrigin = (origin: string | undefined, configuredOrigin: string): boolean => {

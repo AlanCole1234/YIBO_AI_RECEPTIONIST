@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { previewBlockReason } from "../../dashboard/src/services/voice-preview.js";
+import { previewBlockReason, voiceLabConnection } from "../../dashboard/src/services/voice-preview.js";
 
 const ready = { tenantId: "tenant-a", runtime: "openai-realtime", configurationSource: "saved", model: "gpt-realtime-2.1", voice: "marin" };
+describe("Voice Lab endpoint selection", () => {
+  it.each([false, true])("always uses authenticated same-origin WSS for HTTPS (dev=%s)", development => {
+    expect(voiceLabConnection(new URL("https://staging.getyibo.com"), development))
+      .toEqual({ hosted: true, url: "wss://staging.getyibo.com/api/voice-lab/stream" });
+  });
+  it("preserves the loopback development harness and uses the API for production builds", () => {
+    expect(voiceLabConnection(new URL("http://product-acceptance.localhost:5380"), true))
+      .toEqual({ hosted: false, url: "ws://product-acceptance.localhost:4317/voice" });
+    expect(voiceLabConnection(new URL("http://localhost:5380"), false))
+      .toEqual({ hosted: true, url: "ws://localhost:5380/api/voice-lab/stream" });
+  });
+});
 describe("saved Voice Lab preview readiness", () => {
   it("waits for server metadata before allowing a chargeable preview", () => {
     expect(previewBlockReason("tenant-a", undefined)).toContain("Waiting");

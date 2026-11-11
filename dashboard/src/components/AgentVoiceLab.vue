@@ -2,21 +2,22 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { api, type RealtimeModelCapability } from "../services/api";
 import { emptyRealtimeCostState, observeRealtimeCostEvent, estimateRealtimeCost } from "../services/realtime-cost";
-import { previewBlockReason } from "../services/voice-preview";
+import { previewBlockReason, voiceLabConnection } from "../services/voice-preview";
 import RecentActivity from "./RecentActivity.vue";
 import { VoiceLabSession, type VoiceLabSnapshot } from "../../../apps/dev-voice/voice-lab-session.js";
 const props = defineProps<{ expectedTenantId?: string }>();
 const session = shallowRef<VoiceLabSnapshot>({ phase: "connecting", connected: false,
   aiConnected: false, microphoneActive: false, speaking: false, testNumber: 0 });
 const events = ref<string[]>([]);
+const serverBlock = ref<string>();
 const previewMetadata = computed(() => session.value.configuration);
-const previewBlocked = computed(() => previewBlockReason(props.expectedTenantId, previewMetadata.value));
+const previewBlocked = computed(() => serverBlock.value ?? previewBlockReason(props.expectedTenantId, previewMetadata.value));
 const connected = computed(() => session.value.connected);
 const aiSessionConnected = computed(() => session.value.aiConnected);
 const microphoneActive = computed(() => session.value.microphoneActive);
 const sessionUsed = computed(() => ["starting", "active"].includes(session.value.phase));
 const state = computed(() => session.value.speaking ? "speaking" : microphoneActive.value ? "listening" : session.value.phase);
-const canStart = computed(() => !microphoneActive.value && !["connecting", "starting"].includes(session.value.phase)
+const canStart = computed(() => !serverBlock.value && !microphoneActive.value && !["connecting", "starting"].includes(session.value.phase)
   && (["completed", "error"].includes(session.value.phase) || !previewBlocked.value));
 const calendarToolsAvailable = ref(false);
 const clinicTimezone = ref("Loading…");
@@ -34,7 +35,7 @@ const estimatedCostPerMinute = computed(() => elapsedSeconds.value >= 5 && estim
 const elapsedLabel = computed(() => `${String(Math.floor(elapsedSeconds.value / 60)).padStart(2, "0")}:${String(elapsedSeconds.value % 60).padStart(2, "0")}`);
 const textTokens = computed(() => costState.value.usage.inputTextTokens + costState.value.usage.outputTextTokens);
 const audioTokens = computed(() => costState.value.usage.inputAudioTokens + costState.value.usage.outputAudioTokens);
-const statusCopy = computed(() => ({
+const statusCopy = computed(() => serverBlock.value ? ["Voice test unavailable", "See the setup message above."] : ({
   connecting: ["Connecting your studio", "Preparing the audio channel"],
   ready: ["Ready when you are", "The microphone is off"],
   starting: ["Starting your test", "Preparing the microphone and conversation"],
@@ -44,15 +45,35 @@ const statusCopy = computed(() => ({
   completed: ["Test completed", "Activity is saved below. You can start another test."],
   error: ["Test interrupted", "Check Recent activity, then try another test."],
 }[state.value]));
-const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const connection = voiceLabConnection(window.location, import.meta.env.DEV);
+let disposed = false;
 const lab = new VoiceLabSession({
-  url: `${protocol}//${window.location.hostname}:4317/voice`,
+  url: connection.url,
   blockReason: metadata => previewBlockReason(props.expectedTenantId, metadata),
   onState: snapshot => { session.value = snapshot; },
   onActivity: observeEvent,
 });
-onMounted(() => { void lab.connect().catch(() => {}); void loadDeveloperReadiness(); clockTimer = setInterval(updateElapsed, 1_000); });
-onBeforeUnmount(() => { lab.dispose(); if (clockTimer) clearInterval(clockTimer); });
+onMounted(() => { void connectPreview(); void loadDeveloperReadiness(); clockTimer = setInterval(updateElapsed, 1_000); });
+onBeforeUnmount(() => { disposed = true; lab.dispose(); if (clockTimer) clearInterval(clockTimer); });
+
+async function connectPreview(): Promise<void> {
+  try {
+    if (connection.hosted) {
+      const status = await api.voiceLabStatus();
+      if (disposed) return;
+      if (!status.enabled) {
+        serverBlock.value = status.reason ?? "Hosted Voice Lab is not available.";
+        session.value = { ...session.value, phase: "error" };
+        return;
+      }
+    }
+    if (!disposed) await lab.connect();
+  } catch {
+    if (disposed) return;
+    serverBlock.value = "Voice Lab is unavailable. Check your administrator access and server setup, then reload.";
+    session.value = { ...session.value, phase: "error" };
+  }
+}
 
 async function loadDeveloperReadiness(): Promise<void> {
   try {
